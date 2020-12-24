@@ -10,3 +10,4 @@
 |pycfiles| decompiled pyc files extracted from PyPI applications|
 |pypi_install_script| pre/post install scripts|
 |pypiname | full list of app names by date|
+|stegosaurus|hide payload in pyc|
