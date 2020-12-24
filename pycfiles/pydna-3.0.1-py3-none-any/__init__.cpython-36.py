@@ -1,0 +1,8 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/mattcowley/PycharmProjects/PyDMXControl/PyDMXControl/web/__init__.py
+# Compiled at: 2019-06-26 14:48:17
+# Size of source mod 2**32: 1055 bytes
+__doc__ = '\n *  PyDMXControl: A Python 3 module to control DMX using uDMX.\n *                Featuring fixture profiles, built-in effects and a web control panel.\n *  <https://github.com/MattIPv4/PyDMXControl/>\n *  Copyright (C) 2018 Matt Cowley (MattIPv4) (me@mattcowley.co.uk)\n *\n *  This program is free software: you can redistribute it and/or modify\n *   it under the terms of the GNU General Public License as published\n *   by the Free Software Foundation, either version 3 of the License, or\n *   (at your option) any later version.\n *  This program is distributed in the hope that it will be useful,\n *   but WITHOUT ANY WARRANTY; without even the implied warranty of\n *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n *   GNU General Public License for more details.\n *  You should have received a copy of the GNU General Public License\n *   along with this program. If not, please see\n *   <https://github.com/MattIPv4/PyDMXControl/blob/master/LICENSE> or <http://www.gnu.org/licenses/>.\n'
+from ._webController import WebController

@@ -1,0 +1,2 @@
+morpfw>=0.2.1a1
+morpcc>=0.1.0a1

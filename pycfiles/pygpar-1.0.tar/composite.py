@@ -1,0 +1,136 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /usr/local/lib/python2.7/dist-packages/pygp/gp/composite.py
+# Compiled at: 2013-04-10 06:45:39
+__doc__ = '\nGrouping GP regression classes\n==============================\n\nModule for composite Gaussian processes models that combine multiple GPs into one model\n'
+import scipy as SP
+from pygp.gp.gp_base import GP
+
+class GroupGP(GP):
+    """
+    Class to bundle one or more GPs for joint
+    optimization of hyperparameters.
+
+    **Parameters:**
+
+    GPs : [:py:class:`gpr.GP`]
+        Array, holding al GP classes to be optimized together
+    """
+    __slots__ = [
+     'N', 'GPs']
+
+    def __init__(self, GPs=None):
+        self._invalidate_cache()
+        if GPs is None:
+            print 'you need to specify a list of Gaussian Processes to bundle'
+            return
+        else:
+            self.N = len(GPs)
+            self.GPs = GPs
+            self.covar = [ g.covar for g in self.GPs ]
+            return
+
+    def LML(self, hyperparams, **LML_kwargs):
+        """
+        Returns the log Marginal likelyhood for the given logtheta
+        and the LML_kwargs:
+
+        logtheta : [double]
+            Array of hyperparameters, which define the covariance function
+
+        LML_kwargs : lml, dlml, clml, sdlml, priors, Ifilter
+            See :py:class:`gpr.GP.LML`
+    
+        """
+        R = 0
+        for n in range(self.N):
+            L = self.GPs[n].LML(hyperparams, **LML_kwargs)
+            R = R + L
+
+        return R
+
+    def LMLgrad(self, hyperparams, **lml_kwargs):
+        """
+        Returns the log Marginal likelihood for the given logtheta.
+
+        **Parameters:**
+
+        hyperparams : {'covar':CF_hyperparameters, ...}
+            The hyperparameters which shall be optimized and derived
+
+        priors : [:py:class:`pygp.priors`]
+            The hyperparameters which shall be optimized and derived
+
+        """
+        R = {}
+        for n in range(self.N):
+            L = self.GPs[n].LMLgrad(hyperparams, **lml_kwargs)
+            for key in L.keys():
+                if R.has_key(key):
+                    R[key] += L[key]
+                else:
+                    R[key] = L[key]
+
+        return R
+
+    def setData(self, x, y):
+        """
+        set inputs x and outputs y with **Parameters:**
+
+        x : [double]
+            training input
+
+        y : [double]
+            training targets
+            
+        rescale_dim : int
+            dimensions to be rescaled (default all real)
+
+        process : boolean
+            subtract mean and rescale inputs
+
+        """
+        for n in range(self.N):
+            xn = x[n]
+            yn = y[n]
+            self.GPs[n].setData(xn, yn)
+
+    def getData(self):
+        data = []
+        for n in range(self.N):
+            data.append(self.GPs[n].getData())
+
+        return data
+
+    def predict(self, *args, **kwargs):
+        """
+        Predict mean and variance for each GP and given Parameters.
+        
+        **Parameters:**
+        
+        hyperparams : {}
+            hyperparameters in logSpace.
+        xstar    : [double]
+            prediction inputs.
+        var      : boolean
+            return predicted variance.
+        output   : int
+            output dimension for prediction (0)
+
+        **Return:**
+        Array as follows::
+    
+            [[1st_predictions_mean, 2nd, ..., nth_predictions_mean],
+             [1st_predictions_var, 2nd, ..., nth_predictions_var]]
+            
+        See :py:class:`pygp.gp.basic_gp.GP` for individual prediction outputs.
+        """
+        means = []
+        var = []
+        for n in range(self.N):
+            prediction = self.GPs[n].predict(*args, **kwargs)
+            means.append(prediction[0])
+            var.append(prediction[1])
+
+        return SP.array([means, var])

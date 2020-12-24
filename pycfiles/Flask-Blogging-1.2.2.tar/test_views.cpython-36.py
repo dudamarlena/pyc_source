@@ -1,0 +1,338 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/gman/Documents/code/Flask-Blogging/test/test_views.py
+# Compiled at: 2018-09-11 23:52:47
+# Size of source mod 2**32: 16885 bytes
+try:
+    from builtins import str, range
+except ImportError:
+    pass
+
+import os, unittest, tempfile
+from flask import redirect, url_for, current_app
+from flask_login import LoginManager, login_user, logout_user, current_user
+from sqlalchemy import create_engine, MetaData
+from flask_blogging.sqlastorage import SQLAStorage
+from flask_blogging import BloggingEngine
+from test import FlaskBloggingTestCase, TestUser
+import re
+from flask_principal import identity_changed, Identity, Permission, AnonymousIdentity, identity_loaded, RoleNeed, UserNeed
+from flask_caching import Cache
+from .utils import get_random_unicode
+try:
+    import boto3
+    from flask_blogging.dynamodbstorage import DynamoDBStorage
+    HAS_DYNAMODB = True
+except:
+    HAS_DYNAMODB = False
+
+class TestViews(FlaskBloggingTestCase):
+
+    def _create_storage(self):
+        temp_dir = tempfile.gettempdir()
+        self._dbfile = os.path.join(temp_dir, 'temp.db')
+        conn_string = 'sqlite:///' + self._dbfile
+        engine = create_engine(conn_string)
+        meta = MetaData()
+        self.storage = SQLAStorage(engine, metadata=meta)
+        meta.create_all(bind=engine)
+
+    def _create_blogging_engine(self):
+        return BloggingEngine(self.app, self.storage)
+
+    def setUp(self):
+        FlaskBloggingTestCase.setUp(self)
+        self._create_storage()
+        self.app.config['BLOGGING_URL_PREFIX'] = '/blog'
+        self.app.config['BLOGGING_PLUGINS'] = []
+        self.engine = self._create_blogging_engine()
+        self.login_manager = LoginManager(self.app)
+
+        @self.login_manager.user_loader
+        @self.engine.user_loader
+        def load_user(user_id):
+            return TestUser(user_id)
+
+        @self.app.route('/login/<username>/', methods=['POST'], defaults={'blogger': 0})
+        @self.app.route('/login/<username>/<int:blogger>/', methods=['POST'])
+        def login(username, blogger):
+            this_user = TestUser(username)
+            login_user(this_user)
+            if blogger:
+                identity_changed.send((current_app._get_current_object()), identity=(Identity(username)))
+            return redirect('/')
+
+        @self.app.route('/logout/')
+        def logout():
+            logout_user()
+            identity_changed.send((current_app._get_current_object()), identity=(AnonymousIdentity()))
+            return redirect('/')
+
+        self.pids = []
+        for i in range(20):
+            tags = ['hello'] if i < 10 else ['world']
+            user = 'testuser' if i < 10 else 'newuser'
+            pid = self.storage.save_post(title=('Sample Title%d' % i), text=('Sample Text%d' % i),
+              user_id=user,
+              tags=tags)
+            self.pids.append(pid)
+
+    def tearDown(self):
+        os.remove(self._dbfile)
+
+    def test_index(self):
+        response = self.client.get('/blog/')
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get('/blog')
+        self.assertEqual(response.status_code, 301)
+        response = self.client.get('/blog/5/')
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get('/blog/5/2/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_post_by_id(self):
+        post_id0 = self.pids[0]
+        response = self.client.get('/blog/page/%s/' % post_id0)
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get('/blog/page/%s/sample-title/' % post_id0)
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get('/blog/page/%s' % post_id0)
+        self.assertEqual(response.status_code, 301)
+
+    def test_post_by_tag(self):
+        response = self.client.get('/blog/tag/hello/')
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get('/blog/tag/hello/5/')
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get('/blog/tag/hello/5/2/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_post_by_author(self):
+        response = self.client.get('/blog/author/newuser/')
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get('/blog/author/newuser/5/')
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get('/blog/author/newuser/5/2/')
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get('/blog/author/nonexistent_user/', follow_redirects=True)
+        assert 'No posts found for this user!' in str(response.data)
+
+    def test_editor_get(self):
+        user_id = 'testuser'
+        with self.client:
+            response = self.client.get('/blog/editor/')
+            self.assertEqual(response.status_code, 401)
+            response = self.client.get('/blog/editor/%s/' % self.pids[0])
+            self.assertEqual(response.status_code, 401)
+            self.login(user_id)
+            self.assertEquals(current_user.get_id(), user_id)
+            response = self.client.get('/blog/editor/')
+            assert response.status_code == 200
+            for i in range(1, 21):
+                response = self.client.get('/blog/editor/%s/' % self.pids[(i - 1)])
+                expected_status_code = 200 if i <= 10 else 302
+                self.assertEqual(response.status_code, expected_status_code, 'Error for item %s %d' % (
+                 self.pids[(i - 1)], response.status_code))
+
+            self.logout()
+            response = self.client.get('/blog/editor/')
+            self.assertEqual(response.status_code, 401)
+            response = self.client.get('/blog/editor/%s/' % self.pids[0])
+            self.assertEqual(response.status_code, 401)
+
+    def test_editor_post(self):
+        user_id = 'testuser'
+        with self.client:
+            response = self.client.get('/blog/page/21/', follow_redirects=True)
+            assert 'The page you are trying to access is not valid!' in str(response.data)
+            response = self.client.post('/blog/editor/')
+            self.assertEqual(response.status_code, 401)
+            response = self.client.post('/blog/editor/%s/' % self.pids[0])
+            self.assertEqual(response.status_code, 401)
+            self.login(user_id)
+            self.assertEquals(current_user.get_id(), user_id)
+            response = self.client.post('/blog/editor/', data=dict(text='Test Text', tags='tag1, tag2'))
+            self.assertEqual(response.status_code, 200)
+            response = self.client.post('/blog/editor/', data=dict(title='Test Title', text='Test Text',
+              tags='tag1, tag2'))
+            self.assertEqual(response.status_code, 302)
+            response = self.client.get('/blog/page/%s/' % self.pids[19])
+            self.assertEqual(response.status_code, 200)
+
+    def test_editor_edit_page(self):
+        user_id = 'testuser'
+        with self.client:
+            self.login(user_id)
+            response = self.client.post(('/blog/editor/%s/' % self.pids[0]),
+              data=dict(title='Sample Title0-Edited', text='Sample Text0-Edited',
+              tags='tag1, tag2'))
+            response = self.client.get('/blog/100/')
+            self.assertEqual(response.status_code, 200)
+            pattern = re.compile(b'<h1>.*</h1>')
+            headings = pattern.findall(response.data)
+            self.assertEqual(len(headings), 20)
+            self.assertEqual(headings[(-1)], b'<h1>Sample Title0-Edited</h1>')
+            return
+
+    def test_delete(self):
+        user_id = 'testuser'
+        with self.client:
+            response = self.client.post('/blog/delete/%s/' % self.pids[0])
+            self.assertEqual(response.status_code, 401)
+            self.login(user_id)
+            self.assertEquals(current_user.get_id(), user_id)
+            response = self.client.post(('/blog/delete/%s/' % self.pids[12]), follow_redirects=True)
+            assert 'You do not have the rights to delete this post' in str(response.data)
+            response = self.client.post(('/blog/delete/%s/' % self.pids[0]), follow_redirects=True)
+            assert 'Your post was successfully deleted' in str(response.data)
+
+    def login(self, user_id, blogger=False):
+        if blogger:
+            return self.client.post(('/login/%s/1/' % user_id), follow_redirects=True)
+        else:
+            return self.client.post(('/login/%s/' % user_id), follow_redirects=True)
+
+    def logout(self):
+        return self.client.get('/logout/')
+
+    def test_sitemap(self):
+        with self.client:
+            response = self.client.get('/blog/sitemap.xml')
+            self.assertEqual(response.status_code, 200)
+
+    def test_atom(self):
+        with self.client:
+            response = self.client.get('/blog/feeds/all.atom.xml')
+            self.assertEqual(response.status_code, 200)
+
+    def test_posts_per_page(self):
+        posts_per_page = 5
+        self.app.config['BLOGGING_POSTS_PER_PAGE'] = posts_per_page
+        with self.client:
+            pattern = re.compile(b'<h1>.*</h1>')
+            response = self.client.get('/blog/')
+            headings = pattern.findall(response.data)
+            self.assertEqual(len(headings), posts_per_page)
+            response = self.client.get('/blog/tag/hello/')
+            headings = pattern.findall(response.data)
+            self.assertEqual(len(headings), posts_per_page)
+            response = self.client.get('/blog/author/testuser/')
+            headings = pattern.findall(response.data)
+            self.assertEqual(len(headings), posts_per_page)
+
+    def test_url_construction(self):
+        ctx = self.app.test_request_context()
+        ctx.push()
+        index_url = url_for('blogging.index')
+        self.assertEqual(index_url, '/blog/')
+        index_url = url_for('blogging.index', count=10)
+        self.assertEqual(index_url, '/blog/10/')
+        index_url = url_for('blogging.index', count=10, page=2)
+        self.assertEqual(index_url, '/blog/10/2/')
+        page_url = url_for('blogging.page_by_id', post_id=5)
+        self.assertEqual(page_url, '/blog/page/5/')
+        tag_url = url_for('blogging.posts_by_tag', tag='hello')
+        self.assertEqual(tag_url, '/blog/tag/hello/')
+        author_url = url_for('blogging.posts_by_author', user_id='newuser')
+        self.assertEqual(author_url, '/blog/author/newuser/')
+        sitemap_url = url_for('blogging.sitemap')
+        self.assertEqual(sitemap_url, '/blog/sitemap.xml')
+        feed_url = url_for('blogging.feed')
+        self.assertEqual(feed_url, '/blog/feeds/all.atom.xml')
+        ctx.pop()
+
+    def _set_identity_loader(self, role_name):
+
+        @identity_loaded.connect_via(self.app)
+        def on_identity_loaded(sender, identity):
+            identity.user = current_user
+            if hasattr(current_user, 'id'):
+                identity.provides.add(UserNeed(current_user.id))
+            identity.provides.add(RoleNeed(role_name))
+
+    def test_permissions_editor(self):
+        self.app.config['BLOGGING_PERMISSIONS'] = True
+        self.app.config['BLOGGING_PERMISSIONNAME'] = 'testblogger'
+        user_id = 'newuser'
+        self._set_identity_loader(self.app.config.get('BLOGGING_PERMISSIONNAME', 'blogger'))
+        with self.client:
+            response = self.client.post('/blog/editor/')
+            self.assertEqual(response.status_code, 401)
+            response = self.client.post('/blog/editor/1/')
+            self.assertEqual(response.status_code, 401)
+            self.login(user_id)
+            response = self.client.post('/blog/editor/')
+            self.assertEqual(response.status_code, 302)
+            response = self.client.post('/blog/editor/1/')
+            self.assertEqual(response.status_code, 302)
+            self.logout()
+            self.login(user_id, blogger=True)
+            response = self.client.post('/blog/editor/')
+            self.assertEqual(response.status_code, 200)
+            response = self.client.post('/blog/editor/1/')
+            self.assertEqual(response.status_code, 200)
+            test_permission = Permission(RoleNeed('testblogger'))
+            blogger_permission = Permission(RoleNeed('blogger'))
+            self.assertTrue(test_permission.issubset(self.engine.blogger_permission))
+            self.assertFalse(blogger_permission.issubset(self.engine.blogger_permission))
+
+    def test_permissions_delete(self):
+        self.app.config['BLOGGING_PERMISSIONS'] = True
+        user_id = 'testuser'
+        self._set_identity_loader(self.app.config.get('BLOGGING_PERMISSIONNAME', 'blogger'))
+        with self.client:
+            response = self.client.post('/blog/delete/%s/' % self.pids[0])
+            self.assertEqual(response.status_code, 401)
+            self.login(user_id)
+            response = self.client.post('/blog/delete/%s/' % self.pids[0])
+            self.assertEqual(response.status_code, 302)
+            self.logout()
+            self.login(user_id, blogger=True)
+            response = self.client.post(('/blog/delete/%s/' % self.pids[0]), follow_redirects=True)
+            assert 'Your post was successfully deleted' in str(response.data)
+            self.assertEquals(current_user.get_id(), user_id)
+            response = self.client.post(('/blog/delete/%s/' % self.pids[10]), follow_redirects=True)
+            assert 'You do not have the rights to delete this post' in str(response.data)
+            test_permission = Permission(RoleNeed('testblogger'))
+            blogger_permission = Permission(RoleNeed('blogger'))
+            self.assertFalse(test_permission.issubset(self.engine.blogger_permission))
+            self.assertTrue(blogger_permission.issubset(self.engine.blogger_permission))
+
+
+class TestViewsWithCache(TestViews):
+
+    def _create_blogging_engine(self):
+        cache = Cache((self.app), config={'CACHE_TYPE': 'simple'})
+        return BloggingEngine((self.app), (self.storage), cache=cache)
+
+
+class TestViewsWithUnicode(TestViews):
+
+    def setUp(self):
+        TestViews.setUp(self)
+        for i in range(20):
+            tags = ['unicode hello'] if i < 10 else ['unicode world']
+            user = 'testuser' if i < 10 else 'newuser'
+            self.storage.save_post(title=('{0}_{1}'.format(get_random_unicode(15), i)),
+              text=('{0}_{1}'.format(get_random_unicode(200), i)),
+              user_id=user,
+              tags=tags)
+
+    def test_editor_edit_page(self):
+        pass
+
+    def test_editor_post(self):
+        pass
+
+
+@unittest.skipUnless(HAS_DYNAMODB, 'Need DynamoDB setup for this test')
+class TestViewsWithDynamoDB(TestViews):
+
+    def _create_storage(self):
+        self.storage = DynamoDBStorage(table_prefix='test_', endpoint_url='http://localhost:8000')
+
+    def tearDown(self):
+        self.storage._client.delete_table(TableName='test_blog_posts')
+        self.storage._client.delete_table(TableName='test_tag_posts')

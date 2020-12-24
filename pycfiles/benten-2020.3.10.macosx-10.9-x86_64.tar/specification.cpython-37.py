@@ -1,0 +1,123 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/kghose/.venvs/benten/lib/python3.7/site-packages/benten/cwl/specification.py
+# Compiled at: 2020-01-21 05:14:21
+# Size of source mod 2**32: 5112 bytes
+"""Code to load the CWL specification from JSON and represent it as a
+set of types"""
+import json
+from .alltypes import *
+import logging
+logger = logging.getLogger(__name__)
+latest_published_cwl_version = 'v1.1'
+process_types = ['CommandLineTool', 'ExpressionTool', 'Workflow']
+
+def parse_schema(fname):
+    schema = json.load(open(fname, 'r'))
+    type_dict = {}
+    add_formal_primitive_types_to_type_dict(schema, type_dict)
+    parse_cwl_type(schema, type_dict)
+    clean_up_schema(type_dict)
+    return type_dict
+
+
+def add_formal_primitive_types_to_type_dict(schema, type_dict):
+    _primitive_type_definition = next((s for s in schema if s.get('name') == 'PrimitiveType'), None)
+    for pt in _primitive_type_definition.get('symbols'):
+        type_dict[pt] = CWLBaseType(name=pt)
+
+
+def clean_up_schema(type_dict):
+    if isinstance(type_dict.get('CWLVersion'), CWLEnumType):
+        type_dict['CWLVersion'].symbols = [symbol for symbol in type_dict['CWLVersion'].symbols if not symbol.startswith('draft-')]
+        type_dict['CWLVersion'].symbols.remove('v1.0.dev4')
+        return
+    logger.error('No CWLVersion enum in schema')
+
+
+def parse_cwl_type(schema, lang_model, map_subject_predicate=None, field_name=None):
+    if isinstance(schema, str):
+        return lang_model[schema]
+        if isinstance(schema, list):
+            return [parse_cwl_type(_scheme, lang_model, map_subject_predicate, field_name) for _scheme in schema]
+        if schema.get('type') == 'array':
+            name = field_name
+            if map_subject_predicate is None:
+                return CWLArrayType(name=name,
+                  allowed_types=(parse_cwl_type(schema.get('items'), lang_model)))
+            return CWLListOrMapType(name=name,
+              allowed_types=(parse_cwl_type(schema.get('items'), lang_model)),
+              map_sp=map_subject_predicate)
+    else:
+        if schema.get('type') == 'enum':
+            return parse_enum(schema, lang_model)
+        if schema.get('type') == 'record':
+            return parse_record(schema, lang_model)
+    logger.error(f"Unknown schema type {schema.get('type')}: {schema}")
+
+
+def parse_enum(schema, lang_model):
+    enum_name = schema.get('name')
+    if enum_name == 'Any':
+        lang_model[enum_name] = CWLAnyType(name=(schema.get('name')), type_dict=lang_model)
+        return lang_model.get(enum_name)
+    if enum_name == 'Expression':
+        lang_model[enum_name] = CWLExpressionType(name=(schema.get('name')))
+        return lang_model.get(enum_name)
+    symbols = schema.get('symbols')
+    for extends in listify(schema.get('extends')):
+        extends = extends.split('#')[1]
+        if extends in lang_model:
+            symbols += lang_model[extends].symbols
+
+    lang_model[enum_name] = CWLEnumType(name=(schema.get('name')),
+      symbols=(set(symbols)))
+    return lang_model.get(enum_name)
+
+
+def parse_record(schema, lang_model):
+    record_name = schema.get('name')
+    fields = {}
+    for extends in listify(schema.get('extends')):
+        extends = extends.split('#')[1]
+        if extends in lang_model:
+            (fields.update)(**(lang_model[extends]).fields)
+
+    lang_model[record_name] = CWLRecordType(name=record_name,
+      doc=(schema.get('doc')),
+      fields=fields)
+    (lang_model[record_name].fields.update)(**)
+    lang_model[record_name].init()
+    return lang_model.get(record_name)
+
+
+def listify(items):
+    if items is None:
+        return []
+    if isinstance(items, list):
+        return items
+    return [items]
+
+
+def parse_field(field, lang_model):
+    field_name = field.get('name')
+    required = True
+    _allowed_types = field.get('type')
+    if isinstance(_allowed_types, list):
+        if 'null' in _allowed_types:
+            required = False
+            _allowed_types.remove('null')
+    map_subject_predicate = None
+    jldp = field.get('jsonldPredicate')
+    if isinstance(jldp, dict):
+        if 'mapSubject' in jldp:
+            map_subject_predicate = MapSubjectPredicate(jldp.get('mapSubject'), jldp.get('mapPredicate'))
+    return (
+     field_name,
+     CWLFieldType(doc=(field.get('doc')),
+       required=required,
+       allowed_types=parse_cwl_type(_allowed_types,
+       lang_model, map_subject_predicate=map_subject_predicate,
+       field_name=field_name)))

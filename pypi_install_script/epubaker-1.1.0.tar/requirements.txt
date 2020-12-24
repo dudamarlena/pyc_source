@@ -1,0 +1,5 @@
+pillow
+nose
+python-magic
+html5lib
+hooky

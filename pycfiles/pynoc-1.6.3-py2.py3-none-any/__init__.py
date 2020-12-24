@@ -1,0 +1,14 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /usr/local/lib/python2.7/dist-packages/PyNOAAGeoMagIndiceHandler/__init__.py
+# Compiled at: 2012-09-18 11:22:18
+__author__ = 'Patrick.Riendeau: alias, Maxiste Deams < maxistedeams at gmail dot com >'
+__status__ = 'alpha'
+__version__ = '0.0.1r-apha-jedyais'
+__all__ = ['__init__', 'decorator', 'GeoMagReference']
+__title__ = 'PyNOAAGeoMagIndiceHandler'
+__copyright__ = 'Copyright (c) 2006-2010 Patrick Riendeau.'
+__website__ = 'http://github.com/priendeau/PyNOAAGeoMagIndiceHandler'
+__description__ = "A python interface to Space NOAA \n=========\n    A python interface to Space NOAA Magnetometer, Solar Wind Electron Proton, Differential Flux and \n    Anisotropy Index from ACE and Stereo A, B satellite. \n    \n    In this package, I inclued pyaeso and bctc and  LomnickÃ ÅtÃt Neutron detector as well \n    Space NOAA Magnetometer, Solar Wind Electron Proton, Differential Flux and Anisotropy Index, \n    to cross data. \n    \n    This Module is a project aim to get folding indice of magnetic permeability while solar \n    flare higher than Class M. This Solara flare are mitigating the electricity current \n    flow during solar flare event and magnetic storm, and can be predicted by corrected \n    humain normal energy consumption prediction and the normal proton pression existing \n    around many region where energy can rate can be accessible with pythonic module. \n    Region being calculated with spherical harmonic matrix. \n\n    Can also lead to detection of future electric discontinuity during M and X Class Solar flare. \n\nInstalling\n==========\n  It is using distutils(setup.py), so you can easily install this on most system with no trouble.\n  From the base dir:\n  python setup.py install (you would need root access depending on the system being used(`sudo'))\n  \n  You can download the latest versions released from <<No pypi for the moment, crude develpt and \n  in correct stuff will cause problem and rejection, but maxistedeams will release it >>\n  or download the development version straight from the mercurial repository hosted by me at:\n  git://github.com/priendeau/PyNOAAGeoMagIndiceHandler.git.\n\nDocumentation\n=============\n  Is currently lacking, about every method is documented in the source. But future prototype will\n  become move and more verbosis and Final realse will include test-case and a lot of documentation.\n\n\n Don't use Passogva to name sub-version name or you'll have no choice doing\n Ugly Ascii art because you fall on something unattended...\n \n  XXXXXX        XX  XX\n XX    XXX      XX  XX\nXX          XXXXXXXXXXXXXX\nXX  XXXXX       XX  XX\nXX      XX  XXXXXXXXXXXXXX\n XXX   XXX      XX  XX\n   XXXXX        XX  XX\n"
+__license__ = 'New BSD License.'

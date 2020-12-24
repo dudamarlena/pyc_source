@@ -1,0 +1,144 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3351)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/zjshao/Documents/repos/VASPy/tests/arc_test.py
+# Compiled at: 2017-06-01 02:20:05
+# Size of source mod 2**32: 4393 bytes
+"""
+ArcFile类单元测试.
+"""
+import inspect, os, unittest
+from vaspy.matstudio import ArcFile
+from tests import abs_path
+
+class ArcTest(unittest.TestCase):
+
+    def setUp(self):
+        self.maxDiff = True
+
+    def test_construction_query(self):
+        """ Test ArcFile construction and query function. """
+        filename = abs_path + '/testdata/00-04.arc'
+        arc = ArcFile(filename)
+        self.assertEqual(arc.filename, filename)
+        ref_lengths = [
+         7.9398, 7.9398, 17.9398]
+        self.assertListEqual(arc.lengths, ref_lengths)
+        ref_angles = [
+         90.0, 90.0, 90.0]
+        self.assertListEqual(arc.angles, ref_angles)
+
+    def test_coords_iterator(self):
+        """ Make sure we can get coordinates correctly. """
+        filename = abs_path + '/testdata/00-04.arc'
+        arc = ArcFile(filename)
+        for ret_coords in arc.coords_iterator:
+            ret_coords = ret_coords.tolist()
+            break
+
+        ref_coords = [
+         [
+          0.404932144, 3.164028696, 1.984961526],
+         [
+          0.404932144, 3.164028696, 5.965015241],
+         [
+          0.404932144, 1.17906717, 0.0],
+         [
+          0.404932144, 1.17906717, 3.977019323],
+         [
+          0.404932144, 1.17906717, 7.910692688],
+         [
+          2.38989367, 1.17906717, 1.984961526],
+         [
+          2.38989367, 1.17906717, 5.965015241],
+         [
+          2.38989367, 3.164028696, 0.0],
+         [
+          2.38989367, 3.164028696, 3.977019323],
+         [
+          2.38989367, 3.164028696, 7.910692688],
+         [
+          4.374855196, 3.164028696, 1.984961526],
+         [
+          4.374855196, 3.164028696, 5.965015241],
+         [
+          4.374855196, 1.17906717, 0.0],
+         [
+          4.374855196, 1.17906717, 3.977019323],
+         [
+          4.374855196, 1.17906717, 7.910692688],
+         [
+          6.359816723, 1.17906717, 1.984961526],
+         [
+          6.359816723, 1.17906717, 5.965015241],
+         [
+          6.359816723, 3.164028696, 0.0],
+         [
+          6.359816723, 3.164028696, 3.977019323],
+         [
+          6.359816723, 3.164028696, 7.910692688],
+         [
+          0.404932144, 7.133951749, 1.984961526],
+         [
+          0.404932144, 7.133951749, 5.965015241],
+         [
+          0.404932144, 5.148990222, 0.0],
+         [
+          0.404932144, 5.148990222, 3.977019323],
+         [
+          0.404932144, 5.148990222, 7.910692688],
+         [
+          2.38989367, 5.148990222, 1.984961526],
+         [
+          2.38989367, 5.148990222, 5.965015241],
+         [
+          2.38989367, 7.133951749, 0.0],
+         [
+          2.38989367, 7.133951749, 3.977019323],
+         [
+          2.38989367, 7.133951749, 7.910692688],
+         [
+          4.374855196, 7.133951749, 1.984961526],
+         [
+          4.374855196, 7.133951749, 5.965015241],
+         [
+          4.374855196, 5.148990222, 0.0],
+         [
+          4.374855196, 5.148990222, 3.977019323],
+         [
+          4.374855196, 5.148990222, 7.910692688],
+         [
+          6.359816723, 5.148990222, 1.984961526],
+         [
+          6.359816723, 5.148990222, 5.965015241],
+         [
+          6.359816723, 7.133951749, 0.0],
+         [
+          6.359816723, 7.133951749, 3.977019323],
+         [
+          6.359816723, 7.133951749, 7.910692688],
+         [
+          3.419919646, 4.183439745, 9.201971154]]
+        self.assertListEqual(ret_coords, ref_coords)
+
+    def test_elements(self):
+        """ Test query function elements(). """
+        filename = abs_path + '/testdata/00-04.arc'
+        arc = ArcFile(filename)
+        ref_elements = [
+         'Pt', 'Pt', 'Pt', 'Pt', 'Pt',
+         'Pt', 'Pt', 'Pt', 'Pt', 'Pt',
+         'Pt', 'Pt', 'Pt', 'Pt', 'Pt',
+         'Pt', 'Pt', 'Pt', 'Pt', 'Pt',
+         'Pt', 'Pt', 'Pt', 'Pt', 'Pt',
+         'Pt', 'Pt', 'Pt', 'Pt', 'Pt',
+         'Pt', 'Pt', 'Pt', 'Pt', 'Pt',
+         'Pt', 'Pt', 'Pt', 'Pt', 'Pt', 'O']
+        ret_elements = arc.elements
+        self.assertListEqual(ref_elements, ret_elements)
+
+
+if '__main__' == __name__:
+    suite = unittest.TestLoader().loadTestsFromTestCase(ArcTest)
+    unittest.TextTestRunner(verbosity=2).run(suite)

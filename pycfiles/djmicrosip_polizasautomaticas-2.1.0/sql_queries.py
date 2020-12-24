@@ -1,0 +1,8 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: C:\BitBucket\djmicrosip_apps\djmicrosip_polizasautomaticas\djmicrosip_polizasautomaticas\custom_db\ventas\sql_queries.py
+# Compiled at: 2015-10-24 14:40:32
+triggers_activate = {}
+triggers_activate['SIC_POLIZASAUTOMATICAS_DOCTOS_VE'] = '\n  CREATE OR ALTER TRIGGER SIC_POLIZASAUTO_DOCTOS_VE FOR DOCTOS_VE\nACTIVE BEFORE UPDATE POSITION 0\nAS\n  DECLARE VARIABLE VALORES VARCHAR(200);\n  DECLARE VARIABLE INTEGRAR VARCHAR(10);\n  DECLARE VARIABLE POLIZA_GENERADO INTEGER;\n  DECLARE VARIABLE TIPO_DOCUMENTO CHAR(1);\n\n  BEGIN\n  select valor from registry where nombre = \'SIC_POLIZAS_AUTOMATICAS_tipo_ve\' into :tipo_documento;\n    IF  (OLD.APLICADO = \'N\' AND NEW.APLICADO = \'S\' AND (NEW.TIPO_DOCTO = :TIPO_DOCUMENTO OR NEW.TIPO_DOCTO = \'D\') AND NOT NEW.CLIENTE_ID IS NULL) THEN\n    BEGIN\n\n        POLIZA_GENERADO = 0;\n        SELECT VALOR FROM REGISTRY WHERE NOMBRE = \'SIC_POLIZAS_AUTOMATICAS_integrar_contabilidad\' INTO :INTEGRAR;\n        VALORES = \'{"FOLIO":"\'|| NEW.FOLIO ||\'","TIPO_DOCUMENTO":"\'||NEW.tipo_docto||\'"}\';\n        /*  PARA CHECAR SI NO SE A GENERADO EL FOLIO ANTES*/\n        IF (EXISTS(SELECT * FROM SIC_PENDINGTASK WHERE PARAMETERS = :VALORES AND APP = \'POLIZASAUTOMATICAS\' )) THEN\n            POLIZA_GENERADO = 1;\n\n        IF (INTEGRAR = \'True\' AND POLIZA_GENERADO = 0) THEN\n        BEGIN\n            INSERT INTO SIC_PENDINGTASK (TYPE, APP, PARAMETERS, INTENTS) VALUES(\'VE\', \'POLIZASAUTOMATICAS\', :VALORES,  0);\n        END\n    END\n END\n  '

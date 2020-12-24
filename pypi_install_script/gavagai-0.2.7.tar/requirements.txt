@@ -1,0 +1,5 @@
+-e .
+pytest>=2.7.0
+httpretty>=0.8.8
+flake8
+# zest.releaser[recommended]

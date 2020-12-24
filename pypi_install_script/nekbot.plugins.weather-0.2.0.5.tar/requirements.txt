@@ -1,0 +1,3 @@
+nekbot
+python-forecastio
+nekbot.plugins.weather

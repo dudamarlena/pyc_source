@@ -1,0 +1,28 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/mdipierro/make_web2py/web2py/gluon/contrib/pymysql/constants/COMMAND.py
+# Compiled at: 2013-10-14 11:16:24
+COM_SLEEP = 0
+COM_QUIT = 1
+COM_INIT_DB = 2
+COM_QUERY = 3
+COM_FIELD_LIST = 4
+COM_CREATE_DB = 5
+COM_DROP_DB = 6
+COM_REFRESH = 7
+COM_SHUTDOWN = 8
+COM_STATISTICS = 9
+COM_PROCESS_INFO = 10
+COM_CONNECT = 11
+COM_PROCESS_KILL = 12
+COM_DEBUG = 13
+COM_PING = 14
+COM_TIME = 15
+COM_DELAYED_INSERT = 16
+COM_CHANGE_USER = 17
+COM_BINLOG_DUMP = 18
+COM_TABLE_DUMP = 19
+COM_CONNECT_OUT = 20
+COM_REGISTER_SLAVE = 21

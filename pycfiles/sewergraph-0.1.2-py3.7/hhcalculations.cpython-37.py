@@ -1,0 +1,151 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\sewergraph\hhcalculations.py
+# Compiled at: 2018-06-26 13:49:43
+# Size of source mod 2**32: 4956 bytes
+import math
+
+def hhcalcs_on_network(G):
+    """
+        For each sewer (edge) in the network, G, calculate the velocity of gravity
+        flow, full-flow capacity, and full-flow travel time through the length of
+        the sewer. This sets attributes in 'velocity', 'capacity',
+        and 'travel_time'.
+
+        Parameters
+        ----------
+        G : Networkx DiGraph
+                Graph of a sewer network with edges having the Slope, Height, Width
+                pipeshape, and diameter parameters.
+        """
+    G1 = G.copy()
+    for u, v, data in G1.edges(data=True):
+        if 'slope_calculated' in data:
+            slope = max(data['slope_calculated'], 0.01)
+        else:
+            slope = max(data['slope'], 0.1)
+        data['slope_used_in_calcs'] = slope
+        height, width = data['height'], data['width']
+        shape, diameter = data['pipeshape'], data['diameter']
+        if 'shape' is None:
+            shape = 'CIR'
+            diameter = max(diameter, height)
+            data['notes'] = 'assumed CIR and diam of {}'.format(diameter)
+        V = mannings_velocity(diameter, slope, height, width, shape, data)
+        V = max(V, 2.0)
+        data['velocity'] = max(V, 2.0)
+        A = xarea(shape, diameter, height, width)
+        data['capacity'] = A * V
+        T = data['length'] / V / 60.0
+        data['travel_time'] = T
+
+    return G1
+
+
+def slope_at_velocity(velocity, diameter, height=None, width=None, shape='CIR'):
+    Rh = hydraulic_radius(shape, diameter, height, width)
+    n = get_mannings(shape, diameter)
+    k = 1.49 / n * math.pow(Rh, 0.667)
+    slope = (velocity / k) ** 2
+    return slope
+
+
+def mannings_velocity(diameter, slope, height=None, width=None, shape='CIR', data=None):
+    try:
+        A = xarea(shape, diameter, height, width)
+        Rh = hydraulic_radius(shape, diameter, height, width)
+        n = get_mannings(shape, diameter)
+        V = 1.49 / n * math.pow(Rh, 0.667) * math.pow(slope / 100.0, 0.5)
+    except:
+        V = 2.5
+
+    return V
+
+
+def mannings_capacity(diameter, slope, height=None, width=None, shape='CIR'):
+    A = xarea(shape, diameter, height, width)
+    Rh = hydraulic_radius(shape, diameter, height, width)
+    n = get_mannings(shape, diameter)
+    k = 1.49 / n * math.pow(Rh, 0.667) * A
+    Q = k * math.pow(slope / 100.0, 0.5)
+    return Q
+
+
+def get_mannings(shape, diameter):
+    n = 0.015
+    if shape == 'CIR' or shape == 'CIRCULAR':
+        if diameter <= 24:
+            n = 0.015
+    elif shape == 'CIR' or shape == 'CIRCULAR':
+        if diameter > 24:
+            n = 0.013
+    return n
+
+
+def xarea(shape, diameter, height, width):
+    if shape == 'CIR' or shape == 'CIRCULAR':
+        return 3.1415 * math.pow(diameter / 12.0, 2.0) / 4.0
+    if shape == 'EGG' or shape == 'EGG SHAPE':
+        return 0.5105 * math.pow(height / 12.0, 2.0)
+    if shape == 'BOX' or shape == 'BOX SHAPE':
+        return height * width / 144.0
+    return 0
+
+
+def hydraulic_radius(shape, diameter, height, width):
+    if shape == 'CIR' or shape == 'CIRCULAR':
+        return diameter / 12.0 / 4.0
+    if shape == 'EGG' or shape == 'EGG SHAPE':
+        return 0.1931 * (height / 12.0)
+    if shape == 'BOX' or shape == 'BOX SHAPE':
+        return height * width / (2.0 * height + 2.0 * width) / 12.0
+
+
+def replacement_sewer_size(design_q, slope):
+    """
+        return the minimum circular sewer diameter (inches) (and provided capacity)
+        required to convey a given design peak flow at a set slope (ft per 100ft)
+        """
+    sewer_diameters = [
+     18, 21, 24, 27, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84]
+    d = h = w = None
+    for diam in sewer_diameters:
+        capacity = mannings_capacity(diam, slope=slope, shape='CIR')
+        if capacity > design_q:
+            d = diam
+            return (d, h, w, capacity)
+
+    h = 48
+    w = 66
+    while capacity < design_q:
+        capacity = mannings_capacity(height=h, width=w, slope=slope, shape='BOX',
+          diameter=None)
+        h += 6
+        w += 6
+
+    return (d, h, w, capacity)
+
+
+def philly_storm_intensity(tc, return_period=0):
+    """
+        given a tc, return the intensity of the
+        Philadelphia Water Dept design storm (in/hr)
+        """
+    I = 116.0 / (tc + 17.0)
+    if return_period == 1:
+        I = 100.0 / (tc + 18.0)
+    if return_period == 2:
+        I = 131.0 / (tc + 21.0)
+    if return_period == 5:
+        I = 171.0 / (tc + 23.5)
+    if return_period == 10:
+        I = 214.0 / (tc + 26.0)
+    if return_period == 25:
+        I = 252.0 / (tc + 28.0)
+    if return_period == 50:
+        I = 289.0 / (tc + 30.0)
+    if return_period == 100:
+        I = 325.0 / (tc + 32.0)
+    return I

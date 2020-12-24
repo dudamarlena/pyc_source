@@ -1,0 +1,3 @@
+aiorpcx>=0.18.4
+bitcoinx>=0.2.4
+pycryptodomex

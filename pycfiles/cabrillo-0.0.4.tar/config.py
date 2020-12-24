@@ -1,0 +1,349 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/wangwenpei/Codes/nextoa/cabric/cabric/components/config.py
+# Compiled at: 2017-12-26 22:16:35
+import json, os
+from cliez.component import Component
+from cabric.dns.dnspod import DNSPod
+from cabric.utils import get_roots, run, bind_hosts, execute, get_platform, put, fabric_settings, env, get_home, current_machine, mirror_put
+try:
+    from shlex import quote as shell_quote
+except ImportError:
+    from pipes import quote as shell_quote
+
+class ConfigComponent(Component):
+
+    def enable_services(self, services):
+        """
+        :param list services: service list
+        :return:
+        """
+        if get_platform() == 'centos':
+            [ run('systemctl enable %s' % v) for v in services ]
+        else:
+            self.warn('not support platform.no services enabled.')
+
+    def reload(self, reloads, all_services):
+        if all_services and reloads:
+            services = [ v for v in reloads if v in all_services ]
+            run('systemctl reload %s' % (' ').join(services))
+
+    def start(self, services, all_services):
+        if all_services and services:
+            s = [ v for v in services if v in all_services ]
+            run('systemctl start %s' % (' ').join(s))
+
+    def stop(self, services, all_services):
+        if all_services and services:
+            s = [ v for v in services if v in all_services ]
+            run('systemctl stop %s' % (' ').join(s))
+
+    def restart(self, restarts, all_services):
+        if all_services and restarts:
+            services = [ v for v in restarts if v in all_services ]
+            if services:
+                run('systemctl restart %s' % (' ').join(services))
+            else:
+                self.warn('restart progress actived,but no restart service found.')
+
+    def upload_config_file(self, config_root, working_env, stages=[]):
+        """
+        support upload other config or project cabric files
+        :param config_root:
+        :param working_env:
+        :param stages:
+        :return:
+        """
+        stages.append(working_env)
+        upload_roots = map(lambda x: os.path.join(os.path.expanduser(x.get('root')), 'config', 'stages', x.get('name', 'default')) if isinstance(x, dict) else os.path.join(config_root, x), stages)
+        return [ lambda : mirror_put(local_root, '/')
+         for local_root in upload_roots
+               ]
+
+    def upload_crontab(self, config, env_option, crontab_root):
+        user = config.get('user')
+        crontab_file = config.get('crontab', env_option + '.conf')
+        position = config.get('position')
+        if not user:
+            self.warn("no user found,skip deploy crontab file `%s'" % config.get(crontab_file))
+            return
+        else:
+            crontab_path = os.path.expanduser(os.path.join(crontab_root, 'config', 'crontab', crontab_file))
+            if os.path.exists(crontab_path):
+                if position is None or current_machine(position):
+                    put(crontab_path, '/tmp/cabric_crontab')
+                    run('crontab < /tmp/cabric_crontab', user)
+                    run('rm -f /tmp/cabric_crontab')
+                else:
+                    self.warn("crontab doesn't need to deploy this machine:%s." % env.host_string)
+            else:
+                self.warn("crontab file `%s' not found. skip to install it" % crontab_path)
+            return
+
+    def upload_crontabs(self, crons_config, env_option, crontab_root):
+        """
+        because command list is execute after lambda define.
+
+        if we add upload_crontab directly,
+         the value of crontab_config will always be last item.
+
+        :param crons_config:
+        :param env_option:
+        :param crontab_root:
+        :return:
+        """
+        for crontab_config in crons_config:
+            self.upload_crontab(crontab_config, env_option, crontab_root)
+
+    def set_hostname(self):
+        """
+        set machine hostname
+        :return:
+        """
+        try:
+            host_index = env.hosts.index(env.host_string)
+            if env.host_names[host_index]:
+                run('hostnamectl set-hostname %s' % env.host_names[host_index])
+                run('hostnamectl set-hostname %s --pretty' % env.host_names[host_index])
+                run('hostnamectl set-hostname %s --static' % env.host_names[host_index])
+                run('systemctl restart systemd-hostnamed')
+        except IndexError:
+            self.warn("can't find current hostname config:%s" % env.host_string)
+
+    def letsencrypt_server(self, domains):
+        nginx_root = get_home('nginx')
+        if nginx_root:
+            run('systemctl restart nginx')
+            run(('certbot certonly --webroot -w {0} {1}').format(nginx_root, (' ').join([ '-d %s' % v for v in domains ])))
+        else:
+            raise ValueError('no nginx found.skip config certificate...')
+
+    def set_hosts(self, records):
+        """
+        ..experiment::
+
+                use env-config to handle hosts file seems a bad idea.
+
+                we already user upload hosts file, it's simple to use,
+                user only need to care don't overwrite their hosts
+
+                and if we want to support something like:
+
+                    * delete hosts
+                    * update ip
+
+                we need do lot of work to support this.
+
+        :param records:
+        :return:
+        """
+
+        def set_host(ip, host):
+            """
+            if you want to use this feature for old file, use 4 space.
+
+            limit:
+                only support one2one relation
+
+            :param ip:
+            :param host:
+            :return:
+            """
+            with fabric_settings(warn_only=True):
+                match = '%s    %s' % (ip, host)
+                if run('grep "%s" /etc/hosts' % match).failed:
+                    run('echo "%s" >> /etc/hosts' % match)
+
+        [ set_host(v[0], v[1]) for v in records ]
+
+    def set_dns_list(self, dns_list):
+        for dns in dns_list:
+            isp = dns.get('isp')
+            if isp == '/etc/hosts':
+                self.set_hosts(dns.get('records'))
+            elif isp == 'dnspod.cn':
+                domain = dns.get('domain')
+                if domain:
+                    dns_client = DNSPod()
+                    dns_client.bind_domain(domain)
+                    for record in dns.get('records', []):
+                        dns_client.bind_record(**record)
+
+            else:
+                self.error('illegal dns config:%s' % dns)
+
+    def set_ssl_config(self, ssl_config, env_name):
+        """ Not support parallel workflow
+        :param ssl_config:
+        :param env_name:
+        :return:
+        """
+        encrypt_position = ssl_config.get('encrypt-position', 0)
+        try:
+            use_host = env.hosts[encrypt_position]
+            if use_host != env.host_string:
+                return
+        except IndexError:
+            self.error("`ssl.encrypt-position' value is invalid.")
+
+        domains = ssl_config.get('domains')
+        if not domains and not isinstance(domains, list):
+            self.error("`ssl.domains' must be config.")
+        dh_param = ssl_config.get('dhparam')
+        if dh_param:
+            dh_param_file = dh_param['path']
+            dh_param_length = dh_param.get('length', 4096)
+            run(('test -f {0} || openssl dhparam -out {0} {1}').format(dh_param_file, dh_param_length))
+
+        def create_certicifate():
+            try:
+                self.letsencrypt_server(domains)
+            except ValueError as e:
+                self.warn(e)
+
+            certificate_remote_dir = '/etc/letsencrypt/live/' + domains[0]
+            fullchain = run('cat %s' % os.path.join(certificate_remote_dir, 'fullchain.pem'))
+            private_key = run('cat %s' % os.path.join(certificate_remote_dir, 'privkey.pem'))
+            print fullchain
+            print private_key
+
+        load_balancer = ssl_config.get('load-balancer')
+        if load_balancer:
+            lb_isp = load_balancer.get('isp')
+            upstream_mode = load_balancer.get('upstream-mode')
+            if lb_isp.lower() == 'qingcloud.com':
+                from cabric.cloud.qingcloud import QingCloud
+                client = QingCloud()
+                client.connect(load_balancer['zone'])
+                client.connector.debug = self.options.debug
+                if upstream_mode:
+                    create_certicifate()
+                    return
+                policy_name = 'letsencrypt-' + env_name
+                policy = client.get_or_create_loadbalancer_policy(policy_name)
+                rules = [ {'loadbalancer_policy_rule_name': domain, 'rule_type': 'url', 'val': '^/.well-known'} for domain in ssl_config['domains']
+                        ]
+                for rule in rules:
+                    client.get_or_add_loadbalancer_policy_rules(policy['loadbalancer_policy_id'], rule)
+
+                client.apply_loadbalancer_policy(policy['loadbalancer_policy_id'])
+                http_listener = load_balancer.get('http-listener')
+                backend = load_balancer.get('backend')
+                backend.update({'loadbalancer_backend_name': policy['loadbalancer_policy_name'], 
+                   'loadbalancer_policy_id': policy['loadbalancer_policy_id']})
+                if http_listener and backend:
+                    client.get_or_add_load_balancer_backends(http_listener, backend)
+                create_certicifate()
+            elif lb_isp is None:
+                self.warn('load balancer isp not specified.skip config load balancer')
+            else:
+                self.warn('unknown isp for load balancer %s,skip config load balancer' % lb_isp)
+        else:
+            create_certicifate()
+        return
+
+    def set_timezone(self, timezone):
+        """
+        should limit user input
+
+        ..todo:
+            danger if we don't limit timezone.
+            something like this  `Asian/Shanghai && rm -rf /`
+
+        timedatectl list-timezones
+        timedatectl
+
+        :param timezone:
+        :return:
+        """
+        run('timedatectl set-timezone %s' % timezone)
+
+    def run(self, options):
+        """
+        ..note::
+            unstable feature.
+
+            current we use rsync instead fabric put.
+            but rsync may cause permission errors.
+
+        :param options:
+        :return:
+        """
+        package_root, config_root, fabric_root = get_roots(options.dir)
+        bind_hosts(fabric_root, options.env, options.parallel, options.hosts_file)
+        using_config = os.path.join(package_root, options.env)
+        try:
+            env_config = json.load(open(os.path.join(using_config, 'env.json'), 'r'))
+        except ValueError:
+            self.error('Invalid json syntax:%s' % os.path.join(using_config, 'env.json'))
+
+        command_list = []
+        if not options.skip_upload:
+            [ command_list.append(v) for v in self.upload_config_file(config_root, options.env, env_config.get('stages', []))
+            ]
+        if not options.skip_hostname:
+            command_list.append(lambda : self.set_hostname())
+        timezone = env_config.get('timezone')
+        if not options.skip_timezone and timezone:
+            command_list.append(lambda : self.set_timezone(timezone))
+        dns_list = env_config.get('dns-list')
+        if not options.skip_dns and dns_list:
+            command_list.append(lambda : self.set_dns_list(dns_list))
+        services = env_config.get('services', [])
+        if not options.skip_enable_services and services:
+            command_list.append(lambda : self.enable_services(services))
+        if options.reload:
+            command_list.append(lambda : self.reload(options.reload, services))
+        if options.restart:
+            command_list.append(lambda : self.restart(options.restart, services))
+        if options.start:
+            command_list.append(lambda : self.start(options.start, services))
+        if options.stop:
+            command_list.append(lambda : self.stop(options.stop, services))
+        crons_config = env_config.get('crons', [])
+        if not options.skip_crontab and crons_config:
+            command_list.append(lambda : self.upload_crontabs(crons_config, options.env, options.dir))
+        ssl_config = env_config.get('ssl', {})
+        if options.enable_certbot and ssl_config:
+            command_list.append(lambda : self.set_ssl_config(ssl_config, options.env))
+        execute(command_list)
+
+    @classmethod
+    def add_arguments(cls):
+        """
+        sub parser document
+        """
+        return [
+         (
+          ('--skip-enable-services', ),
+          dict(action='store_true', help='skip enable system services')),
+         (
+          ('--skip-upload', ),
+          dict(action='store_true', help='skip upload config files')),
+         (
+          ('--skip-crontab', ),
+          dict(action='store_true', help='skip upload crontab')),
+         (
+          ('--skip-timezone', ),
+          dict(action='store_true', help='skip set timezone')),
+         (
+          ('--skip-hostname', ),
+          dict(action='store_true', help='skip set hostname')),
+         (
+          ('--skip-dns', ),
+          dict(action='store_true', help='skip config dns')),
+         (
+          ('--enable-certbot', ),
+          dict(action='store_true', help='enable config ssl certificate')),
+         (
+          ('--reload', ), dict(nargs='+', help='set reload service')),
+         (
+          ('--restart', ), dict(nargs='+', help='set restart service')),
+         (
+          ('--start', ), dict(nargs='+', help='set start service')),
+         (
+          ('--stop', ), dict(nargs='+', help='set stop service')),
+         (
+          ('--parallel', '-P'),
+          dict(action='store_true', help='default to parallel execution method'))]

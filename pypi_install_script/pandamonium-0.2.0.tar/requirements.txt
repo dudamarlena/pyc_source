@@ -1,0 +1,4 @@
+Click>=6.0
+pandas>=0.20.0
+numpy>=1.12.1
+Faker>=0.7.12

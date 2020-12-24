@@ -1,0 +1,49 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.3 (3230)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/trepan/processor/command/alias.py
+# Compiled at: 2018-02-01 07:53:21
+# Size of source mod 2**32: 3162 bytes
+from trepan.processor.command import base_cmd as Mbase_cmd
+
+class AliasCommand(Mbase_cmd.DebuggerCommand):
+    __doc__ = '**alias** *alias-name* *debugger-command*\n\nAdd alias *alias-name* for a debugger command *debugger-command*.  You\nmight do this if you want shorter command names or more commands that\nhave more familiar meanings.\n\nAnother related use is as a command abbreviation for a command that\nwould otherwise be ambiguous. For example, by default we make `s` be\nan alias of `step` to force it to be used. Without the alias, `s`\nmight be `step`, `show`, or `set` among others.\n\nExamples:\n--------\n\n    alias cat list   # "cat prog.py" is the same as "list prog.py"\n    alias s   step   # "s" is now an alias for "step".\n                     # The above example is done by default.\n\nSee also:\n---------\n\n`unalias` and `show alias`.\n    '
+    category = 'support'
+    min_args = 0
+    max_args = 2
+    name = 'alias'
+    need_stack = True
+    short_help = 'Add an alias for a debugger command'
+
+    def run(self, args):
+        if len(args) == 1:
+            self.proc.commands['show'].run(['show', 'alias'])
+        else:
+            if len(args) == 2:
+                self.proc.commands['show'].run(['show', 'alias', args[1]])
+            else:
+                junk, al, command = args
+                if command in self.proc.commands:
+                    if al in self.proc.aliases:
+                        old_command = self.proc.aliases[al]
+                        self.msg(("Alias '%s#' for command '%s'replaced old " + "alias for '%s'.") % (
+                         al, command, old_command))
+                    else:
+                        self.msg("New alias '%s' for command '%s' created." % (
+                         al, command))
+                    self.proc.aliases[al] = command
+                else:
+                    self.errmsg(("You must alias to a command name, and '%s' " + 'and is not one.') % command)
+                return
+
+
+if __name__ == '__main__':
+    from trepan.processor.command import mock
+    d, cp = mock.dbg_setup()
+    command = AliasCommand(cp)
+    command.run(['alias', 'yy', 'foo'])
+    command.run(['alias', 'yy', ' foo'])
+    command.run(['alias', 'yystep'])
+    command.run(['alias'])
+    command.run(['alias', 'yynext'])

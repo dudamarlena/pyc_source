@@ -1,0 +1,105 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/martijndevos/Documents/anydex-core/anydex/core/pricelevel_list.py
+# Compiled at: 2019-05-25 07:28:23
+from __future__ import absolute_import
+from typing import Any, Dict, List
+from anydex.core.price import Price
+from anydex.core.pricelevel import PriceLevel
+
+class PriceLevelList(object):
+    """
+    Sorted doubly linked dictionary implementation.
+    """
+
+    def __init__(self):
+        super(PriceLevelList, self).__init__()
+        self._price_list = []
+        self._price_level_dictionary = {}
+
+    def insert(self, price_level):
+        """
+        :type price_level: PriceLevel
+        """
+        self._price_list.append(price_level.price)
+        self._price_list.sort()
+        self._price_level_dictionary[price_level.price] = price_level
+
+    def remove(self, price):
+        """
+        :type price: Price
+        """
+        self._price_list.remove(price)
+        del self._price_level_dictionary[price]
+
+    def succ_item(self, price):
+        """
+        Returns the price level where price_level.price is successor to given price
+
+        :type price: Price
+        :rtype: PriceLevel
+        """
+        index = self._price_list.index(price) + 1
+        if index >= len(self._price_list):
+            raise IndexError
+        succ_price = self._price_list[index]
+        return self._price_level_dictionary[succ_price]
+
+    def prev_item(self, price):
+        """
+        Returns the price level where price_level.price is predecessor to given price
+
+        :type price: Price
+        :rtype: PriceLevel
+        """
+        index = self._price_list.index(price) - 1
+        if index < 0:
+            raise IndexError
+        prev_price = self._price_list[index]
+        return self._price_level_dictionary[prev_price]
+
+    def min_key(self):
+        """
+        Return the lowest price in the price level list
+
+        :rtype: Price
+        """
+        return self._price_list[0]
+
+    def max_key(self):
+        """
+        Return the highest price in the price level list
+
+        :rtype: Price
+        """
+        return self._price_list[(-1)]
+
+    def items(self, reverse=False):
+        """
+        Returns a sorted list (on price) of price_levels
+
+        :param reverse: When true returns the reversed sorted list of price, price_level tuples
+        :type reverse: bool
+        :rtype: List[(Price, PriceLevel)]
+        """
+        items = []
+        for price in self._price_list:
+            if reverse:
+                items.insert(0, self._price_level_dictionary[price])
+            else:
+                items.append(self._price_level_dictionary[price])
+
+        return items
+
+    def get_ticks_list(self):
+        """
+        Returns a list describing all ticks.
+        :return: list
+        """
+        ticks_list = []
+        for price_level in self.items():
+            for tick in price_level:
+                ticks_list.append(tick.tick.to_dictionary())
+
+        return ticks_list

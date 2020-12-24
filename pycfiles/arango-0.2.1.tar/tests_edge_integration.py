@@ -1,0 +1,49 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/maxk/Projects/OpenSource/arango-python/arango/tests/tests_edge_integration.py
+# Compiled at: 2013-03-08 14:06:20
+import logging
+from nose.tools import assert_equal, raises
+from arango.collection import Collection
+from .tests_integraion_base import TestsIntegration
+logger = logging.getLogger(__name__)
+__all__ = ('TestsEdge', )
+
+class TestsEdge(TestsIntegration):
+
+    def setUp(self):
+        super(TestsEdge, self).setUp()
+        self.c = self.conn.collection
+        self.c.test.create(type=Collection.TYPE_EDGE)
+        body = {'key': 1}
+        self.from_doc = self.c.test.documents.create(body)
+        self.to_doc = self.c.test.documents.create(body)
+
+    def tearDown(self):
+        super(TestsEdge, self).tearDown()
+        c = self.conn
+        c.collection.test.delete()
+
+    @raises(NotImplementedError)
+    def test_edge_creation(self):
+        self.c.test.edges.create(self.from_doc, self.to_doc, {'custom': 1})
+        result = self.c.test.edges(self.from_doc, direction='out').first
+        assert_equal(result.to_document, self.to_doc)
+        assert_equal(self.c.test.edges(self.from_doc, direction='in').first, None)
+        return
+
+    @raises(NotImplementedError)
+    def test_edge_deletion(self):
+        self.c.test.edges.create(self.from_doc, self.to_doc, {'custom': 1})
+        self.c.test.edges(self.from_doc).first.delete()
+        assert_equal(self.c.test.edges(self.from_doc).first, None)
+        return
+
+    @raises(NotImplementedError)
+    def test_edge_update(self):
+        self.c.test.edges.create(self.from_doc, self.to_doc, {'custom': 1})
+        new_doc = self.c.test.documents.create({'value': 2})
+        edge = self.c.test.edges(self.from_doc).first
+        edge.update(edge.body, from_doc=edge.from_document, to_doc=new_doc, save=True)

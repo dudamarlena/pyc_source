@@ -1,0 +1,139 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/mx/Dropbox (MIT)/Science/Code/allesfitter/allesfitter/mcmc_output.py
+# Compiled at: 2019-01-24 17:29:21
+__doc__ = '\nCreated on Fri Oct  5 14:44:29 2018\n\n@author:\nMaximilian N. Günther\nMIT Kavli Institute for Astrophysics and Space Research, \nMassachusetts Institute of Technology,\n77 Massachusetts Avenue,\nCambridge, MA 02109, \nUSA\nEmail: maxgue@mit.edu\nWeb: www.mnguenther.com\n'
+from __future__ import print_function, division, absolute_import
+import seaborn as sns
+sns.set(context='paper', style='ticks', palette='deep', font='sans-serif', font_scale=1.5, color_codes=True)
+sns.set_style({'xtick.direction': 'in', 'ytick.direction': 'in'})
+sns.set_context(rc={'lines.markeredgewidth': 1})
+import numpy as np, matplotlib.pyplot as plt, os
+from shutil import copyfile
+import emcee
+from corner import corner
+from . import config
+from . import deriver
+from .general_output import afplot, save_table, save_latex_table, logprint
+
+def draw_mcmc_posterior_samples(sampler, Nsamples=None):
+    """
+    Default: return all possible sampels
+    Set e.g. Nsamples=20 for plotting
+    """
+    posterior_samples = sampler.get_chain(flat=True, discard=int(1.0 * config.BASEMENT.settings['mcmc_burn_steps'] / config.BASEMENT.settings['mcmc_thin_by']))
+    if Nsamples:
+        posterior_samples = posterior_samples[np.random.randint(len(posterior_samples), size=20)]
+    return posterior_samples
+
+
+def plot_MCMC_chains(sampler):
+    chain = sampler.get_chain()
+    log_prob = sampler.get_log_prob()
+    fig, axes = plt.subplots(config.BASEMENT.ndim + 1, 1, figsize=(6, 3 * config.BASEMENT.ndim))
+    axes[0].plot(log_prob, '-', rasterized=True)
+    axes[0].axvline(1.0 * config.BASEMENT.settings['mcmc_burn_steps'] / config.BASEMENT.settings['mcmc_thin_by'], color='k', linestyle='--')
+    mini = np.min(log_prob[int(1.0 * config.BASEMENT.settings['mcmc_burn_steps'] / config.BASEMENT.settings['mcmc_thin_by']):, :])
+    maxi = np.max(log_prob[int(1.0 * config.BASEMENT.settings['mcmc_burn_steps'] / config.BASEMENT.settings['mcmc_thin_by']):, :])
+    axes[0].set(ylabel='lnprob', xlabel='steps', rasterized=True, ylim=[
+     mini, maxi])
+    axes[0].set_xticklabels([ int(label) for label in axes[0].get_xticks() * config.BASEMENT.settings['mcmc_thin_by'] ])
+    for i in range(config.BASEMENT.ndim):
+        ax = axes[(i + 1)]
+        ax.set(ylabel=config.BASEMENT.fitkeys[i], xlabel='steps')
+        ax.plot(chain[:, :, i], '-', rasterized=True)
+        ax.axvline(1.0 * config.BASEMENT.settings['mcmc_burn_steps'] / config.BASEMENT.settings['mcmc_thin_by'], color='k', linestyle='--')
+        ax.set_xticklabels([ int(label) for label in ax.get_xticks() * config.BASEMENT.settings['mcmc_thin_by'] ])
+
+    plt.tight_layout()
+    return (
+     fig, axes)
+
+
+def plot_MCMC_corner(sampler):
+    samples = sampler.get_chain(flat=True, discard=int(1.0 * config.BASEMENT.settings['mcmc_burn_steps'] / config.BASEMENT.settings['mcmc_thin_by']))
+    fig = corner(samples, labels=config.BASEMENT.fitkeys, range=[
+     0.999] * config.BASEMENT.ndim, quantiles=[
+     0.15865, 0.5, 0.84135], show_titles=True, title_kwargs={'fontsize': 14})
+    return fig
+
+
+def print_autocorr(sampler):
+    logprint('\nConvergence check:')
+    logprint('--------------------------')
+    logprint(('{0: <20}').format('Total steps:'), ('{0: <10}').format(config.BASEMENT.settings['mcmc_total_steps']))
+    logprint(('{0: <20}').format('Burn steps:'), ('{0: <10}').format(config.BASEMENT.settings['mcmc_burn_steps']))
+    logprint(('{0: <20}').format('Evaluation steps:'), ('{0: <20}').format(config.BASEMENT.settings['mcmc_total_steps'] - config.BASEMENT.settings['mcmc_burn_steps']))
+    discard = int(1.0 * config.BASEMENT.settings['mcmc_burn_steps'] / config.BASEMENT.settings['mcmc_thin_by'])
+    tau = sampler.get_autocorr_time(discard=discard, c=5, tol=10, quiet=True) * config.BASEMENT.settings['mcmc_thin_by']
+    logprint('Autocorrelation times:')
+    logprint('\t', ('{0: <30}').format('parameter'), ('{0: <20}').format('tau (in steps)'), ('{0: <20}').format('Chain length (in multiples of tau)'))
+    for i, key in enumerate(config.BASEMENT.fitkeys):
+        logprint('\t', ('{0: <30}').format(key), ('{0: <20}').format(tau[i]), ('{0: <20}').format((config.BASEMENT.settings['mcmc_total_steps'] - config.BASEMENT.settings['mcmc_burn_steps']) / tau[i]))
+
+
+def mcmc_output(datadir):
+    """
+    Inputs:
+    -------
+    datadir : str
+        the working directory for allesfitter
+        must contain all the data files
+        output directories and files will also be created inside datadir
+            
+    Outputs:
+    --------
+    This will output information into the console, and create a output files 
+    into datadir/results/ (or datadir/QL/ if QL==True)    
+    """
+    config.init(datadir)
+    if os.path.exists(os.path.join(config.BASEMENT.outdir, 'mcmc_fit.pdf')):
+        overwrite = str(input('MCMC output files already exists in ' + config.BASEMENT.outdir + '.\n' + 'What do you want to do?\n' + '1 : overwrite the output files\n' + '2 : abort\n'))
+        if overwrite == '1':
+            pass
+        else:
+            raise ValueError('User aborted operation.')
+    copyfile(os.path.join(datadir, 'results', 'mcmc_save.h5'), os.path.join(config.BASEMENT.outdir, 'mcmc_save_tmp.h5'))
+    reader = emcee.backends.HDFBackend(os.path.join(config.BASEMENT.outdir, 'mcmc_save_tmp.h5'), read_only=True)
+    completed_steps = reader.get_chain().shape[0] * config.BASEMENT.settings['mcmc_thin_by']
+    if completed_steps < config.BASEMENT.settings['mcmc_total_steps']:
+        config.BASEMENT.settings['mcmc_total_steps'] = config.BASEMENT.settings['mcmc_thin_by'] * reader.get_chain().shape[0]
+        config.BASEMENT.settings['mcmc_burn_steps'] = int(0.75 * config.BASEMENT.settings['mcmc_total_steps'])
+    print_autocorr(reader)
+    posterior_samples = draw_mcmc_posterior_samples(reader, Nsamples=20)
+    for companion in config.BASEMENT.settings['companions_all']:
+        fig, axes = afplot(posterior_samples, companion)
+        fig.savefig(os.path.join(config.BASEMENT.outdir, 'mcmc_fit_' + companion + '.pdf'), bbox_inches='tight')
+        plt.close(fig)
+
+    fig, axes = plot_MCMC_chains(reader)
+    fig.savefig(os.path.join(config.BASEMENT.outdir, 'mcmc_chains.pdf'), bbox_inches='tight')
+    plt.close(fig)
+    fig = plot_MCMC_corner(reader)
+    fig.savefig(os.path.join(config.BASEMENT.outdir, 'mcmc_corner.pdf'), bbox_inches='tight')
+    plt.close(fig)
+    posterior_samples = draw_mcmc_posterior_samples(reader)
+    save_table(posterior_samples, 'mcmc')
+    save_latex_table(posterior_samples, 'mcmc')
+    if os.path.exists(os.path.join(config.BASEMENT.datadir, 'params_star.csv')):
+        deriver.derive(posterior_samples, 'mcmc')
+    else:
+        print('File "params_star.csv" not found. Cannot derive final parameters.')
+    os.remove(os.path.join(datadir, 'results', 'mcmc_save_tmp.h5'))
+    logprint('Done. For all outputs, see', config.BASEMENT.outdir)
+
+
+def get_mcmc_posterior_samples(datadir, Nsamples=None, QL=False, as_type='dic'):
+    config.init(datadir, QL=QL)
+    reader = emcee.backends.HDFBackend(os.path.join(config.BASEMENT.outdir, 'save.h5'), read_only=True)
+    posterior_samples = draw_mcmc_posterior_samples(reader, Nsamples=Nsamples)
+    if as_type == '2d_array':
+        return posterior_samples
+    if as_type == 'dic':
+        posterior_samples_dic = {}
+        for key in config.BASEMENT.fitkeys:
+            ind = np.where(config.BASEMENT.fitkeys == key)[0]
+            posterior_samples_dic[key] = posterior_samples[:, ind].flatten()
+
+        return posterior_samples_dic

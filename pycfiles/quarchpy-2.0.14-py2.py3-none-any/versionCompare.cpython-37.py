@@ -1,0 +1,75 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: C:\Users\sboon\AppData\Local\Temp\pip-install-ptdbtr91\quarchpy\quarchpy\debug\versionCompare.py
+# Compiled at: 2020-03-25 05:10:07
+# Size of source mod 2**32: 2696 bytes
+"""
+Provides functions to compare quarchpy versions
+
+"""
+import pkg_resources
+from pkg_resources import parse_version, get_distribution
+import re, logging
+
+def getQuarchPyVersion():
+    """
+    Gets the version of the current quarchpy installation
+    
+    Returns
+    -------
+    version : str
+        String representation quarchpy version number
+    """
+    return pkg_resources.get_distribution('quarchpy').version
+
+
+def requiredQuarchpyVersion(requiredVersion):
+    """
+    Checks if the given (required) version is present.  This is used by example scripts to ensure the features they use
+    are supported by the installed package version
+    
+    Parameters
+    ----------
+    requiredVersion : str
+        String representation of the minimum quarchpy version required
+        
+    Returns
+    -------
+    safe_to_run : bool
+        True if the minimum version requirement is met, otherwise false
+    
+    """
+    currentVersion = getQuarchPyVersion()
+    if 'dev' in currentVersion.lower():
+        logging.warning('Using Dev version of quarchpy\n Allowing continue')
+        return True
+    requiredVersion = requiredVersion.split('.')
+    currentVersion = currentVersion.split('.')
+    i = 0
+    for x in requiredVersion:
+        requiredVersion[i] = int(x)
+        i += 1
+
+    i = 0
+    for x in currentVersion:
+        currentVersion[i] = int(x)
+        i += 1
+
+    if currentVersion[0] < requiredVersion[0]:
+        raise ValueError('Current quarchpy version ' + str(currentVersion) + ' is not high enough, upgrade to ' + str(requiredVersion) + ' or above.')
+        return False
+    if currentVersion[0] > requiredVersion[0]:
+        return True
+    if currentVersion[1] < requiredVersion[1]:
+        raise ValueError('Current quarchpy version ' + str(currentVersion) + ' is not high enough, upgrade to ' + str(requiredVersion) + ' or above.')
+        return False
+    if currentVersion[1] > requiredVersion[1]:
+        return True
+    if currentVersion[2] < requiredVersion[2]:
+        raise ValueError('Current quarchpy version ' + str(currentVersion) + ' is not high enough, upgrade to ' + str(requiredVersion) + ' or above.')
+        return False
+    if currentVersion[2] > requiredVersion[2]:
+        return True
+    return True

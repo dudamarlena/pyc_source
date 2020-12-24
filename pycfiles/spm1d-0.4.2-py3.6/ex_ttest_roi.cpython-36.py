@@ -1,0 +1,28 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.7-x86_64/egg/spm1d/examples/stats1d/ex_ttest_roi.py
+# Compiled at: 2019-08-22 04:37:03
+# Size of source mod 2**32: 884 bytes
+from matplotlib import pyplot
+import spm1d
+dataset = spm1d.data.uv1d.t1.Random()
+dataset = spm1d.data.uv1d.t1.SimulatedPataky2015a()
+Y, mu = dataset.get_data()
+alpha = 0.05
+t = spm1d.stats.ttest(Y, mu)
+ti = t.inference(alpha, two_tailed=False, interp=True)
+pyplot.close('all')
+pyplot.figure(figsize=(8, 3.5))
+ax = pyplot.axes((0.1, 0.15, 0.35, 0.8))
+spm1d.plot.plot_mean_sd(Y)
+ax.axhline(y=0, color='k', linestyle=':')
+ax.set_xlabel('Measurement domain (%)')
+ax.set_ylabel('Dependent Variable')
+ax = pyplot.axes((0.55, 0.15, 0.35, 0.8))
+ti.plot()
+ti.plot_threshold_label(fontsize=8)
+ti.plot_p_values(size=10, offsets=[(0, 0.3)])
+ax.set_xlabel('Measurement domain (%)')
+pyplot.show()

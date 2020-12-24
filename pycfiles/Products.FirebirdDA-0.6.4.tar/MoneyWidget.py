@@ -1,0 +1,30 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-i686/egg/Products/FinanceFields/MoneyWidget.py
+# Compiled at: 2010-03-10 14:21:02
+from Products.Archetypes.Widget import ReferenceWidget, TypesWidget
+from Products.Archetypes.Registry import registerWidget
+from Money import Money
+
+class MoneyWidget(TypesWidget):
+    __module__ = __name__
+    _properties = TypesWidget._properties.copy()
+    _properties.update({'macro': 'money', 'size': '8', 'maxlength': '255'})
+
+    def process_form(self, instance, field, form, empty_marker=None, emptyReturnsMarker=False):
+        """ handle money input """
+        name = field.getName()
+        amount = form.get(name, 0)
+        if amount:
+            if field.use_global_currency:
+                currency = field.getGlobalCurrency()
+            else:
+                currency = form.get('%s_currency' % name)
+            value = Money(amount, currency)
+        else:
+            value = None
+        return (value, {})
+
+
+registerWidget(MoneyWidget, title='Money', description='Renders a widget for entering monetary values', used_for=('Products.FinanceFields.MoneyField.MoneyField', ))

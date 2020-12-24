@@ -1,0 +1,104 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.5 (62131)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-i686/egg/playlist/m3u.py
+# Compiled at: 2009-03-30 14:23:58
+import os, itertools
+
+class NotM3uError(Exception):
+
+    def __init__(self, fname):
+        self.msg = "File '%s' is not an M3U format file." % fname
+
+
+class M3uException(Exception):
+
+    def __str__(self):
+        return self.msg
+
+
+class BadM3uEntryFormat(M3uException):
+
+    def __init__(self, line):
+        self.msg = "Not a correct M3U line:\n'%s'"
+
+
+class MalformattedM3uEntry(M3uException):
+
+    def __init__(self, lineno, line):
+        self.msg = "Malformed M3uEntry at line %d: '%s'" % (lineno, line)
+
+
+class M3uEntryLacksPath(M3uException):
+
+    def __init__(self, lineno):
+        self.msg = 'M3u entry at line %d lacks media URI' % lineno
+
+
+class M3uEntry(object):
+
+    def __init__(self, length, title, path, lineno):
+        self.length = length
+        self.title = title
+        self.path = path
+        self.infoline = lineno
+        self.pathline = lineno + 1
+        self._existsfunc = os.path.exists
+
+    @property
+    def filename(self):
+        raise NotImplementedError
+
+    @property
+    def exists(self):
+        return self._existsfunc(self.path)
+
+
+class M3uFileReader(object):
+
+    def __init__(self, fp):
+        self.fp = fp
+        self.start()
+
+    def start(self):
+        self.fp.seek(0)
+        self.lc = itertools.count(1)
+        first = self.fp.readline().strip()
+        if first != '#EXTM3U':
+            raise NotM3uError(getattr(self.fp, 'name', self.fp.__class__.__name__))
+        self.lc.next()
+
+    def next(self):
+        infoln, pathln = self.lc.next(), self.lc.next()
+        infoline, path = self.fp.readline().strip().split(':'), self.fp.readline().strip()
+        if infoline == ['']:
+            raise StopIteration
+        if path == ['']:
+            raise M3uEntryLacksPath(infoln)
+        if infoline[0] == '#EXTINF':
+            (length, title) = infoline[1].split(',')
+            return M3uEntry(length, title, path, infoln)
+        else:
+            raise MalformattedM3uEntry(1, infoline)
+
+
+class M3u(object):
+
+    def __init__(self, pathOrFile):
+        if hasattr(pathOrFile, 'close'):
+            self._fp = pathOrFile
+        else:
+            self.path = pathOrFile
+
+    @property
+    def fp(self):
+        fp = getattr(self, '_fp', False)
+        if fp:
+            return fp
+        else:
+            self._fp = open(self.path, 'r')
+            return self._fp
+
+    def __iter__(self):
+        self.filereader = M3uFileReader(self.fp)
+        return self.filereader

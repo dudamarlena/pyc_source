@@ -1,0 +1,65 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-i686/egg/collective/portlet/recentactivity/viewlet.py
+# Compiled at: 2010-05-19 10:20:52
+import time
+from Acquisition import aq_inner
+from zope.component import getUtility
+from zope.component import getMultiAdapter
+from Products.CMFCore.utils import getToolByName
+from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile
+from plone.app.layout.viewlets.common import ViewletBase
+from plone.memoize.instance import memoize
+from utils import compute_time
+from collective.portlet.recentactivity.interfaces import IRecentActivityUtility
+
+class RecentActivityViewlet(ViewletBase):
+    __module__ = __name__
+    index = ViewPageTemplateFile('viewlet.pt')
+
+    @property
+    def available(self):
+        """Show the portlet only to logged in users.
+        """
+        context = aq_inner(self.context)
+        portal_state = getMultiAdapter((context, self.request), name='plone_portal_state')
+        if self.request.getURL() == self.site_url + '/front-page/document_view':
+            return not portal_state.anonymous()
+
+    def recent_activities(self):
+        """Recent activities, most recent activities come first.
+        """
+        context = aq_inner(self.context)
+        if self._data():
+            for brain in self._data():
+                activity = brain[1]
+                yield dict(time=compute_time(int(time.time()) - brain[0]), action=activity['action'], user=activity['user'], user_url='%s/author/%s' % (context.portal_url(), activity['user']), object=activity['object'], object_url=activity['object_url'], parent=activity['parent'], parent_url=activity['parent_url'])
+
+    def recently_modified_link(self):
+        return '%s/@@recent-activity' % self.portal_url
+
+    @memoize
+    def _data(self):
+        limit = 5
+        activities = getUtility(IRecentActivityUtility)
+        return activities.getRecentActivity(limit)
+
+    def is_anonymous(self):
+        portal_membership = getToolByName(self.context, 'portal_membership', None)
+        return portal_membership.isAnonymousUser()
+
+    def get_user_home_url(self, username):
+        if username is None:
+            return
+        else:
+            return '%s/author/%s' % (self.context.portal_url(), username)
+        return
+
+    def get_user_portrait(self, username):
+        if username is None:
+            return 'defaultUser.gif'
+        else:
+            portal_membership = getToolByName(self.context, 'portal_membership', None)
+            return portal_membership.getPersonalPortrait(username).absolute_url()
+        return

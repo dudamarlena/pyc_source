@@ -1,0 +1,219 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python3.6/dist-packages/pyxrd/generic/io/custom_io.py
+# Compiled at: 2020-03-07 03:51:50
+# Size of source mod 2**32: 10300 bytes
+from collections import OrderedDict
+import logging
+logger = logging.getLogger(__name__)
+from io import StringIO
+from zipfile import ZipFile
+try:
+    import zlib
+    from zipfile import ZIP_DEFLATED as COMPRESSION
+except ImportError:
+    from zipfile import ZIP_STORED as COMPRESSION
+
+from ..utils import not_none
+from .json_codec import PyXRDDecoder, PyXRDEncoder
+
+class StorableRegistry(dict):
+    __doc__ = "\n        Basically a dict which maps class names to the actual\n        class types. This relies on the classes being registered using\n        the 'register' decorator provided in this class type.\n        It also has a number of aliases, for backwards-compatibility (e.g.\n        when class names change or from the era before using this method\n        when we stored the entire class path, we might remove these at\n        some point)\n    "
+    aliases = {'generic.treemodels/XYListStore':'XYListStore', 
+     'generic.treemodels/ObjectListStore':'ObjectListStore', 
+     'generic.treemodels/ObjectTreeStore':'ObjectTreeStore', 
+     'generic.treemodels/IndexListStore':'IndexListStore', 
+     'generic.models.treemodels/ObjectListStore':'ObjectListStore', 
+     'generic.models.treemodels/ObjectTreeStore':'ObjectTreeStore', 
+     'generic.models.treemodels/IndexListStore':'IndexListStore', 
+     'generic.models.treemodels/XYListStore':'XYListStore', 
+     'generic.models/PyXRDLine':'PyXRDLine', 
+     'generic.models/CalculatedLine':'CalculatedLine', 
+     'generic.models/ExperimentalLine':'ExperimentalLine', 
+     'goniometer.models/Goniometer':'Goniometer', 
+     'specimen.models/Specimen':'Specimen', 
+     'specimen.models/Marker':'Marker', 
+     'mixture.models/Mixture':'Mixture', 
+     'atoms.models/AtomType':'AtomType', 
+     'atoms.models/Atom':'Atom', 
+     'probabilities.R0models/R0G1Model':'R0G1Model', 
+     'probabilities.R0models/R0G2Model':'R0G2Model', 
+     'probabilities.R0models/R0G3Model':'R0G3Model', 
+     'probabilities.R0models/R0G4Model':'R0G4Model', 
+     'probabilities.R0models/R0G5Model':'R0G5Model', 
+     'probabilities.R0models/R0G6Model':'R0G6Model', 
+     'probabilities.R1models/R1G2Model':'R1G2Model', 
+     'probabilities.R1models/R1G3Model':'R1G3Model', 
+     'probabilities.R1models/R1G4Model':'R1G4Model', 
+     'probabilities.R2models/R2G2Model':'R2G2Model', 
+     'probabilities.R2models/R2G3Model':'R2G3Model', 
+     'probabilities.R3models/R3G2Model':'R3G2Model', 
+     'phases.CSDS_models/LogNormalCSDSDistribution':'LogNormalCSDSDistribution', 
+     'phases.CSDS_models/DritsCSDSDistribution':'DritsCSDSDistribution', 
+     'phases.atom_relations/AtomRelation':'AtomRelation', 
+     'phases.atom_relations/AtomRatio':'AtomRatio', 
+     'phases.atom_relations/AtomContents':'AtomContents', 
+     'phases.models/UnitCellProperty':'UnitCellProperty', 
+     'phases.models/Component':'Component', 
+     'phases.models/Phase':'Phase', 
+     'project.models/Project':'Project', 
+     'InSituMixture':None}
+
+    def __getitem__(self, key):
+        key = self.aliases.get(key, key)
+        if key is not None:
+            return super(StorableRegistry, self).__getitem__(key)
+
+    def register(self):
+        """
+            Returns a decorator that will register Storable sub-classes.
+        """
+        return self.register_decorator
+
+    def register_decorator(self, cls):
+        if hasattr(cls, 'Meta'):
+            if hasattr(cls.Meta, 'store_id'):
+                logger.debug("Registering %s as storage type with id '%s'" % (cls, cls.Meta.store_id))
+                self[cls.Meta.store_id] = cls
+        else:
+            raise TypeError("Cannot register type '%s' without a Meta.store_id!" % cls)
+        return cls
+
+
+storables = StorableRegistry()
+
+def __map_reduce__(json_obj):
+    decoder = PyXRDDecoder(mapper=storables)
+    return decoder.decode(json_obj)
+
+
+class Storable(object):
+    __doc__ = "\n        A class with a number of default implementations to serialize objects\n        to JSON strings. It used the PyXRDDecoder en PyXRDEncoder.\n        Subclasses should override their 'Meta.store_id' property\n        and register themselves by calling the storables.register method\n        and applying it as decorator to the subclass:\n        \n         @storables.register()\n         class StorableSubclass(Storable, ...):\n            ...\n            \n        Sub-classes can optionally implement the following methods:\n         - 'json_properties' or for more fine-grained control 'to_json'\n         - 'from_json'\n         \n    "
+    __storables__ = []
+
+    class Meta:
+        store_id = None
+
+    def dump_object(self, zipped=False):
+        """
+            Returns this object serialized as a JSON string.
+            If `zipped` is true it returns an in-memory ZipFile.
+        """
+        content = PyXRDEncoder.dump_object(self)
+        if zipped:
+            f = StringIO()
+            with ZipFile(f, mode='w', compression=COMPRESSION) as (z):
+                z.writestr('content', content)
+            return f
+        else:
+            return content
+
+    def print_object(self):
+        """
+        Prints the output from dump_object().
+        """
+        print(self.dump_object())
+
+    def to_json(self):
+        """
+        Method that should return a dict containing two keys:
+         - 'type' -> registered class Meta.store_id
+         - 'properties' -> a dict containg all the properties neccesary to 
+           re-create the object when serialized as JSON.
+        """
+        return {'type':self.Meta.store_id, 
+         'properties':self.json_properties()}
+
+    def to_json_multi_part(self):
+        """
+            This should generate a list of two-tuples:
+            (partname, json_dict), (partname, json_dict), ...
+            These can then be saved as seperate files (e.g. in a ZIP file)
+        """
+        yield (
+         'content', self.to_json())
+
+    def json_properties(self):
+        """
+        Method that should return a dict containing all the properties necessary to 
+        re-create the object when serialized as JSON.
+        """
+        retval = OrderedDict()
+
+        def add_prop(label, store_private):
+            if not store_private:
+                retval[label] = getattr(self, label)
+            else:
+                try:
+                    retval[label] = getattr(self, store_private)
+                except (TypeError, AttributeError):
+                    retval[label] = getattr(type(self), label)._get(self)
+
+        from mvc.models import Model
+        if isinstance(self, Model):
+            for prop in self.Meta.all_properties:
+                if prop.persistent:
+                    add_prop(prop.label, not_none(prop.store_private, False))
+                    if getattr(prop, 'refinable', False):
+                        add_prop(prop.get_refinement_info_name(), False)
+
+        else:
+            if hasattr(self, '__storables__'):
+                for val in self.__storables__:
+                    add_prop(val, False)
+
+            else:
+                raise RuntimeError("Cannot find either a '__storables__' or Meta class attribute on Storable '%s' instance!" % type(self))
+        return retval
+
+    def parse_init_arg(self, arg, default, child=False, default_is_class=False, **kwargs):
+        """
+        Can be used to transform an argument passed to a __init__ method of a
+        Storable (sub-)class containing a JSON dict into the actual object it
+        is representing.
+        
+        *arg* the passed argument
+        
+        *default* the default value if argument is None
+        
+        **child* boolean flag indicating wether or not the object is a child,
+        if true, self is passed as the parent keyword to the JSON decoder if
+        the passed argument is a JSON dict
+        
+        **default_is_class** boolean flag indicating whether or not the passed
+        default value is an unitialized type. If True, the type will be initialized
+        using the kwargs passed to this function.
+        
+        **kwargs* any other kwargs are passed to the JSON decoder if the passed
+        argument is a JSON dict
+        
+        :rtype: the argument (not a JSON dict), the actual object (argument was
+        a JSON dict) or the default value (argument was None)
+        """
+        if arg == None:
+            if not default_is_class:
+                return default
+            else:
+                if child:
+                    kwargs['parent'] = self
+                return default(**kwargs)
+        else:
+            if isinstance(arg, dict) and 'type' in arg and 'properties' in arg:
+                arg = (PyXRDDecoder(mapper=storables, parent=(self if child else None)).__pyxrd_decode__)(arg, **kwargs)
+                return arg
+            else:
+                return arg
+
+    @classmethod
+    def from_json(cls, *args, **kwargs):
+        """
+        Class method transforming JSON kwargs into an instance of this class.
+        By default this assumes a 1-on-1 mapping to the __init__ method.
+        """
+        return cls(*args, **kwargs)
+
+    def __reduce__(self):
+        props = self.dump_object()
+        return (__map_reduce__, (props,), None)

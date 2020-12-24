@@ -1,0 +1,143 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.5 (62131)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/mathml/utils/pyterm.py
+# Compiled at: 2006-02-06 02:06:09
+from mathml.termbuilder import tree_converters, InfixTermBuilder
+from mathml.termparser import term_parsers, cached, TermTokenizer, InfixTermParser, InfixBoolExpressionParser, ListParser, CaselessKeyword
+__all__ = [
+ 'PyTermBuilder', 'PyTermParser', 'PyBoolExpressionParser', 'ParseException']
+
+class PyTermBuilder(InfixTermBuilder):
+    _INTERVAL_NOTATION = {'closed': ('xrange(int(%s),   int(%s)+1)').replace(' ', ''), 
+       'closed-open': ('xrange(int(%s),   int(%s)  )').replace(' ', ''), 
+       'open-closed': ('xrange(int(%s)+1, int(%s)+1)').replace(' ', ''), 
+       'open': ('xrange(int(%s)+1, int(%s)  )').replace(' ', '')}
+    _OPERATOR_MAP = {'^': '**', 
+       '=': '==', 
+       'acos': 'math.acos', 
+       'asin': 'math.asin', 
+       'atan': 'math.atan', 
+       'atan2': 'math.atan2', 
+       'ceil': 'math.ceil', 
+       'cos': 'math.cos', 
+       'cosh': 'math.cosh', 
+       'degrees': 'math.degrees', 
+       'exp': 'math.exp', 
+       'floor': 'math.floor', 
+       'log': 'math.log', 
+       'log10': 'math.log10', 
+       'pow': 'math.pow', 
+       'radians': 'math.radians', 
+       'sin': 'math.sin', 
+       'sinh': 'math.sinh', 
+       'sqrt': 'math.sqrt', 
+       'tan': 'math.tan', 
+       'tanh': 'math.tanh'}
+    _NAME_MAP = {'e': 'math.e', 
+       'pi': 'math.pi', 
+       'true': 'True', 
+       'false': 'False'}
+
+    def _handle_const_bool(self, operator, operands, affin):
+        return [
+         operands[0] and 'True' or 'False']
+
+    def _handle_const_complex(self, operator, operands, affin):
+        value = operands[0]
+        if value.imag == 0:
+            return value.real_str
+        real_str = value.real_str
+        if real_str == '0':
+            real_str = ''
+        return [
+         '(%s%s%sj)' % (real_str, value.imag >= 0 and '+' or '', value.imag_str)]
+
+    def _handle_case(self, operator, operands, affin_status):
+        assert operator == 'case'
+        result = [operands[0], 'and', operands[1]]
+        if len(operands) > 2:
+            result.append('or')
+            result.append(operands[2])
+        return result
+
+    def _handle_interval(self, operator, operands, affin):
+        assert operator[:9] == 'interval:'
+        return [self._INTERVAL_NOTATION[operator[9:]] % tuple(operands)]
+
+
+tree_converters.register_converter('python', PyTermBuilder())
+from pyparsing import *
+
+class PyTermTokenizer(TermTokenizer):
+    _CONSTANT_MAP = {'math.e': 'e', 
+       'math.pi': 'pi'}
+
+    @cached
+    def p_bool(self):
+        p_bool = Keyword('True') | Keyword('False')
+        p_bool.setName('bool')
+        p_bool.setParseAction(self._parse_bool)
+        return p_bool
+
+
+class PyTermParser(InfixTermParser):
+    OPERATOR_ORDER = InfixTermParser.OPERATOR_ORDER.replace(' ^ ', ' ** ')
+
+    def build_tokenizer(self):
+        return PyTermTokenizer()
+
+    @cached
+    def _zero(self):
+        return self.tokenizer._parse_int(None, None, ['0'])[0]
+
+    def _parse_operator(self, s, p, t):
+        if t[0] == '**':
+            return [
+             '^']
+        else:
+            return t
+
+    def p_operator(self, operator):
+        p_op = super(PyTermParser, self).p_operator(operator)
+        if operator == '*':
+            p_op = p_op + NotAny('*')
+        return p_op
+
+    def _parse_interval(self, s, p, t):
+        if len(t) == 1:
+            start, stop = self._zero(), t[0]
+        else:
+            (start, stop) = t
+        return [
+         (
+          'interval:closed-open', start, stop)]
+
+    def p_case(self, *args):
+        return NoMatch()
+
+    def p_arithmetic_interval(self, p_arithmetic_exp):
+        p_interval = Suppress(Literal('xrange') | Literal('range')) + Suppress('(') + p_arithmetic_exp + Optional(Suppress(',') + p_arithmetic_exp) + Suppress(')')
+        p_interval.setParseAction(self._parse_interval)
+        return p_interval
+
+
+class PyBoolExpressionParser(InfixBoolExpressionParser):
+
+    def build_term_parser(self):
+        return PyTermParser()
+
+    @cached
+    def p_cmp_in(self):
+        not_in = Combine(CaselessKeyword('not') + CaselessKeyword('in'), adjacent=False)
+        p_cmp_in = CaselessKeyword('in') | not_in
+        p_cmp_in.setParseAction(self._parse_cmp_operator)
+        return p_cmp_in
+
+
+py_term = PyTermParser().p_arithmetic_exp()
+term_parsers.register_converter('python_bool', PyBoolExpressionParser().p_bool_exp())
+term_parsers.register_converter('python_term', py_term)
+term_parsers.register_converter('python_term_list', ListParser(py_term).p_list())
+del py_term

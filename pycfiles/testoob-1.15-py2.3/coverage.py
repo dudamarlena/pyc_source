@@ -1,0 +1,152 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.3 (62011)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/testoob/coverage.py
+# Compiled at: 2009-10-07 18:08:46
+"""Code coverage module"""
+import os, sys
+
+def supported():
+    """Is coverage supported?"""
+    return True
+
+
+try:
+    import trace
+except ImportError:
+    from compatibility import trace
+
+try:
+    sum
+except NameError:
+    import operator
+    sum = lambda seq: reduce(operator.add, seq, 0)
+
+try:
+    set
+except NameError:
+    try:
+        from sets import Set as set
+    except ImportError:
+        from compatibility.sets import Set as set
+
+def _find_executable_linenos(filename):
+    """
+    A re-implementation of trace.find_executable_linenos working around
+    compile's problems with missing EOLS
+    """
+    try:
+        prog = open(filename, 'rU').read()
+    except IOError, err:
+        print >> sys.stderr, 'Not printing coverage data for %r: %s' % (filename, err)
+        return {}
+
+    if not prog.endswith('\n'):
+        prog += '\n'
+    code = compile(prog, filename, 'exec')
+    strs = trace.find_strings(filename)
+    return trace.find_lines(code, strs)
+
+
+class Coverage:
+    """
+    Python code coverage module built specifically for checking code coverage
+    in tests performed by Testoob.
+
+    NOTE: This class depends on the 'trace' module.
+    """
+    __module__ = __name__
+
+    def __init__(self, ignorepaths=()):
+        """
+        initialize the code coverage module, gets list of directories and files
+        which's coverage is not needed.
+        """
+        self.coverage = {}
+        self.ignorepaths = map(os.path.abspath, ignorepaths)
+        self.modname = trace.modname
+
+    def runfunc(self, func, *args, **kwargs):
+        """
+        Runs the function with arguments and keyword arguments, and checks the
+        code coverage.
+        """
+        sys.settrace(self._tracer)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            sys.settrace(None)
+        return
+
+    def getstatistics(self):
+        """
+        Returns a dictionary of statistics. the dictionary maps between a
+        filename and the statistics associated to it.
+
+        The statistics dictionary has 3 keys:
+            lines   - the number of executable lines in the file
+            covered - the number of lines covered in the file
+            percent - the percentage of covered lines.
+
+        This dictionary also has a special "file" (key) called '__total__',
+        which holds the statistics for all the files together.
+        """
+        statistics = {}
+        for (filename, coverage) in self.coverage.items():
+            statistics[filename] = self._single_file_statistics(coverage)
+
+        return statistics
+
+    def _single_file_statistics(self, coverage_dict):
+
+        def num_lines():
+            return len(coverage_dict['lines'])
+
+        def num_lines_covered():
+            return len(coverage_dict['covered'])
+
+        def percentage():
+            if num_lines() > 0:
+                return int(100 * num_lines_covered()) / num_lines()
+            else:
+                return 0
+
+        return {'lines': num_lines(), 'covered': num_lines_covered(), 'percent': percentage()}
+
+    def _sum_coverage(self, callable):
+        """Helper method for _total_{lines,covered}"""
+        return sum([ callable(coverage) for coverage in self.coverage.values() ])
+
+    def total_lines(self):
+        return self._sum_coverage(lambda coverage: len(coverage['lines']))
+
+    def total_lines_covered(self):
+        return self._sum_coverage(lambda coverage: len(coverage['covered']))
+
+    def total_coverage_percentage(self):
+        if self.total_lines() == 0:
+            return 0
+        return int(100 * self.total_lines_covered() / self.total_lines())
+
+    def _should_cover_frame(self, frame):
+        """Should we check coverage for this file?"""
+        filename = os.path.abspath(frame.f_code.co_filename)
+        lineno = frame.f_lineno
+        for path in self.ignorepaths:
+            if filename.startswith(path):
+                return False
+
+        if not (filename.endswith('.py') or filename.endswith('.pyc')):
+            return False
+        if not self.coverage.has_key(filename):
+            self.coverage[filename] = {'lines': set(_find_executable_linenos(filename)), 'covered': set()}
+        return lineno in self.coverage[filename]['lines']
+
+    def _tracer(self, frame, why, arg):
+        """Trace function to be put as input for sys.settrace()"""
+        if self._should_cover_frame(frame):
+            filename = os.path.abspath(frame.f_code.co_filename)
+            lineno = frame.f_lineno
+            self.coverage[filename]['covered'].add(lineno)
+        return self._tracer

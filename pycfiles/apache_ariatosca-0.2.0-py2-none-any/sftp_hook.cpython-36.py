@@ -1,0 +1,158 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.macosx-10.7-x86_64/egg/airflow/contrib/hooks/sftp_hook.py
+# Compiled at: 2019-09-11 03:47:34
+# Size of source mod 2**32: 7888 bytes
+import stat, pysftp, datetime
+from airflow.contrib.hooks.ssh_hook import SSHHook
+
+class SFTPHook(SSHHook):
+    """SFTPHook"""
+
+    def __init__(self, ftp_conn_id='sftp_default', *args, **kwargs):
+        kwargs['ssh_conn_id'] = ftp_conn_id
+        (super(SFTPHook, self).__init__)(*args, **kwargs)
+        self.conn = None
+        self.private_key_pass = None
+        self.no_host_key_check = False
+        if self.ssh_conn_id is not None:
+            conn = self.get_connection(self.ssh_conn_id)
+            if conn.extra is not None:
+                extra_options = conn.extra_dejson
+                if 'private_key_pass' in extra_options:
+                    self.private_key_pass = extra_options.get('private_key_pass', None)
+                import warnings
+                if 'ignore_hostkey_verification' in extra_options:
+                    warnings.warn('Extra option `ignore_hostkey_verification` is deprecated.Please use `no_host_key_check` instead.This option will be removed in Airflow 2.1',
+                      DeprecationWarning,
+                      stacklevel=2)
+                    self.no_host_key_check = str(extra_options['ignore_hostkey_verification']).lower() == 'true'
+                if 'no_host_key_check' in extra_options:
+                    self.no_host_key_check = str(extra_options['no_host_key_check']).lower() == 'true'
+                if 'private_key' in extra_options:
+                    warnings.warn('Extra option `private_key` is deprecated.Please use `key_file` instead.This option will be removed in Airflow 2.1',
+                      DeprecationWarning,
+                      stacklevel=2)
+                    self.key_file = extra_options.get('private_key')
+
+    def get_conn(self):
+        """
+        Returns an SFTP connection object
+        """
+        if self.conn is None:
+            cnopts = pysftp.CnOpts()
+            if self.no_host_key_check:
+                cnopts.hostkeys = None
+            cnopts.compression = self.compress
+            conn_params = {'host':self.remote_host, 
+             'port':self.port, 
+             'username':self.username, 
+             'cnopts':cnopts}
+            if self.password:
+                if self.password.strip():
+                    conn_params['password'] = self.password
+            if self.key_file:
+                conn_params['private_key'] = self.key_file
+            if self.private_key_pass:
+                conn_params['private_key_pass'] = self.private_key_pass
+            self.conn = (pysftp.Connection)(**conn_params)
+        return self.conn
+
+    def close_conn(self):
+        """
+        Closes the connection. An error will occur if the
+        connection wasnt ever opened.
+        """
+        conn = self.conn
+        conn.close()
+        self.conn = None
+
+    def describe_directory(self, path):
+        """
+        Returns a dictionary of {filename: {attributes}} for all files
+        on the remote system (where the MLSD command is supported).
+        :param path: full path to the remote directory
+        :type path: str
+        """
+        conn = self.get_conn()
+        flist = conn.listdir_attr(path)
+        files = {}
+        for f in flist:
+            modify = datetime.datetime.fromtimestamp(f.st_mtime).strftime('%Y%m%d%H%M%S')
+            files[f.filename] = {'size':f.st_size, 
+             'type':'dir' if stat.S_ISDIR(f.st_mode) else 'file', 
+             'modify':modify}
+
+        return files
+
+    def list_directory(self, path):
+        """
+        Returns a list of files on the remote system.
+        :param path: full path to the remote directory to list
+        :type path: str
+        """
+        conn = self.get_conn()
+        files = conn.listdir(path)
+        return files
+
+    def create_directory(self, path, mode=777):
+        """
+        Creates a directory on the remote system.
+        :param path: full path to the remote directory to create
+        :type path: str
+        :param mode: int representation of octal mode for directory
+        """
+        conn = self.get_conn()
+        conn.mkdir(path, mode)
+
+    def delete_directory(self, path):
+        """
+        Deletes a directory on the remote system.
+        :param path: full path to the remote directory to delete
+        :type path: str
+        """
+        conn = self.get_conn()
+        conn.rmdir(path)
+
+    def retrieve_file(self, remote_full_path, local_full_path):
+        """
+        Transfers the remote file to a local location.
+        If local_full_path is a string path, the file will be put
+        at that location
+        :param remote_full_path: full path to the remote file
+        :type remote_full_path: str
+        :param local_full_path: full path to the local file
+        :type local_full_path: str
+        """
+        conn = self.get_conn()
+        self.log.info('Retrieving file from FTP: %s', remote_full_path)
+        conn.get(remote_full_path, local_full_path)
+        self.log.info('Finished retrieving file from FTP: %s', remote_full_path)
+
+    def store_file(self, remote_full_path, local_full_path):
+        """
+        Transfers a local file to the remote location.
+        If local_full_path_or_buffer is a string path, the file will be read
+        from that location
+        :param remote_full_path: full path to the remote file
+        :type remote_full_path: str
+        :param local_full_path: full path to the local file
+        :type local_full_path: str
+        """
+        conn = self.get_conn()
+        conn.put(local_full_path, remote_full_path)
+
+    def delete_file(self, path):
+        """
+        Removes a file on the FTP Server
+        :param path: full path to the remote file
+        :type path: str
+        """
+        conn = self.get_conn()
+        conn.remove(path)
+
+    def get_mod_time(self, path):
+        conn = self.get_conn()
+        ftp_mdtm = conn.stat(path).st_mtime
+        return datetime.datetime.fromtimestamp(ftp_mdtm).strftime('%Y%m%d%H%M%S')

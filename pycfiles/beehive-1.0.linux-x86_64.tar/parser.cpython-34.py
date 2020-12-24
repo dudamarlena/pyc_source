@@ -1,0 +1,466 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/lib/python3.4/site-packages/beehive/parser.py
+# Compiled at: 2014-11-03 05:47:13
+# Size of source mod 2**32: 18543 bytes
+from __future__ import with_statement
+from beehive.compat import unicode
+from beehive import model, i18n
+DEFAULT_LANGUAGE = 'en'
+
+def parse_file(filename, language=None):
+    with open(filename, 'rb') as (f):
+        data = f.read().decode('utf8')
+    return parse_feature(data, language, filename)
+
+
+def parse_feature(data, language=None, filename=None):
+    assert isinstance(data, unicode)
+    try:
+        result = Parser(language).parse(data, filename)
+    except ParserError as e:
+        e.filename = filename
+        raise
+
+    return result
+
+
+def parse_steps(text, language=None, filename=None):
+    """
+    Parse a number of steps a multi-line text from a scenario.
+    Scenario line with title and keyword is not provided.
+
+    :param text: Multi-line text with steps to parse (as unicode).
+    :param language:  i18n language identifier (optional).
+    :param filename:  Filename (optional).
+    :return: Parsed steps (if successful).
+    """
+    assert isinstance(text, unicode)
+    try:
+        result = Parser(language, variant='steps').parse_steps(text, filename)
+    except ParserError as e:
+        e.filename = filename
+        raise
+
+    return result
+
+
+def parse_tags(text):
+    """
+    Parse tags from text (one or more lines, as string).
+
+    :param text: Multi-line text with tags to parse (as unicode).
+    :return: List of tags (if successful).
+    """
+    if not text:
+        return []
+    return Parser().parse_tags(text)
+
+
+class ParserError(Exception):
+
+    def __init__(self, message, line, filename=None, line_text=None):
+        if line:
+            message += ' at line %d' % line
+            if line_text:
+                message += ": '%s'" % line_text.strip()
+            super(ParserError, self).__init__(message)
+            self.line = line
+            self.line_text = line_text
+            self.filename = filename
+
+    def __str__(self):
+        if self.filename:
+            return 'Failed to parse "%s": %s' % (self.filename, self.args[0])
+        return 'Failed to parse <string>: %s' % self.args[0]
+
+
+class Parser(object):
+
+    def __init__(self, language=None, variant=None):
+        if not variant:
+            variant = 'feature'
+        self.language = language
+        self.variant = variant
+        self.reset()
+
+    def reset(self):
+        if self.language:
+            self.keywords = i18n.languages[self.language]
+        else:
+            self.keywords = None
+        self.state = 'init'
+        self.line = 0
+        self.last_step = None
+        self.multiline_start = None
+        self.multiline_leading = None
+        self.multiline_terminator = None
+        self.filename = None
+        self.feature = None
+        self.statement = None
+        self.tags = []
+        self.lines = []
+        self.table = None
+        self.examples = None
+
+    def parse(self, data, filename=None):
+        self.reset()
+        self.filename = filename
+        for line in data.split('\n'):
+            self.line += 1
+            if not line.strip():
+                if not self.state == 'multiline':
+                    continue
+                self.action(line)
+
+        if self.table:
+            self.action_table('')
+        feature = self.feature
+        if feature:
+            feature.parser = self
+        self.reset()
+        return feature
+
+    def _build_feature(self, keyword, line):
+        name = line[len(keyword) + 1:].strip()
+        self.feature = model.Feature(self.filename, self.line, keyword, name, tags=self.tags)
+        self.tags = []
+
+    def _build_background_statement(self, keyword, line):
+        if self.tags:
+            msg = 'Background supports no tags: @%s' % ' @'.join(self.tags)
+            raise ParserError(msg, self.line, self.filename, line)
+        name = line[len(keyword) + 1:].strip()
+        statement = model.Background(self.filename, self.line, keyword, name)
+        self.statement = statement
+        self.feature.background = self.statement
+
+    def _build_scenario_statement(self, keyword, line):
+        name = line[len(keyword) + 1:].strip()
+        self.statement = model.Scenario(self.filename, self.line, keyword, name, tags=self.tags)
+        self.feature.add_scenario(self.statement)
+        self.tags = []
+
+    def _build_scenario_outline_statement(self, keyword, line):
+        name = line[len(keyword) + 1:].strip()
+        self.statement = model.ScenarioOutline(self.filename, self.line, keyword, name, tags=self.tags)
+        self.feature.add_scenario(self.statement)
+        self.tags = []
+
+    def _build_examples(self, keyword, line):
+        if not isinstance(self.statement, model.ScenarioOutline):
+            message = 'Examples must only appear inside scenario outline'
+            raise ParserError(message, self.line, self.filename, line)
+        name = line[len(keyword) + 1:].strip()
+        self.examples = model.Examples(self.filename, self.line, keyword, name)
+        self.statement.examples.append(self.examples)
+
+    def diagnose_feature_usage_error(self):
+        if self.feature:
+            return 'Multiple features in one file are not supported.'
+        else:
+            return 'Feature should not be used here.'
+
+    def diagnose_background_usage_error(self):
+        if self.feature and self.feature.scenarios:
+            return 'Background may not occur after Scenario/ScenarioOutline.'
+        else:
+            if self.tags:
+                return 'Background does not support tags.'
+            return 'Background should not be used here.'
+
+    def diagnose_scenario_usage_error(self):
+        if not self.feature:
+            return 'Scenario may not occur before Feature.'
+        else:
+            return 'Scenario should not be used here.'
+
+    def diagnose_scenario_outline_usage_error(self):
+        if not self.feature:
+            return 'ScenarioOutline may not occur before Feature.'
+        else:
+            return 'ScenarioOutline should not be used here.'
+
+    def ask_parse_failure_oracle(self, line):
+        """
+        Try to find the failure reason when a parse failure occurs:
+
+            Oracle, oracle, ... what went wrong?
+            Zzzz
+
+        :param line:  Text line where parse failure occured (as string).
+        :return: Reason (as string) if an explanation is found.
+                 Otherwise, empty string or None.
+        """
+        feature_kwd = self.match_keyword('feature', line)
+        if feature_kwd:
+            return self.diagnose_feature_usage_error()
+        background_kwd = self.match_keyword('background', line)
+        if background_kwd:
+            return self.diagnose_background_usage_error()
+        scenario_kwd = self.match_keyword('scenario', line)
+        if scenario_kwd:
+            return self.diagnose_scenario_usage_error()
+        scenario_outline_kwd = self.match_keyword('scenario_outline', line)
+        if scenario_outline_kwd:
+            return self.diagnose_scenario_outline_usage_error()
+        if self.variant == 'feature' and not self.feature:
+            return 'No feature found.'
+
+    def action(self, line):
+        if line.strip().startswith('#') and not self.state == 'multiline':
+            if self.keywords or self.state != 'init' or self.tags:
+                return
+            line = line.strip()[1:].strip()
+            if line.lstrip().lower().startswith('language:'):
+                language = line[9:].strip()
+                self.language = language
+                self.keywords = i18n.languages[language]
+            return
+        func = getattr(self, 'action_' + self.state, None)
+        if func is None:
+            line = line.strip()
+            msg = 'Parser in unknown state %s;' % self.state
+            raise ParserError(msg, self.line, self.filename, line)
+        if not func(line):
+            line = line.strip()
+            msg = "\nParser failure in state %s, at line %d: '%s'\n" % (
+             self.state, self.line, line)
+            reason = self.ask_parse_failure_oracle(line)
+            if reason:
+                msg += 'REASON: %s' % reason
+            raise ParserError(msg, None, self.filename)
+
+    def action_init(self, line):
+        line = line.strip()
+        if line.startswith('@'):
+            self.tags.extend(self.parse_tags(line))
+            return True
+        feature_kwd = self.match_keyword('feature', line)
+        if feature_kwd:
+            self._build_feature(feature_kwd, line)
+            self.state = 'feature'
+            return True
+        return False
+
+    def subaction_detect_next_scenario(self, line):
+        if line.startswith('@'):
+            self.tags.extend(self.parse_tags(line))
+            self.state = 'next_scenario'
+            return True
+        scenario_kwd = self.match_keyword('scenario', line)
+        if scenario_kwd:
+            self._build_scenario_statement(scenario_kwd, line)
+            self.state = 'scenario'
+            return True
+        scenario_outline_kwd = self.match_keyword('scenario_outline', line)
+        if scenario_outline_kwd:
+            self._build_scenario_outline_statement(scenario_outline_kwd, line)
+            self.state = 'scenario'
+            return True
+        return False
+
+    def action_feature(self, line):
+        line = line.strip()
+        if self.subaction_detect_next_scenario(line):
+            return True
+        background_kwd = self.match_keyword('background', line)
+        if background_kwd:
+            self._build_background_statement(background_kwd, line)
+            self.state = 'steps'
+            return True
+        self.feature.description.append(line)
+        return True
+
+    def action_next_scenario(self, line):
+        """
+        Entered after first tag for Scenario/ScenarioOutline is detected.
+        """
+        line = line.strip()
+        if self.subaction_detect_next_scenario(line):
+            return True
+        return False
+
+    def action_scenario(self, line):
+        """
+        Entered when Scenario/ScenarioOutline keyword/line is detected.
+        Hunts/collects scenario description lines.
+
+        DETECT:
+            * first step of Scenario/ScenarioOutline
+            * next Scenario/ScenarioOutline.
+        """
+        line = line.strip()
+        step = self.parse_step(line)
+        if step:
+            self.state = 'steps'
+            self.statement.steps.append(step)
+            return True
+        if self.subaction_detect_next_scenario(line):
+            return True
+        self.statement.description.append(line)
+        return True
+
+    def action_steps(self, line):
+        """
+        Entered when first step is detected (or nested step parsing).
+
+        Subcases:
+          * step
+          * multi-line text (doc-string), following a step
+          * table, following a step
+          * examples for a ScenarioOutline, after ScenarioOutline steps
+
+        DETECT:
+          * next Scenario/ScenarioOutline
+        """
+        stripped = line.lstrip()
+        if stripped.startswith('"""') or stripped.startswith("'''"):
+            self.state = 'multiline'
+            self.multiline_start = self.line
+            self.multiline_terminator = stripped[:3]
+            self.multiline_leading = line.index(stripped[0])
+            return True
+        line = line.strip()
+        step = self.parse_step(line)
+        if step:
+            self.statement.steps.append(step)
+            return True
+        if self.subaction_detect_next_scenario(line):
+            return True
+        examples_kwd = self.match_keyword('examples', line)
+        if examples_kwd:
+            self._build_examples(examples_kwd, line)
+            self.state = 'table'
+            return True
+        if line.startswith('|'):
+            assert self.statement.steps, 'TABLE-START without step detected.'
+            self.state = 'table'
+            return self.action_table(line)
+        return False
+
+    def action_multiline(self, line):
+        if line.strip().startswith(self.multiline_terminator):
+            step = self.statement.steps[(-1)]
+            step.text = model.Text('\n'.join(self.lines), 'text/plain', self.multiline_start)
+            if step.name.endswith(':'):
+                step.name = step.name[:-1]
+            self.lines = []
+            self.multiline_terminator = None
+            self.state = 'steps'
+            return True
+        self.lines.append(line[self.multiline_leading:])
+        removed_line_prefix = line[:self.multiline_leading]
+        if removed_line_prefix.strip():
+            message = 'BAD-INDENT in multiline text: '
+            message += "Line '%s' would strip leading '%s'" % (
+             line, removed_line_prefix)
+            raise ParserError(message, self.line, self.filename)
+        return True
+
+    def action_table(self, line):
+        line = line.strip()
+        if not line.startswith('|'):
+            if self.examples:
+                self.examples.table = self.table
+                self.examples = None
+            else:
+                step = self.statement.steps[(-1)]
+                step.table = self.table
+                if step.name.endswith(':'):
+                    step.name = step.name[:-1]
+                self.table = None
+                self.state = 'steps'
+                return self.action_steps(line)
+            cells = [cell.strip() for cell in line.split('|')[1:-1]]
+            if self.table is None:
+                self.table = model.Table(cells, self.line)
+        else:
+            if len(cells) != len(self.table.headings):
+                raise ParserError('Malformed table', self.line)
+            self.table.add_row(cells, self.line)
+        return True
+
+    def match_keyword(self, keyword, line):
+        if not self.keywords:
+            self.language = DEFAULT_LANGUAGE
+            self.keywords = i18n.languages[DEFAULT_LANGUAGE]
+        for alias in self.keywords[keyword]:
+            if line.startswith(alias + ':'):
+                return alias
+
+        return False
+
+    def parse_tags(self, line):
+        """
+        Parse a line with one or more tags:
+
+          * A tag starts with the AT sign.
+          * A tag consists of one word without whitespace chars.
+          * Multiple tags are separated with whitespace chars
+          * End-of-line comment is stripped.
+
+        :param line:   Line with one/more tags to process.
+        :raise ParseError: If syntax error is detected.
+        """
+        assert line.startswith('@')
+        tags = []
+        for word in line.split():
+            if word.startswith('@'):
+                tags.append(model.Tag(word[1:], self.line))
+            elif word.startswith('#'):
+                break
+            else:
+                raise ParserError('tag: %s (line: %s)' % (word, line), self.line, self.filename)
+
+        return tags
+
+    def parse_step(self, line):
+        for step_type in ('given', 'when', 'then', 'and', 'but'):
+            for kw in self.keywords[step_type]:
+                if kw.endswith('<'):
+                    whitespace = ''
+                    kw = kw[:-1]
+                else:
+                    whitespace = ' '
+                if not (line.startswith(kw + whitespace) or line.lower().startswith(kw.lower() + whitespace)):
+                    continue
+                name = line[len(kw):].strip()
+                if step_type in ('and', 'but'):
+                    if not self.last_step:
+                        raise ParserError('No previous step', self.line)
+                    step_type = self.last_step
+                else:
+                    self.last_step = step_type
+                step = model.Step(self.filename, self.line, kw, step_type, name)
+                return step
+
+    def parse_steps(self, text, filename=None):
+        """
+        Parse support for execute_steps() functionality that supports step with:
+          * multiline text
+          * table
+
+        :param text:  Text that contains 0..* steps
+        :return: List of parsed steps (as model.Step objects).
+        """
+        assert isinstance(text, unicode)
+        if not self.language:
+            self.language = 'en'
+        self.reset()
+        self.filename = filename
+        self.statement = model.Scenario(filename, 0, 'scenario', '')
+        self.state = 'steps'
+        for line in text.split('\n'):
+            self.line += 1
+            if not line.strip():
+                if not self.state == 'multiline':
+                    continue
+                self.action(line)
+
+        if self.table:
+            self.action_table('')
+        steps = self.statement.steps
+        return steps

@@ -1,0 +1,354 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/ramusus/workspace/manufacture_old/env/src/django-vkontakte-photos/vkontakte_photos/models.py
+# Compiled at: 2015-06-02 11:52:34
+import logging
+from parser import VkontaktePhotosParser
+import re
+from django.contrib.contenttypes import generic
+from django.contrib.contenttypes.models import ContentType
+from django.db import models
+from django.utils import timezone
+from django.utils.encoding import python_2_unicode_compatible
+from vkontakte_api.decorators import fetch_all, atomic
+from vkontakte_api.models import VkontakteTimelineManager, VkontakteModel, VkontakteCRUDModel
+from vkontakte_groups.models import Group
+from vkontakte_users.models import User
+log = logging.getLogger('vkontakte_photos')
+ALBUM_PRIVACY_CHOCIES = (
+ (0, 'Все пользователи'),
+ (1, 'Только друзья'),
+ (2, 'Друзья и друзья друзей'),
+ (3, 'Только я'))
+
+class AlbumRemoteManager(VkontakteTimelineManager):
+    timeline_force_ordering = True
+
+    def get_timeline_date(self, instance):
+        return instance.updated or instance.created or timezone.now()
+
+    @atomic
+    def fetch(self, user=None, group=None, ids=None, need_covers=False, before=None, after=None, **kwargs):
+        if not user and not group:
+            raise ValueError('You must specify user of group, which albums you want to fetch')
+        if ids and not isinstance(ids, (tuple, list)):
+            raise ValueError("Attribute 'ids' should be tuple or list")
+        if before and not after:
+            raise ValueError('Attribute `before` should be specified with attribute `after`')
+        if before and before < after:
+            raise ValueError('Attribute `before` should be later, than attribute `after`')
+        kwargs = {'need_covers': int(need_covers)}
+        if user:
+            kwargs.update({'uid': user.remote_id})
+        if group:
+            kwargs.update({'gid': group.remote_id})
+        if ids:
+            kwargs.update({'aids': (',').join(map(str, ids))})
+        kwargs['after'] = after
+        kwargs['before'] = before
+        return super(AlbumRemoteManager, self).fetch(**kwargs)
+
+
+class PhotoRemoteManager(VkontakteTimelineManager):
+    timeline_cut_fieldname = 'created'
+    timeline_force_ordering = True
+
+    @atomic
+    def fetch(self, album, ids=None, limit=None, extended=False, offset=0, photo_sizes=False, before=None, rev=0, after=None, **kwargs):
+        if ids and not isinstance(ids, (tuple, list)):
+            raise ValueError("Attribute 'ids' should be tuple or list")
+        if before and not after:
+            raise ValueError('Attribute `before` should be specified with attribute `after`')
+        if before and before < after:
+            raise ValueError('Attribute `before` should be later, than attribute `after`')
+        if rev == 1 and (after or before):
+            raise ValueError('Attribute `rev` should be equal to 0 with defined `after` attribute')
+        kwargs = {'album_id': album.remote_id.split('_')[1], 
+           'extended': int(extended), 
+           'offset': int(offset), 
+           'photo_sizes': int(photo_sizes)}
+        if album.owner:
+            kwargs.update({'uid': album.owner.remote_id})
+        elif album.group:
+            kwargs.update({'gid': album.group.remote_id})
+        if ids:
+            kwargs.update({'photo_ids': (',').join(map(str, ids))})
+        if limit:
+            kwargs.update({'limit': limit})
+        kwargs['rev'] = int(rev)
+        kwargs['after'] = after
+        kwargs['before'] = before
+        return super(PhotoRemoteManager, self).fetch(**kwargs)
+
+
+class CommentRemoteManager(VkontakteTimelineManager):
+
+    @atomic
+    @fetch_all(default_count=100)
+    def fetch_album(self, album, offset=0, count=100, sort='asc', need_likes=True, before=None, after=None, **kwargs):
+        raise NotImplementedError
+
+    @atomic
+    @fetch_all(default_count=100)
+    def fetch_photo(self, photo, offset=0, count=100, sort='asc', need_likes=True, before=None, after=None, **kwargs):
+        if count > 100:
+            raise ValueError("Attribute 'count' can not be more than 100")
+        if sort not in ('asc', 'desc'):
+            raise ValueError("Attribute 'sort' should be equal to 'asc' or 'desc'")
+        if sort == 'asc' and after:
+            raise ValueError("Attribute `sort` should be equal to 'desc' with defined `after` attribute")
+        if before and not after:
+            raise ValueError('Attribute `before` should be specified with attribute `after`')
+        if before and before < after:
+            raise ValueError('Attribute `before` should be later, than attribute `after`')
+        if photo.owner:
+            kwargs['owner_id'] = photo.owner.remote_id
+        elif photo.group:
+            kwargs['owner_id'] = -1 * photo.group.remote_id
+        kwargs['photo_id'] = photo.remote_id.split('_')[1]
+        kwargs['need_likes'] = int(need_likes)
+        kwargs['offset'] = int(offset)
+        kwargs['count'] = int(count)
+        kwargs['sort'] = sort
+        kwargs['after'] = after
+        kwargs['before'] = before
+        kwargs['extra_fields'] = {'photo_id': photo.id}
+        return super(CommentRemoteManager, self).fetch(**kwargs)
+
+
+class PhotosAbstractModel(VkontakteModel):
+    methods_namespace = 'photos'
+    remote_id = models.CharField('ID', max_length='20', help_text='Уникальный идентификатор', unique=True)
+
+    class Meta:
+        abstract = True
+
+    @property
+    def remote_id_short(self):
+        return self.remote_id.split('_')[1]
+
+    @property
+    def slug(self):
+        return self.slug_prefix + str(self.remote_id)
+
+    def get_remote_id(self, id):
+        u"""
+        Returns unique remote_id, contains from 2 parts: remote_id of owner or group and remote_id of photo object
+        TODO: перейти на ContentType и избавиться от метода
+        """
+        if self.owner:
+            remote_id = self.owner.remote_id
+        elif self.group:
+            remote_id = -1 * self.group.remote_id
+        return '%s_%s' % (remote_id, id)
+
+    def parse(self, response):
+        owner_id = int(response.pop('owner_id'))
+        if owner_id > 0:
+            self.owner = User.objects.get_or_create(remote_id=owner_id)[0]
+        else:
+            self.group = Group.objects.get_or_create(remote_id=abs(owner_id))[0]
+        super(PhotosAbstractModel, self).parse(response)
+        self.remote_id = self.get_remote_id(self.remote_id)
+
+
+@python_2_unicode_compatible
+class Album(PhotosAbstractModel):
+    remote_pk_field = 'aid'
+    slug_prefix = 'album'
+    owner = models.ForeignKey(User, verbose_name='Владелец альбома', null=True, related_name='photo_albums')
+    group = models.ForeignKey(Group, verbose_name='Группа альбома', null=True, related_name='photo_albums')
+    thumb_id = models.PositiveIntegerField()
+    thumb_src = models.CharField('Обложка альбома', max_length='200')
+    title = models.CharField(max_length='200')
+    description = models.TextField()
+    created = models.DateTimeField(null=True, db_index=True)
+    updated = models.DateTimeField(null=True, db_index=True)
+    size = models.PositiveIntegerField('Кол-во фотографий')
+    privacy = models.PositiveIntegerField('Уровень доступа к альбому', null=True, choices=ALBUM_PRIVACY_CHOCIES)
+    objects = models.Manager()
+    remote = AlbumRemoteManager(remote_pk=('remote_id', ), methods={'get': 'getAlbums'})
+
+    class Meta:
+        verbose_name = 'Альбом фотографий Вконтакте'
+        verbose_name_plural = 'Альбомы фотографий Вконтакте'
+
+    def __str__(self):
+        return self.title
+
+    @atomic
+    def fetch_photos(self, *args, **kwargs):
+        return Photo.remote.fetch(album=self, *args, **kwargs)
+
+
+class Photo(PhotosAbstractModel):
+    remote_pk_field = 'pid'
+    slug_prefix = 'photo'
+    album = models.ForeignKey(Album, verbose_name='Альбом', related_name='photos')
+    owner = models.ForeignKey(User, verbose_name='Владелец фотографии', null=True, related_name='photos')
+    group = models.ForeignKey(Group, verbose_name='Группа фотографии', null=True, related_name='photos')
+    user = models.ForeignKey(User, verbose_name='Автор фотографии', null=True, related_name='photos_author')
+    src = models.CharField('Иконка', max_length='200')
+    src_big = models.CharField('Большая', max_length='200')
+    src_small = models.CharField('Маленькая', max_length='200')
+    src_xbig = models.CharField('Большая X', max_length='200')
+    src_xxbig = models.CharField('Большая XX', max_length='200')
+    width = models.PositiveIntegerField(null=True)
+    height = models.PositiveIntegerField(null=True)
+    likes_count = models.PositiveIntegerField('Лайков', default=0)
+    comments_count = models.PositiveIntegerField('Комментариев', default=0)
+    actions_count = models.PositiveIntegerField('Комментариев', default=0)
+    tags_count = models.PositiveIntegerField('Тегов', default=0)
+    like_users = models.ManyToManyField(User, related_name='like_photos')
+    text = models.TextField()
+    created = models.DateTimeField(db_index=True)
+    objects = models.Manager()
+    remote = PhotoRemoteManager(remote_pk=('remote_id', ), methods={'get': 'get'})
+
+    class Meta:
+        verbose_name = 'Фотография Вконтакте'
+        verbose_name_plural = 'Фотографии Вконтакте'
+
+    def parse(self, response):
+        super(Photo, self).parse(response)
+        for field_name in ['likes', 'comments', 'tags']:
+            if field_name in response and 'count' in response[field_name]:
+                setattr(self, '%s_count' % field_name, response[field_name]['count'])
+
+        self.actions_count = self.likes_count + self.comments_count
+        if 'user_id' in response:
+            self.user = User.objects.get_or_create(remote_id=response['user_id'])[0]
+        try:
+            self.album = Album.objects.get(remote_id=self.get_remote_id(response['aid']))
+        except Album.DoesNotExist:
+            raise Exception('Impossible to save photo for unexisted album %s' % (self.get_remote_id(response['aid']),))
+
+    def fetch_comments_parser(self):
+        """
+        Fetch total ammount of comments
+        TODO: implement fetching comments
+        """
+        post_data = {'act': 'photo_comments', 
+           'al': 1, 
+           'offset': 0, 
+           'photo': self.remote_id}
+        parser = VkontaktePhotosParser().request('/al_photos.php', data=post_data)
+        self.comments_count = len(parser.content_bs.findAll('div', {'class': 'clear_fix pv_comment '}))
+        self.save()
+
+    def fetch_likes_parser(self):
+        """
+        Fetch total ammount of likes
+        TODO: implement fetching users who likes
+        """
+        post_data = {'act': 'a_get_stats', 
+           'al': 1, 
+           'list': 'album%s' % self.album.remote_id, 
+           'object': 'photo%s' % self.remote_id}
+        parser = VkontaktePhotosParser().request('/like.php', data=post_data)
+        values = re.findall('value="(\\d+)"', parser.html)
+        if len(values):
+            self.likes_count = int(values[0])
+            self.save()
+
+    @atomic
+    def fetch_likes(self, *args, **kwargs):
+        kwargs['likes_type'] = 'photo'
+        kwargs['item_id'] = self.remote_id.split('_')[1]
+        kwargs['owner_id'] = self.group.remote_id
+        if isinstance(self.group, Group):
+            kwargs['owner_id'] *= -1
+        log.debug('Fetching likes of %s %s of owner "%s"' % (self._meta.module_name, self.remote_id, self.group))
+        users = User.remote.fetch_instance_likes(self, *args, **kwargs)
+        self.likes_count = self.like_users.count()
+        self.save()
+        return users
+
+    @atomic
+    def fetch_comments(self, *args, **kwargs):
+        return Comment.remote.fetch_photo(photo=self, *args, **kwargs)
+
+
+class Comment(VkontakteModel, VkontakteCRUDModel):
+    methods_namespace = 'photos'
+    remote_pk_field = 'cid'
+    fields_required_for_update = ['comment_id', 'owner_id']
+    _commit_remote = False
+    remote_id = models.CharField('ID', max_length='20', help_text='Уникальный идентификатор', unique=True)
+    photo = models.ForeignKey(Photo, verbose_name='Фотография', related_name='comments')
+    author_content_type = models.ForeignKey(ContentType, related_name='photo_comments')
+    author_id = models.PositiveIntegerField(db_index=True)
+    author = generic.GenericForeignKey('author_content_type', 'author_id')
+    date = models.DateTimeField(help_text='Дата создания', db_index=True)
+    text = models.TextField('Текст сообщения')
+    objects = models.Manager()
+    remote = CommentRemoteManager(remote_pk=('remote_id', ), methods={'get': 'getComments', 
+       'create': 'createComment', 
+       'update': 'editComment', 
+       'delete': 'deleteComment', 
+       'restore': 'restoreComment'})
+
+    class Meta:
+        verbose_name = 'Коммментарий фотографии Вконтакте'
+        verbose_name_plural = 'Коммментарии фотографий Вконтакте'
+
+    @property
+    def remote_owner_id(self):
+        return self.photo.remote_id.split('_')[0]
+
+    @property
+    def remote_id_short(self):
+        return self.remote_id.split('_')[1]
+
+    def prepare_create_params(self, from_group=False, **kwargs):
+        if self.author == self.photo.group:
+            from_group = True
+        kwargs.update({'owner_id': self.remote_owner_id, 
+           'photo_id': self.photo.remote_id_short, 
+           'message': self.text, 
+           'from_group': int(from_group), 
+           'attachments': kwargs.get('attachments', '')})
+        return kwargs
+
+    def prepare_update_params(self, **kwargs):
+        kwargs.update({'owner_id': self.remote_owner_id, 
+           'comment_id': self.remote_id_short, 
+           'message': self.text, 
+           'attachments': kwargs.get('attachments', '')})
+        return kwargs
+
+    def prepare_delete_params(self):
+        return {'owner_id': self.remote_owner_id, 
+           'comment_id': self.remote_id_short}
+
+    def parse_remote_id_from_response(self, response):
+        if response:
+            return '%s_%s' % (self.remote_owner_id, response)
+        else:
+            return
+
+    def get_or_create_group_or_user(self, remote_id):
+        if remote_id > 0:
+            Model = User
+        elif remote_id < 0:
+            Model = Group
+        else:
+            raise ValueError("remote_id shouldn't be equal to 0")
+        return Model.objects.get_or_create(remote_id=abs(remote_id))
+
+    def parse(self, response):
+        if response['from_id'] == 101:
+            self.author = self.photo.group
+        else:
+            self.author = self.get_or_create_group_or_user(response.pop('from_id'))[0]
+        if 'attachments' in response:
+            response.pop('attachments')
+        if 'poll' in response:
+            response.pop('poll')
+        if 'message' in response:
+            response['text'] = response.pop('message')
+        super(Comment, self).parse(response)
+        if '_' not in str(self.remote_id):
+            self.remote_id = '%s_%s' % (self.remote_owner_id, self.remote_id)

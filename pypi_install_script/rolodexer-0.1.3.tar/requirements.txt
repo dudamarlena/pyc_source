@@ -1,0 +1,2 @@
+phonenumbers        # https://github.com/daviddrysdale/python-phonenumbers
+docopt              # https://github.com/docopt/docopt

@@ -1,0 +1,8 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/templates/readme.py
+# Compiled at: 2020-04-22 17:57:01
+# Size of source mod 2**32: 1409 bytes
+readme_template = '\n[![Build Status](https://travis-ci.com/{1}/{0}.svg?branch=master)](https://travis-ci.com/{1}/{0})\n[![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://opensource.org/licenses/MIT)\n[![Organization](https://img.shields.io/badge/Org-TralahTek-blue.svg)](https://github.com/TralahTek)\n[![HitCount](http://hits.dwyl.io/{1}/{0}.svg)](http://dwyl.io/{1}/{0})\n[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/{1}/pull/)\n[![GitHub pull-requests](https://img.shields.io/github/issues-pr/Naereen/StrapDown.js.svg)](https://gitHub.com/{1}/{0}/pull/)\n[![GitHub version](https://badge.fury.io/gh/Naereen%2FStrapDown.js.svg)](https://github.com/{1}/{0}).\n\n# {0}.\n\n\n[![{1}](https://img.shields.io/badge/Engineer-{1}-blue.svg?style=for-the-badge)](https://github.com/{1})\n[![{1}](https://img.shields.io/badge/Maintainer-{1}-green.svg?style=for-the-badge)](https://github.com/{1})\n\n# Documentation\n\n# How to Install\n\n## Building from Source for Developers\n\n```Bash\ngit clone https://github.com/{1}/{0}.git\ncd {0}\n```\n\n# Contributing\n[See the Contributing File](CONTRIBUTING.rst)\n\n\n[See the Pull Request File](PULL_REQUEST_TEMPLATE.md)\n\n\n# Support\n\n# LICENCE\n\n[Read the license here](LICENSE)\n\n\n# Acknowledgements\n\n[Find me on Twitter](https://twitter.com/TralahM)\n\n[Find me on Kaggle](https://kaggle.com/TralahM)\n\n\n'

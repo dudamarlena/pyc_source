@@ -1,0 +1,37 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python3.6/dist-packages/pyFTS/tests/cmsfts.py
+# Compiled at: 2018-02-26 11:15:34
+# Size of source mod 2**32: 1771 bytes
+import os, numpy as np, pandas as pd, matplotlib as plt, matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import datetime, pandas as pd
+from pyFTS.partitioners import Grid, CMeans, FCM, Entropy
+from pyFTS.common import FLR, FuzzySet, Membership, Transformations, Util, fts
+from pyFTS import sfts
+from pyFTS.models import msfts
+from pyFTS.benchmarks import benchmarks as bchmk
+from pyFTS.benchmarks import Measures
+os.chdir('/home/petronio/dados/Dropbox/Doutorado/Disciplinas/AdvancedFuzzyTimeSeriesModels/')
+sonda = pd.read_csv('DataSets/SONDA_BSB_MOD.csv', sep=';')
+sonda['data'] = pd.to_datetime(sonda['data'])
+sonda = sonda[:][527041:]
+sonda.index = np.arange(0, len(sonda.index))
+sonda_treino = sonda[:1051200]
+sonda_teste = sonda[1051201:]
+from pyFTS.common import Util
+from pyFTS.models import cmsfts
+partitions = [
+ 'grid', 'entropy']
+indexers = [
+ 'm15', 'Mh', 'Mhm15']
+for max_part in (40, 50):
+    for part in partitions:
+        fs = Util.load_obj('models/sonda_fs_' + part + '_' + str(max_part) + '.pkl')
+        for ind in indexers:
+            ix = Util.load_obj('models/sonda_ix_' + ind + '.pkl')
+            model = cmsfts.ContextualMultiSeasonalFTS(part + ' ' + ind, ix)
+            model.train(sonda_treino, fs)
+            Util.persist_obj(model, 'models/sonda_cmsfts_' + part + '_' + str(max_part) + '_' + ind + '.pkl')

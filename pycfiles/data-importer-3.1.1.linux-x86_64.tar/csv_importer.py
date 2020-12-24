@@ -1,0 +1,16 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /mnt/d/Sandbox/huru-server/.venv/lib/python2.7/site-packages/data_importer/importers/csv_importer.py
+# Compiled at: 2020-04-17 10:46:24
+from __future__ import unicode_literals
+from data_importer.importers.base import BaseImporter
+from data_importer.readers import CSVReader
+
+class CSVImporter(BaseImporter):
+
+    def set_reader(self):
+        delimiter = self.Meta.delimiter or b';'
+        delimiter = str(delimiter)
+        self._reader = CSVReader(self, delimiter=delimiter)

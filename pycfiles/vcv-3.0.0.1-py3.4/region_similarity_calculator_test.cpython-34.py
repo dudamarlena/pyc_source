@@ -1,0 +1,73 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/object_detection/core/region_similarity_calculator_test.py
+# Compiled at: 2018-06-15 01:39:54
+# Size of source mod 2**32: 3445 bytes
+"""Tests for region_similarity_calculator."""
+import tensorflow as tf
+from object_detection.core import box_list
+from object_detection.core import region_similarity_calculator
+
+class RegionSimilarityCalculatorTest(tf.test.TestCase):
+
+    def test_get_correct_pairwise_similarity_based_on_iou(self):
+        corners1 = tf.constant([[4.0, 3.0, 7.0, 5.0], [5.0, 6.0, 10.0, 7.0]])
+        corners2 = tf.constant([[3.0, 4.0, 6.0, 8.0], [14.0, 14.0, 15.0, 15.0],
+         [
+          0.0, 0.0, 20.0, 20.0]])
+        exp_output = [[0.125, 0, 0.015], [0.0625, 0.0, 0.0125]]
+        boxes1 = box_list.BoxList(corners1)
+        boxes2 = box_list.BoxList(corners2)
+        iou_similarity_calculator = region_similarity_calculator.IouSimilarity()
+        iou_similarity = iou_similarity_calculator.compare(boxes1, boxes2)
+        with self.test_session() as (sess):
+            iou_output = sess.run(iou_similarity)
+            self.assertAllClose(iou_output, exp_output)
+
+    def test_get_correct_pairwise_similarity_based_on_squared_distances(self):
+        corners1 = tf.constant([[0.0, 0.0, 0.0, 0.0],
+         [
+          1.0, 1.0, 0.0, 2.0]])
+        corners2 = tf.constant([[3.0, 4.0, 1.0, 0.0],
+         [
+          -4.0, 0.0, 0.0, 3.0],
+         [
+          0.0, 0.0, 0.0, 0.0]])
+        exp_output = [[-26, -25, 0], [-18, -27, -6]]
+        boxes1 = box_list.BoxList(corners1)
+        boxes2 = box_list.BoxList(corners2)
+        dist_similarity_calc = region_similarity_calculator.NegSqDistSimilarity()
+        dist_similarity = dist_similarity_calc.compare(boxes1, boxes2)
+        with self.test_session() as (sess):
+            dist_output = sess.run(dist_similarity)
+            self.assertAllClose(dist_output, exp_output)
+
+    def test_get_correct_pairwise_similarity_based_on_ioa(self):
+        corners1 = tf.constant([[4.0, 3.0, 7.0, 5.0], [5.0, 6.0, 10.0, 7.0]])
+        corners2 = tf.constant([[3.0, 4.0, 6.0, 8.0], [14.0, 14.0, 15.0, 15.0],
+         [
+          0.0, 0.0, 20.0, 20.0]])
+        exp_output_1 = [[0.16666666666666666, 0, 0.015],
+         [
+          0.08333333333333333, 0.0, 0.0125]]
+        exp_output_2 = [[0.3333333333333333, 0.2],
+         [
+          0, 0],
+         [
+          1.0, 1.0]]
+        boxes1 = box_list.BoxList(corners1)
+        boxes2 = box_list.BoxList(corners2)
+        ioa_similarity_calculator = region_similarity_calculator.IoaSimilarity()
+        ioa_similarity_1 = ioa_similarity_calculator.compare(boxes1, boxes2)
+        ioa_similarity_2 = ioa_similarity_calculator.compare(boxes2, boxes1)
+        with self.test_session() as (sess):
+            iou_output_1, iou_output_2 = sess.run([
+             ioa_similarity_1, ioa_similarity_2])
+            self.assertAllClose(iou_output_1, exp_output_1)
+            self.assertAllClose(iou_output_2, exp_output_2)
+
+
+if __name__ == '__main__':
+    tf.test.main()

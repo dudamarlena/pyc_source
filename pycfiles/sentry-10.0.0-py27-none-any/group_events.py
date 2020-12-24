@@ -1,0 +1,112 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/src/sentry/src/sentry/api/endpoints/group_events.py
+# Compiled at: 2019-08-16 17:27:45
+from __future__ import absolute_import
+import six
+from datetime import timedelta
+from django.utils import timezone
+from rest_framework.response import Response
+from functools import partial
+from sentry import eventstore, features
+from sentry.api.base import DocSection, EnvironmentMixin
+from sentry.api.bases import GroupEndpoint
+from sentry.api.event_search import get_snuba_query_args
+from sentry.api.exceptions import ResourceDoesNotExist
+from sentry.api.helpers.environments import get_environments
+from sentry.api.helpers.events import get_direct_hit_response
+from sentry.api.serializers import EventSerializer, serialize, SimpleEventSerializer
+from sentry.api.paginator import GenericOffsetPaginator
+from sentry.api.utils import get_date_range_from_params
+from sentry.models import Group
+from sentry.search.utils import InvalidQuery, parse_query
+from sentry.utils.apidocs import scenario, attach_scenarios
+
+class NoResults(Exception):
+    pass
+
+
+class GroupEventsError(Exception):
+    pass
+
+
+@scenario('ListAvailableSamples')
+def list_available_samples_scenario(runner):
+    group = Group.objects.filter(project=runner.default_project).first()
+    runner.request(method='GET', path='/issues/%s/events/' % group.id)
+
+
+class GroupEventsEndpoint(GroupEndpoint, EnvironmentMixin):
+    doc_section = DocSection.EVENTS
+
+    @attach_scenarios([list_available_samples_scenario])
+    def get(self, request, group):
+        """
+        List an Issue's Events
+        ``````````````````````
+
+        This endpoint lists an issue's events.
+
+        :pparam string issue_id: the ID of the issue to retrieve.
+        :auth: required
+        """
+        try:
+            environments = get_environments(request, group.project.organization)
+            query, tags = self._get_search_query_and_tags(request, group, environments)
+        except InvalidQuery as exc:
+            return Response({'detail': six.text_type(exc)}, status=400)
+        except (NoResults, ResourceDoesNotExist):
+            return Response([])
+
+        start, end = get_date_range_from_params(request.GET, optional=True)
+        try:
+            return self._get_events_snuba(request, group, environments, query, tags, start, end)
+        except GroupEventsError as exc:
+            return Response({'detail': six.text_type(exc)}, status=400)
+
+    def _get_events_snuba(self, request, group, environments, query, tags, start, end):
+        default_end = timezone.now()
+        default_start = default_end - timedelta(days=90)
+        params = {'issue.id': [
+                      group.id], 
+           'project_id': [
+                        group.project_id], 
+           'start': start if start else default_start, 
+           'end': end if end else default_end}
+        direct_hit_resp = get_direct_hit_response(request, query, params, 'api.group-events')
+        if direct_hit_resp:
+            return direct_hit_resp
+        else:
+            if environments:
+                params['environment'] = [ env.name for env in environments ]
+            full = request.GET.get('full', False)
+            snuba_args = get_snuba_query_args(request.GET.get('query', None), params)
+            if snuba_args:
+                has_boolean_op_flag = features.has('organizations:boolean-search', group.project.organization, actor=request.user)
+                if snuba_args.pop('has_boolean_terms', False) and not has_boolean_op_flag:
+                    raise GroupEventsError('Boolean search operator OR and AND not allowed in this search.')
+            snuba_cols = None if full else eventstore.full_columns
+            data_fn = partial(eventstore.get_events, additional_columns=snuba_cols, referrer='api.group-events', **snuba_args)
+            serializer = EventSerializer() if full else SimpleEventSerializer()
+            return self.paginate(request=request, on_results=lambda results: serialize(results, request.user, serializer), paginator=GenericOffsetPaginator(data_fn=data_fn))
+
+    def _get_search_query_and_tags(self, request, group, environments=None):
+        raw_query = request.GET.get('query')
+        if raw_query:
+            query_kwargs = parse_query([group.project], raw_query, request.user, environments)
+            query = query_kwargs.pop('query', None)
+            tags = query_kwargs.pop('tags', {})
+        else:
+            query = None
+            tags = {}
+        if environments:
+            env_names = set(env.name for env in environments)
+            if 'environment' in tags:
+                if tags['environment'] not in env_names:
+                    raise NoResults
+            else:
+                tags['environment'] = list(env_names) if len(env_names) > 1 else env_names.pop()
+        return (
+         query, tags)

@@ -1,0 +1,5 @@
+numba
+numpy>=1.10
+scikit-image
+matplotlib>=1.4.3
+nose>=1.3

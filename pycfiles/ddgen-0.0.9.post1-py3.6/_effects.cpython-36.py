@@ -1,0 +1,42 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/ddgen/utils/_effects.py
+# Compiled at: 2020-03-24 14:57:35
+# Size of source mod 2**32: 24089 bytes
+VARIANT_EFFECTS = ('CHROMOSOME_NUMBER_VARIATION', 'TRANSCRIPT_ABLATION', 'EXON_LOSS_VARIANT',
+                   'INVERSION', 'INSERTION', 'TRANSLOCATION', 'FRAMESHIFT_ELONGATION',
+                   'FRAMESHIFT_TRUNCATION', 'FRAMESHIFT_VARIANT', 'INTERNAL_FEATURE_ELONGATION',
+                   'FEATURE_TRUNCATION', 'TRANSCRIPT_AMPLIFICATION', 'COPY_NUMBER_CHANGE',
+                   'MNV', 'COMPLEX_SUBSTITUTION', 'STOP_GAINED', 'STOP_LOST', 'START_LOST',
+                   'SPLICE_ACCEPTOR_VARIANT', 'SPLICE_DONOR_VARIANT', 'RARE_AMINO_ACID_VARIANT',
+                   'MISSENSE_VARIANT', 'INFRAME_INSERTION', 'DISRUPTIVE_INFRAME_INSERTION',
+                   'INFRAME_DELETION', 'DISRUPTIVE_INFRAME_DELETION', 'FIVE_PRIME_UTR_TRUNCATION',
+                   'THREE_PRIME_UTR_TRUNCATION', 'SPLICE_REGION_VARIANT', 'STOP_RETAINED_VARIANT',
+                   'INITIATOR_CODON_VARIANT', 'SYNONYMOUS_VARIANT', 'CODING_TRANSCRIPT_INTRON_VARIANT',
+                   'FIVE_PRIME_UTR_PREMATURE_START_CODON_GAIN_VARIANT', 'FIVE_PRIME_UTR_EXON_VARIANT',
+                   'THREE_PRIME_UTR_EXON_VARIANT', 'FIVE_PRIME_UTR_INTRON_VARIANT',
+                   'THREE_PRIME_UTR_INTRON_VARIANT', 'NON_CODING_TRANSCRIPT_EXON_VARIANT',
+                   'NON_CODING_TRANSCRIPT_INTRON_VARIANT', 'DIRECT_TANDEM_DUPLICATION',
+                   'MOBILE_ELEMENT_DELETION', 'MOBILE_ELEMENT_INSERTION', 'CUSTOM',
+                   'UPSTREAM_GENE_VARIANT', 'DOWNSTREAM_GENE_VARIANT', 'INTERGENIC_VARIANT',
+                   'TFBS_ABLATION', 'TFBS_AMPLIFICATION', 'TF_BINDING_SITE_VARIANT',
+                   'REGULATORY_REGION_VARIANT', 'REGULATORY_REGION_ABLATION', 'REGULATORY_REGION_AMPLIFICATION',
+                   'CONSERVED_INTRON_VARIANT', 'INTRAGENIC_VARIANT', 'CONSERVED_INTERGENIC_VARIANT',
+                   'STRUCTURAL_VARIANT', 'CODING_SEQUENCE_VARIANT', 'INTRON_VARIANT',
+                   'EXON_VARIANT', 'SPLICING_VARIANT', 'MIRNA', 'GENE_VARIANT', 'CODING_TRANSCRIPT_VARIANT',
+                   'NON_CODING_TRANSCRIPT_VARIANT', 'TRANSCRIPT_VARIANT', 'INTERGENIC_REGION',
+                   'CHROMOSOME', 'SEQUENCE_VARIANT')
+VARIANT_EFFECT_PRIORITIES = {e:i for i, e in enumerate(VARIANT_EFFECTS)}
+
+def get_variant_effect_priority(effect: str) -> int:
+    """
+    Return a numeric value for given `effect`. Lower the value, higher the priority.
+    :param effect: string like `MISSENSE_VARIANT`
+    :return: integer representing the priority, -1 if the `effect` is un-recognized/gibberish/None
+    """
+    if effect in VARIANT_EFFECTS:
+        return VARIANT_EFFECT_PRIORITIES[effect]
+    else:
+        return -1

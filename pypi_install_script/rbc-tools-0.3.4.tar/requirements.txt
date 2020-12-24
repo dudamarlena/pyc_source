@@ -1,0 +1,5 @@
+molnctrl>=0.6.0
+tabulate
+docopt
+translitcodec
+simplejson

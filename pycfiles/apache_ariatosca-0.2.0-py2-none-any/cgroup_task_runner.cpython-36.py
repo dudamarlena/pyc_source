@@ -1,0 +1,131 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.macosx-10.7-x86_64/egg/airflow/contrib/task_runner/cgroup_task_runner.py
+# Compiled at: 2019-09-11 03:47:34
+# Size of source mod 2**32: 9375 bytes
+import datetime, getpass, os, uuid
+from cgroupspy import trees
+import psutil
+from airflow.task.task_runner.base_task_runner import BaseTaskRunner
+from airflow.utils.helpers import reap_process_group
+from airflow.utils.operator_resources import Resources
+
+class CgroupTaskRunner(BaseTaskRunner):
+    """CgroupTaskRunner"""
+
+    def __init__(self, local_task_job):
+        super(CgroupTaskRunner, self).__init__(local_task_job)
+        self.process = None
+        self._finished_running = False
+        self._cpu_shares = None
+        self._mem_mb_limit = None
+        self._created_cpu_cgroup = False
+        self._created_mem_cgroup = False
+        self._cur_user = getpass.getuser()
+
+    def _create_cgroup(self, path):
+        """
+        Create the specified cgroup.
+
+        :param path: The path of the cgroup to create.
+        E.g. cpu/mygroup/mysubgroup
+        :return: the Node associated with the created cgroup.
+        :rtype: cgroupspy.nodes.Node
+        """
+        node = trees.Tree().root
+        path_split = path.split(os.sep)
+        for path_element in path_split:
+            name_to_node = {x.name.decode():x for x in node.children}
+            if path_element not in name_to_node:
+                self.log.debug('Creating cgroup %s in %s', path_element, node.path.decode())
+                node = node.create_cgroup(path_element)
+            else:
+                self.log.debug('Not creating cgroup %s in %s since it already exists', path_element, node.path.decode())
+                node = name_to_node[path_element]
+
+        return node
+
+    def _delete_cgroup(self, path):
+        """
+        Delete the specified cgroup.
+
+        :param path: The path of the cgroup to delete.
+        E.g. cpu/mygroup/mysubgroup
+        """
+        node = trees.Tree().root
+        path_split = path.split('/')
+        for path_element in path_split:
+            name_to_node = {x.name.decode():x for x in node.children}
+            if path_element not in name_to_node:
+                self.log.warning('Cgroup does not exist: %s', path)
+                return
+            node = name_to_node[path_element]
+
+        parent = node.parent
+        self.log.debug('Deleting cgroup %s/%s', parent, node.name)
+        parent.delete_cgroup(node.name.decode())
+
+    def start(self):
+        cgroups = self._get_cgroup_names()
+        if cgroups.get('cpu') and cgroups.get('cpu') != '/' or cgroups.get('memory') and cgroups.get('memory') != '/':
+            self.log.debug('Already running in a cgroup (cpu: %s memory: %s) so not creating another one', cgroups.get('cpu'), cgroups.get('memory'))
+            self.process = self.run_command()
+            return
+        cgroup_name = 'airflow/{}/{}'.format(datetime.datetime.utcnow().strftime('%Y-%m-%d'), str(uuid.uuid4()))
+        self.mem_cgroup_name = 'memory/{}'.format(cgroup_name)
+        self.cpu_cgroup_name = 'cpu/{}'.format(cgroup_name)
+        task = self._task_instance.task
+        resources = task.resources if task.resources is not None else Resources()
+        cpus = resources.cpus.qty
+        self._cpu_shares = cpus * 1024
+        self._mem_mb_limit = resources.ram.qty
+        mem_cgroup_node = self._create_cgroup(self.mem_cgroup_name)
+        self._created_mem_cgroup = True
+        if self._mem_mb_limit > 0:
+            self.log.debug('Setting %s with %s MB of memory', self.mem_cgroup_name, self._mem_mb_limit)
+            mem_cgroup_node.controller.limit_in_bytes = self._mem_mb_limit * 1024 * 1024
+        cpu_cgroup_node = self._create_cgroup(self.cpu_cgroup_name)
+        self._created_cpu_cgroup = True
+        if self._cpu_shares > 0:
+            self.log.debug('Setting %s with %s CPU shares', self.cpu_cgroup_name, self._cpu_shares)
+            cpu_cgroup_node.controller.shares = self._cpu_shares
+        self.log.debug('Starting task process with cgroups cpu,memory: %s', cgroup_name)
+        self.process = self.run_command([
+         'cgexec', '-g', 'cpu,memory:{}'.format(cgroup_name)])
+
+    def return_code(self):
+        return_code = self.process.poll()
+        if return_code == 137:
+            self.log.warning('Task failed with return code of 137. This may indicate that it was killed due to excessive memory usage. Please consider optimizing your task or using the resources argument to reserve more memory for your task')
+        return return_code
+
+    def terminate(self):
+        if self.process:
+            if psutil.pid_exists(self.process.pid):
+                reap_process_group(self.process.pid, self.log)
+
+    def on_finish(self):
+        self._finished_running = True
+        if self._created_mem_cgroup:
+            self._delete_cgroup(self.mem_cgroup_name)
+        if self._created_cpu_cgroup:
+            self._delete_cgroup(self.cpu_cgroup_name)
+        super(CgroupTaskRunner, self).on_finish()
+
+    @staticmethod
+    def _get_cgroup_names():
+        """
+        :return: a mapping between the subsystem name to the cgroup name
+        :rtype: dict[str, str]
+        """
+        with open('/proc/self/cgroup') as (f):
+            lines = f.readlines()
+            d = {}
+            for line in lines:
+                line_split = line.rstrip().split(':')
+                subsystem = line_split[1]
+                group_name = line_split[2]
+                d[subsystem] = group_name
+
+            return d

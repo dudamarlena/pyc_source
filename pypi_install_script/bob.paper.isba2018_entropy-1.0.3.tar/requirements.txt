@@ -1,0 +1,6 @@
+bob.bio.vein
+scipy
+bob.io.base
+bob.measure
+numpy
+matplotlib

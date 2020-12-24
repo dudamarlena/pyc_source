@@ -1,0 +1,17 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/insights/parsers/tests/test_rhsm_conf.py
+# Compiled at: 2019-05-16 13:41:33
+from insights.tests import context_wrap
+from insights.parsers import rhsm_conf
+CONFIG = ('\n# Red Hat Subscription Manager Configuration File:\n\n# Unified Entitlement Platform Configuration\n[server]\n# Server hostname:\nhostname = subscription.rhn.redhat.com\n\n# Server prefix:\nprefix = /subscription\n\n# Server port:\nport = 443\n\n# Set to 1 to disable certificate validation:\ninsecure = 0\n\n# Set the depth of certs which should be checked\n# when validating a certificate\nssl_verify_depth = 3\n\n# an http proxy server to use\nproxy_hostname =\n\n# port for http proxy server\nproxy_port =\n\n# user name for authenticating to an http proxy, if needed\nproxy_user =\n\n# password for basic http proxy auth, if needed\nproxy_password =\n\n[rhsm]\n# Content base URL:\nbaseurl= https://cdn.redhat.com\n\n# Server CA certificate location:\nca_cert_dir = /etc/rhsm/ca/\n\n# Default CA cert to use when generating yum repo configs:\nrepo_ca_cert = %(ca_cert_dir)sredhat-uep.pem\n\n# Where the certificates should be stored\nproductCertDir = /etc/pki/product\nentitlementCertDir = /etc/pki/entitlement\nconsumerCertDir = /etc/pki/consumer\n\n# Manage generation of yum repositories for subscribed content:\nmanage_repos = 1\n\n# Refresh repo files with server overrides on every yum command\nfull_refresh_on_yum = 0\n\n# If set to zero, the client will not report the package profile to\n# the subscription management service.\nreport_package_profile = 1\n\n# The directory to search for subscription manager plugins\npluginDir = /usr/share/rhsm-plugins\n\n# The directory to search for plugin configuration files\npluginConfDir = /etc/rhsm/pluginconf.d\n\n[rhsmcertd]\n# Interval to run cert check (in minutes):\ncertCheckInterval = 240\n# Interval to run auto-attach (in minutes):\nautoAttachInterval = 1440\n\n').strip()
+RETURN_VALUE = ("\n{'rhsmcertd': {'certCheckInterval': '240', 'autoAttachInterval': '1440'}, 'rhsm': {'pluginConfDir': '/etc/rhsm/pluginconf.d', 'full_refresh_on_yum': '0', 'manage_repos': '1', 'baseurl': 'https://cdn.redhat.com', 'productCertDir': '/etc/pki/product', 'ca_cert_dir': '/etc/rhsm/ca/', 'entitlementCertDir': '/etc/pki/entitlement', 'report_package_profile': '1', 'consumerCertDir': '/etc/pki/consumer', 'pluginDir': '/usr/share/rhsm-plugins', 'repo_ca_cert': '%(ca_cert_dir)sredhat-uep.pem'}, 'server': {'proxy_hostname': '', 'proxy_user': '', 'insecure': '0', 'hostname': 'subscription.rhn.redhat.com', 'ssl_verify_depth': '3', 'proxy_password': '', 'proxy_port': '', 'prefix': '/subscription', 'port': '443'}}\n").strip()
+
+def test_rhsm_conf():
+    resault = rhsm_conf.RHSMConf(context_wrap(CONFIG))
+    assert resault.get('rhsm', 'pluginConfDir') == '/etc/rhsm/pluginconf.d'
+    assert resault.get('rhsm', 'full_refresh_on_yum') == '0'
+    assert resault.get('rhsm', 'consumerCertDir') == '/etc/pki/consumer'
+    assert resault.get('rhsm', 'repo_ca_cert') == '%(ca_cert_dir)sredhat-uep.pem'

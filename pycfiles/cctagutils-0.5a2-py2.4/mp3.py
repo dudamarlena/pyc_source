@@ -1,0 +1,189 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.3-i386/egg/cctagutils/handler/mp3.py
+# Compiled at: 2007-03-15 10:29:40
+"""Classes and functions to support embedding metadata in a music file;
+contains the abstract class which allows extensions to be implemented for
+OGG, etc.
+"""
+__id__ = '$Id: mp3.py 708 2007-02-20 17:36:22Z nyergler $'
+__version__ = '$Revision: 708 $'
+__copyright__ = '(c) 2004, Creative Commons, Nathan R. Yergler'
+__license__ = 'licensed under the GNU GPL2'
+import tagger, eyeD3, os, cctagutils.const as const, base
+from xmp import XmpMetadata
+
+class Mp3Metadata(base.BaseMetadata):
+    __module__ = __name__
+
+    def __init__(self, filename):
+        super(Mp3Metadata, self).__init__(filename)
+        self.__fields = None
+        self.__open(filename)
+        return
+
+    def __open(self, filename=None):
+        if filename is not None:
+            self.filename = str(filename)
+        self.__tag = eyeD3.Tag()
+        try:
+            self.__tag.link(self.filename)
+        except eyeD3.tag.TagException, e:
+            if '2.2' in e.msg:
+                print 'aieee!'
+                self.__tag = None
+            else:
+                raise
+
+        return
+
+    def _getFrame(self, fids):
+        """Returns the first frame whose ID is contained in the tuple fids.
+        Returns None if the frame identifiers do not exist."""
+        if self.__tag is None:
+            return
+        for frame in self.__tag.frames:
+            if frame.header.id in fids:
+                return frame
+
+        return
+
+    def _getFrameData(self, fids):
+        frame = self._getFrame(fids)
+        if frame is not None:
+            if isinstance(frame, eyeD3.frames.DateFrame):
+                return frame.getYear()
+            elif isinstance(frame, eyeD3.frames.TextFrame):
+                return frame.text
+            else:
+                return frame.data
+        return
+
+    def getTitle(self):
+        return self.__tag and self.__tag.getTitle() or ''
+
+    def getArtist(self):
+        return self.__tag and self.__tag.getArtist() or ''
+
+    def getYear(self):
+        return self._getFrameData(('TYE', 'TYER', 'TDRC')) or ''
+
+    def getClaim(self):
+        return self._getFrameData(('TCR', 'TCOP')) or ''
+
+    def _needsUpgrade(self):
+        """Returns True if a file has ID3 tags of v2.2."""
+        if self.__tag is None:
+            return True
+        elif self.__tag and len(self.__tag.frames) > 0:
+            return self.__tag.frames[0].header.majorVersion >= 2 and self.__tag.frames[0].header.minorVersion >= 3
+        else:
+            return False
+        return
+
+    def upgrade(self):
+        """Upgrades a file's ID3 tags from ID3v2.2 to ID3v2.3."""
+        self.__v2 = tagger.id3v2.ID3v2(self.filename, tagger.constants.ID3_FILE_MODIFY)
+        oldframes = {}
+        for frame in self.__v2.frames:
+            oldframes[frame.fid] = (
+             frame.rawdata, frame.length)
+
+        self.__v2 = tagger.id3v2.ID3v2(self.filename, mode=tagger.constants.ID3_FILE_NEW, version=2.3)
+        for fid in oldframes:
+            if fid not in const.TAG_MAP or const.TAG_MAP[fid] is None:
+                print 'Field can not be converted from 2.2 to 2.3: ', fid
+                continue
+            newframe = self.__v2.new_frame(fid=const.TAG_MAP[fid])
+            (newframe.rawdata, newframe.length) = oldframes[fid]
+            newframe.parse_field()
+            self.__v2.frames.append(newframe)
+
+        self.__v2.commit()
+        return
+
+    def _addId3v1(self):
+        """Checks for the existance of ID3v1 data in the specified file;
+        if it does not exist, generates data from the ID3v2 tags.
+        """
+        if self.__hasV1:
+            return
+        self.__v1.songname = self.getTitle()
+        self.__v1.artist = self.getArtist()
+        self.__v1.year = self.getYear()
+        self.__v1.commit()
+        self.__v1 = tagger.id3v1.ID3v1(self.filename, tagger.constants.ID3_FILE_MODIFY)
+        self.__hasV1 = True
+
+    def __clearTcop(self):
+        for f in self.__tag.frames:
+            if f.header.id == 'TCOP':
+                del f
+
+    def setClaim(self, claim):
+        if self._needsUpgrade():
+            self.upgrade()
+        self.__open()
+        print self.__tag
+        self.__clearTcop()
+        header = eyeD3.frames.FrameHeader()
+        header.id = 'TCOP'
+        header.compressed = 0
+        tcop = eyeD3.frames.TextFrame(header, text=unicode(claim))
+        self.__tag.frames.append(tcop)
+        self.__tag.update()
+
+    def embed(self, license, verification, year, holder):
+        claim = '%s %s. Licensed to the public under %s verify at %s' % (year, holder, license, verification)
+        self.setClaim(claim)
+
+    def isWritable(self):
+        """Returns true if the user has permission to change the metadata."""
+        return os.access(self.filename, os.W_OK)
+
+    def __extractFields(self):
+        """Extract all the fields from the file for use when iterating
+        the metadata."""
+        self.__fields = {}
+        try:
+            v2 = tagger.id3v2.ID3v2(self.filename, tagger.constants.ID3_FILE_READ)
+            for frame in v2.frames:
+                if len(getattr(frame, 'strings', [])) > 0:
+                    oframe = frame.strings[0]
+                else:
+                    oframe = frame.output_field()
+                self.__fields[frame.fid] = oframe
+
+        except:
+            pass
+
+    def properties(self):
+        """Return a sequence of property keys for metadata on this object."""
+        if self.__fields is None:
+            self.__extractFields()
+        return self.__fields.keys()
+
+    def __getitem__(self, key):
+        """Return an additional metadata property for this object."""
+        if self.__fields is None:
+            self.__extractFields()
+        return self.__fields[key]
+
+
+class OggMetadata(base.BaseMetadata):
+    __module__ = __name__
+
+
+meta_handlers = {'mp3': Mp3Metadata}
+
+def metadata(filename):
+    """Returns the appropriate instance for the detected filetype of
+    [filename].  The returned instance will be a subclass of the
+    AudioMetadata class."""
+    ext = filename.split('.')[(-1)].lower()
+    if ext in meta_handlers:
+        return meta_handlers[ext](filename)
+    else:
+        return XmpMetadata(filename)

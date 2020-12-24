@@ -1,0 +1,51 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/tina/gitlib.py
+# Compiled at: 2013-04-10 10:01:21
+import git, os, re
+from cookbook_metadata import *
+from tag import Tag
+
+def checkout_repo(repo_name, repo_url):
+    local_path = os.path.join('.tina', repo_name)
+    return git.Repo.clone_from(repo_url, local_path)
+
+
+def get_tag_of_repo(repo):
+    tags = repo.tags
+    if len(tags) is 0:
+        return None
+    else:
+        tag_list = []
+        for tag in tags:
+            try:
+                tag_list.append(Tag(str(tag)))
+            except Exception:
+                pass
+
+        tag_list.sort()
+        return tag_list[(-1)]
+
+
+def get_local_repo_url():
+    repo = git.Repo('.')
+    origin = repo.remotes.origin
+    return origin.url
+
+
+def create_tag(repo, tag):
+    repo.index.add(['metadata.rb'])
+    repo.index.commit('Tagging for %s.' % tag)
+    repo.create_tag(tag)
+
+
+def commit_and_push(repo, name, tag):
+    try:
+        print 'Pushing %s...' % name
+        create_tag(repo, str(tag))
+        repo.remotes.origin.push('--tags')
+    except git.GitCommandError as e:
+        print "Problem committing to '%s', error was '%s'" % (name, e.command)
+        raise

@@ -1,0 +1,13 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/doakey/Sync/Programming/reflowrst/reflowrst/collect_main_title.py
+# Compiled at: 2018-01-26 15:31:48
+# Size of source mod 2**32: 172 bytes
+
+
+def collect_main_title(lines, index):
+    """Collect a main title"""
+    output = '\n'.join([lines[index], lines[(index + 1)], lines[(index + 2)]])
+    return (output, index + 3)

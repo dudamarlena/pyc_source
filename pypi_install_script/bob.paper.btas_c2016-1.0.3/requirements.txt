@@ -1,0 +1,17 @@
+setuptools
+bob.blitz
+bob.core
+bob.io.base
+bob.measure
+bob.math
+bob.sp
+bob.ap
+bob.ip.base
+bob.learn.linear
+bob.db.base
+bob.bio.base
+bob.bio.spear
+bob.db.avspoof
+antispoofing.utils
+bob.db.avspoof_btas2016
+

@@ -1,0 +1,36 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\entransit\common\exceptions.py
+# Compiled at: 2008-03-07 16:10:41
+"""
+$Id: __init__.py 732 2005-01-21 19:43:40Z sidnei $
+"""
+
+class DeploymentError(Exception):
+    __module__ = __name__
+
+
+class DeploymentInProgress(DeploymentError):
+    __module__ = __name__
+
+
+class OSError(DeploymentError):
+    __module__ = __name__
+
+
+class URLRewritingError(DeploymentError):
+    __module__ = __name__
+
+
+class DependencyError(DeploymentError):
+    __module__ = __name__
+
+
+class ReferenceLookupError(DeploymentError):
+    __module__ = __name__
+
+
+class ShutdownException(Exception):
+    __module__ = __name__

@@ -1,0 +1,35 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/ai_tools/predict.py
+# Compiled at: 2018-08-04 12:32:06
+from vcvf import face_detector as fd
+import cv2, os
+
+def predict(img_dir, reusltdir):
+    fd1 = fd.face_detector(1)
+    files1 = os.listdir(img_dir)
+    for xmlFile in files1:
+        list1 = []
+        name = xmlFile[:-4]
+        imf = os.path.join(img_dir, xmlFile)
+        print imf
+        image = cv2.imread(imf)
+        num, list1, time = fd1.detect_face(image)
+        pathn = os.path.join(resultdir, xmlFile)
+        pathn += '.txt'
+        with open(pathn, 'w') as (fp):
+            fp.write('%s %d ' % (name, num))
+            for i in range(num):
+                list2 = str(list1[i])
+                list2 = list2[1:-1]
+                print list2
+                fp.write('%s ' % list2)
+
+    print 'vcvf_txt() is OK'
+
+
+if __name__ == '__main__':
+    img_dir = 'D:\\zmm\\moba\\home\\intern_mission\\bndbox_test2\\bndbox_test\\vcvf_txt\\pre_file'
+    resultdir = 'D:\\zmm\\moba\\home\\intern_mission\\bndbox_test2\\caculate_roc\\predict_result'
+    predict(img_dir, resultdir)

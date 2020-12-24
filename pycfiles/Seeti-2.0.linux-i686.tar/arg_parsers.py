@@ -1,0 +1,30 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/lib/python2.7/site-packages/Seeti/core/arg_parsers.py
+# Compiled at: 2012-04-16 01:03:03
+import argparse
+parser = argparse.ArgumentParser(description='Computes how long time has been spent on a project.', prog='seeti')
+parser.add_argument('--version', action='version', version='%(prog)s 2.0')
+subparsers = parser.add_subparsers()
+parser_init = subparsers.add_parser('init', help="Inits Seeti on a project. This creates .seeti file which stores all the information about the time you're working on the project.")
+parser_init.add_argument('init', action='store_true')
+parser_init.add_argument('--minute', type=int, dest='--minute')
+parser_init.add_argument('--hour', type=int, dest='--hour')
+parser_start = subparsers.add_parser('start', help='Called when you start working on the project.')
+parser_start.add_argument('start', action='store_true')
+parser_stop = subparsers.add_parser('stop', help='Called when you stop working on the project, at the end of the day.')
+parser_stop.add_argument('stop', action='store_true')
+parser_close = subparsers.add_parser('close', help='Close a finished project.')
+parser_close.add_argument('close', action='store_true')
+parser_open = subparsers.add_parser('open', help='Open a finished project, resuming the closed project.')
+parser_open.add_argument('open', action='store_true')
+parser_restart = subparsers.add_parser('restart', help='Restarts a closed project, reseting all written data. Cannot be undone.')
+parser_restart.add_argument('restart', action='store_true')
+parser_status = subparsers.add_parser('status', help='Displays the status of the project.')
+parser_status.add_argument('status', action='store_true')
+parser_report = subparsers.add_parser('report', help='Generates a report of how much time was spent on the project. Can be called any time.')
+parser_report.add_argument('report', action='store_true')
+parser_remove = subparsers.add_parser('remove', help='Removes the file which Seeti stores all operational information. Cannot be undone.')
+parser_remove.add_argument('remove', action='store_true')

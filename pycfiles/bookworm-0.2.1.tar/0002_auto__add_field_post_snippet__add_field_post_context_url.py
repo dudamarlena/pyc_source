@@ -1,0 +1,54 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/booki/messaging/migrations/0002_auto__add_field_post_snippet__add_field_post_context_url.py
+# Compiled at: 2012-02-14 23:34:00
+import datetime
+from south.db import db
+from south.v2 import SchemaMigration
+from django.db import models
+
+class Migration(SchemaMigration):
+
+    def forwards(self, orm):
+        db.add_column('messaging_post', 'snippet', self.gf('django.db.models.fields.TextField')(default=''), keep_default=False)
+        db.add_column('messaging_post', 'context_url', self.gf('django.db.models.fields.TextField')(default=''), keep_default=False)
+
+    def backwards(self, orm):
+        db.delete_column('messaging_post', 'snippet')
+        db.delete_column('messaging_post', 'context_url')
+
+    models = {'messaging.endpoint': {'Meta': {'object_name': 'Endpoint'}, 'id': (
+                                   'django.db.models.fields.AutoField', [], {'primary_key': 'True'}), 
+                              'syntax': (
+                                       'django.db.models.fields.CharField', [], {'unique': 'True', 'max_length': '2500'})}, 
+       'messaging.following': {'Meta': {'object_name': 'Following'}, 'follower': (
+                                          'django.db.models.fields.related.ForeignKey', [], {'related_name': "'follower'", 'to': "orm['messaging.Endpoint']"}), 
+                               'id': (
+                                    'django.db.models.fields.AutoField', [], {'primary_key': 'True'}), 
+                               'target': (
+                                        'django.db.models.fields.related.ForeignKey', [], {'related_name': "'target'", 'to': "orm['messaging.Endpoint']"})}, 
+       'messaging.post': {'Meta': {'object_name': 'Post'}, 'attachment': (
+                                       'django.db.models.fields.files.FileField', [], {'max_length': '2500'}), 
+                          'content': (
+                                    'django.db.models.fields.TextField', [], {}), 
+                          'context_url': (
+                                        'django.db.models.fields.TextField', [], {}), 
+                          'id': (
+                               'django.db.models.fields.AutoField', [], {'primary_key': 'True'}), 
+                          'sender': (
+                                   'django.db.models.fields.related.ForeignKey', [], {'to': "orm['messaging.Endpoint']"}), 
+                          'snippet': (
+                                    'django.db.models.fields.TextField', [], {}), 
+                          'timestamp': (
+                                      'django.db.models.fields.DateTimeField', [], {'auto_now': 'True', 'blank': 'True'})}, 
+       'messaging.postappearance': {'Meta': {'object_name': 'PostAppearance'}, 'endpoint': (
+                                               'django.db.models.fields.related.ForeignKey', [], {'to': "orm['messaging.Endpoint']"}), 
+                                    'id': (
+                                         'django.db.models.fields.AutoField', [], {'primary_key': 'True'}), 
+                                    'post': (
+                                           'django.db.models.fields.related.ForeignKey', [], {'to': "orm['messaging.Post']"}), 
+                                    'timestamp': (
+                                                'django.db.models.fields.DateTimeField', [], {})}}
+    complete_apps = [
+     'messaging']

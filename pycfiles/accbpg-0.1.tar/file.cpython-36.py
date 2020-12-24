@@ -1,0 +1,137 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build\bdist.win-amd64\egg\accasim\utils\file.py
+# Compiled at: 2018-05-28 14:30:20
+# Size of source mod 2**32: 4412 bytes
+__doc__ = '\nMIT License\n\nCopyright (c) 2017 cgalleguillosm\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the "Software"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n'
+from os import makedirs as _makedir, listdir as _listdir
+from os.path import isfile as _isfile, isdir as _isdir, join as _join
+from ntpath import split as _split, basename as _basename
+from shutil import rmtree as _rmtree
+from json import dump as _dump, load as _load
+
+def file_exists(file_path, boolean=False, raise_error=False, head_message=''):
+    """
+
+    :param file_path:
+    :param boolean:
+    :param raise_error:
+    :param head_message:
+    :return:
+    """
+    exists = _isfile(file_path)
+    if raise_error or head_message != '':
+        if not exists:
+            raise Exception('{}{} File does not exist.'.format(head_message, file_path))
+    if boolean:
+        return exists
+    else:
+        return file_path
+
+
+def dir_exists(dir_path, create=False):
+    """
+
+    :param dir_path:
+    :param create:
+    :return:
+    """
+    exists = _isdir(dir_path)
+    if create and not exists:
+        _makedir(dir_path)
+        return True
+    else:
+        return exists
+
+
+def path_leaf(path):
+    """
+
+    :param path:
+    :return:
+    """
+    head, tail = _split(path)
+    return (
+     head, tail or _basename(head))
+
+
+def remove_dir(path, parent_folder='results/'):
+    """
+
+    :param path:
+    :param parent_folder:
+    :return:
+    """
+    if path.startswith(parent_folder):
+        if dir_exists(path):
+            _rmtree(path)
+
+
+def find_file_by(_path, prefix=None, sufix=None):
+    """
+
+    :param _path:
+    :param prefix:
+    :param sufix:
+    :return:
+    """
+    filename = None
+    for _filename in _listdir(_path):
+        _filepath = _join(_path, _filename)
+        if _isfile(_filepath):
+            if _filename.startswith(prefix) if prefix else _filename.endswith(sufix):
+                filename = filename or _filename
+            else:
+                raise Exception('Multiple benchmark files in a same folder.')
+
+    return filename
+
+
+def save_jsonfile(filepath, _dict, **kwargs):
+    """
+
+    :param filepath:
+    :param _dict:
+    :param kwargs:
+    :return:
+    """
+    with open(filepath, 'w') as (file):
+        _dump(_dict, file, **kwargs)
+
+
+def load_jsonfile(filepath):
+    """
+
+    :param filepath:
+    :return:
+    """
+    with open(filepath) as (file):
+        return _load(file)
+
+
+class PlainFileReader:
+
+    def __init__(self, filepath):
+        """
+
+        :param filepath:
+        """
+        assert file_exists(filepath, True, True)
+        self.file = open(filepath)
+        self.last_pos = self.file.tell()
+        self.EOF = False
+
+    def nextline(self):
+        """
+
+        :return:
+        """
+        line = self.file.readline()
+        last_pos = self.file.tell()
+        if self.last_pos == last_pos:
+            self.EOF = True
+            return
+        else:
+            self.last_pos = last_pos
+            return line

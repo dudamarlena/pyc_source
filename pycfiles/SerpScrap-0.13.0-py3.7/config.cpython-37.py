@@ -1,0 +1,79 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win-amd64\egg\serpscrap\config.py
+# Compiled at: 2018-09-28 07:39:37
+# Size of source mod 2**32: 2780 bytes
+import datetime
+
+class Config:
+    __doc__ = '\n    Config\n    This modul is used to hold and handle the required configuration settings\n\n    Attributes:\n        config: dict of configuration keys and values\n        apply (dict): method to set a new configuration\n        get (): return the current configuration\n        set (string, mixed): set an new value for an existing config key\n    '
+    config = {'use_own_ip':True, 
+     'search_engines':[
+      'google'], 
+     'num_pages_for_keyword':2, 
+     'scrape_method':'selenium', 
+     'sel_browser':'chrome', 
+     'chrome_headless':True, 
+     'executable_path':'', 
+     'do_caching':True, 
+     'cachedir':'/tmp/.serpscrap/', 
+     'screenshot':True, 
+     'dir_screenshot':'/tmp/screenshots', 
+     'database_name':'/tmp/serpscrap', 
+     'minimize_caching_files':True, 
+     'clean_cache_after':24, 
+     'output_filename':None, 
+     'scrape_urls':False, 
+     'url_threads':6, 
+     'log_level':'INFO', 
+     'num_workers':1, 
+     'num_results_per_page':10, 
+     'results_age':'Any', 
+     'sleeping_min':20, 
+     'sleeping_max':25, 
+     'search_type':'normal', 
+     'google_search_url':'https://www.google.com/search?', 
+     'bing_search_url':'http://www.bing.com/search?', 
+     'headers':{'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8', 
+      'Accept-Language':'de-DE,de;q=0.8,en-US;q=0.6,en;q=0.4', 
+      'Accept-Encoding':'gzip, deflate, br'}, 
+     'proxy_file':'', 
+     'proxy_check_url':'http://canihazip.com/s', 
+     'proxy_info_url':'https://ipinfo.io/json', 
+     'stop_on_detection':True, 
+     'today':datetime.datetime.strftime(datetime.datetime.utcnow(), '%Y-%m-%d')}
+
+    def __init__(self):
+        for k, v in self.config.items():
+            setattr(self, k, v)
+
+    def __dict__(self):
+        return self.config
+
+    def get(self):
+        """get the config dictionary
+
+        Returns:
+            dict: the ccurrent config
+        """
+        return self.config
+
+    def set(self, key, value):
+        """set or update a value of a config key
+
+        Args:
+            key (string): the config key
+            value (int|string|None): the config key value
+        """
+        self.config.__setitem__(key, value)
+
+    def apply(self, config):
+        """apply an individual config, replace default config
+        by values of new config
+
+        Args:
+            config (dict): new configuration
+        """
+        self.config.update(config)

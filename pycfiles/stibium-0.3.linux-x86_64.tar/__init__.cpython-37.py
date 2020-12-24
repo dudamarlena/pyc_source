@@ -1,0 +1,12 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/lib/python3.7/site-packages/stibium/__init__.py
+# Compiled at: 2019-09-02 08:41:04
+# Size of source mod 2**32: 219 bytes
+"""Stibium - a framework for creating Facebook Messenger bots"""
+__version__ = '0.3'
+__author__ = 'szymonszl'
+from .bot import Bot
+from . import dataclasses, handlers, contrib

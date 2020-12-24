@@ -1,0 +1,62 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.5 (62131)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /opt/geoctopus_config/django-geoprisma/geoprisma/conf/types.py
+# Compiled at: 2012-09-17 10:22:32
+APPLICATION_TYPES = ((1, 'ExtJS'), )
+WIDGET_TYPES = (
+ (3, 'MapFishLayerTree'),
+ (4, 'MapFishRecenter'),
+ (5, 'MeasureTool'),
+ (7, 'QueryonClick'),
+ (9, 'ResulTextGrid'),
+ (11, 'InitialView'),
+ (12, 'ZoomSlider'),
+ (13, 'MousePosition'),
+ (14, 'GetMousePosition'),
+ (15, 'Scale'),
+ (16, 'EditFeature_Create'),
+ (17, 'EditFeature_Update'),
+ (18, 'EditFeature_Delete'),
+ (20, 'FeaturePanel_Selector'),
+ (22, 'GeoExtToolbar'),
+ (25, 'Shortcut'),
+ (27, 'GeoExtUx_Redliningpanel'),
+ (28, 'PdfPrint'),
+ (29, 'WMSLayerAdder'),
+ (30, 'GeoExtUx_ShortcutCombo'),
+ (31, 'GeoExtUx_ZoomTo'),
+ (32, 'HTWindow'),
+ (33, 'UnselectAll'),
+ (34, 'GeoExtPrintForm'),
+ (35, 'FileTreePanel'),
+ (36, 'GeoExtUx_LayerTreeBuilder'),
+ (39, 'QueryByRect'),
+ (40, 'FeaturePanel_AttributeForm'),
+ (41, 'FeaturePanel_CustomForm'),
+ (42, 'GeoExtUx_WMSBrowser'),
+ (43, 'VectorLayer'),
+ (44, 'ResultVectorLayer'),
+ (45, 'QueryOnClickWizard'),
+ (46, 'GeoExtUx_PrintPreview'),
+ (47, 'WFSFilterBuilder'),
+ (48, 'TemplatePopup'),
+ (49, 'Toggle'),
+ (50, 'EditFeature_Split'),
+ (51, 'EditFeature_Drag'),
+ (52, 'EditFeature_Copy'),
+ (53, 'EditFeature_Confirm'),
+ (54, 'KeepActiveSession'),
+ (10001, 'DXFImport'),
+ (10002, 'GeoctopusPrint'),
+ (10003, 'GeoctopusSplitter'))
+SERVICE_TYPES = (
+ (1, 'WMS'),
+ (2, 'TileCache'),
+ (3, 'FeatureServer'),
+ (4, 'GYMO'),
+ (7, 'MapFishPrint'),
+ (8, 'File'),
+ (9, 'WFS'),
+ (10, 'HttpRequest'))

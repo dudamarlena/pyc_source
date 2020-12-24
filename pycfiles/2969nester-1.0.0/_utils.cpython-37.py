@@ -1,0 +1,537 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /home/steven/Documents/Projects/radio/EOR/OthersCodes/21cmFAST/21cmFAST/src/py21cmfast/_utils.py
+# Compiled at: 2020-02-13 15:47:20
+# Size of source mod 2**32: 25554 bytes
+__doc__ = 'Utilities that help with wrapping various C structures.'
+import glob, logging, warnings
+from hashlib import md5
+from os import path
+import h5py, numpy as np
+from cffi import FFI
+from ._cfg import config
+_ffi = FFI()
+logger = logging.getLogger('21cmFAST')
+
+class StructWrapper:
+    """StructWrapper"""
+    _name = None
+    _ffi = None
+
+    def __init__(self):
+        if self._name is None:
+            self._name = self.__class__.__name__
+
+    @property
+    def _cstruct(self):
+        """
+        The actual structure which needs to be passed around to C functions.
+
+        .. note:: This is best accessed by calling the instance (see __call__).
+
+        The reason it is defined as this (manual) cached property is so that it can be created
+        dynamically, but not lost. It must not be lost, or else C functions which use it will lose
+        access to its memory. But it also must be created dynamically so that it can be recreated
+        after pickling (pickle can't handle CData).
+        """
+        try:
+            return self._StructWrapper__cstruct
+        except AttributeError:
+            self._StructWrapper__cstruct = self._new()
+            return self._StructWrapper__cstruct
+
+    def _new(self):
+        """Return a new empty C structure corresponding to this class."""
+        return self._ffi.new('struct ' + self._name + '*')
+
+    @property
+    def fields(self):
+        """List of fields of the underlying C struct (a list of tuples of "name, type")."""
+        return self._ffi.typeof(self._cstruct[0]).fields
+
+    @property
+    def fieldnames(self):
+        """List names of fields of the underlying C struct."""
+        return [f for f, t in self.fields]
+
+    @property
+    def pointer_fields(self):
+        """List of names of fields which have pointer type in the C struct."""
+        return [f for f, t in self.fields if t.type.kind == 'pointer']
+
+    @property
+    def primitive_fields(self):
+        """List of names of fields which have primitive type in the C struct."""
+        return [f for f, t in self.fields if t.type.kind == 'primitive']
+
+    def __getstate__(self):
+        """Return the current state of the class without pointers."""
+        return {k:v for k, v in self.__dict__.items() if k not in ('_strings', '_StructWrapper__cstruct') if k not in ('_strings',
+                                                                                                                       '_StructWrapper__cstruct')}
+
+    def refresh_cstruct(self):
+        """Delete the underlying C object, forcing it to be rebuilt."""
+        try:
+            del self._StructWrapper__cstruct
+        except AttributeError:
+            pass
+
+
+class StructWithDefaults(StructWrapper):
+    """StructWithDefaults"""
+    _defaults_ = {}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        if args:
+            if len(args) > 1:
+                raise TypeError('%s takes up to one position argument, %s were given' % (
+                 self.__class__.__name__, len(args)))
+            elif args[0] is None:
+                pass
+            elif isinstance(args[0], self.__class__):
+                kwargs.update(args[0].self)
+            elif isinstance(args[0], dict):
+                kwargs.update(args[0])
+            else:
+                raise TypeError('optional positional argument for %s must be None, dict, or an instance of itself' % self.__class__.__name__)
+        for k, v in self._defaults_.items():
+            _v = kwargs.pop(k, None)
+            if _v is not None:
+                v = _v
+            try:
+                setattr(self, k, v)
+            except AttributeError:
+                setattr(self, '_' + k, v)
+
+        if kwargs:
+            logger.warning('The following parameters to {thisclass} are not supported: {lst}'.format(thisclass=(self.__class__.__name__),
+              lst=(list(kwargs.keys()))))
+
+    def convert(self, key, val):
+        """Make any conversions of values before saving to the instance."""
+        return val
+
+    def update(self, **kwargs):
+        """
+        Update the parameters of an existing class structure.
+
+        This should always be used instead of attempting to *assign* values to instance attributes.
+        It consistently re-generates the underlying C memory space and sets some book-keeping
+        variables.
+
+        Parameters
+        ----------
+        kwargs:
+            Any argument that may be passed to the class constructor.
+        """
+        if kwargs:
+            self.refresh_cstruct()
+        for k in self._defaults_:
+            if k in kwargs:
+                v = kwargs.pop(k)
+                try:
+                    setattr(self, k, v)
+                except AttributeError:
+                    setattr(self, '_' + k, v)
+
+        for k in list(kwargs.keys()):
+            if hasattr(self, k):
+                setattr(self, k, kwargs.pop(k))
+
+        if kwargs:
+            warnings.warn('The following arguments to be updated are not compatible with this class: %s' % kwargs)
+
+    def __call__(self):
+        """Return a filled C Structure corresponding to this instance."""
+        for key, val in self.pystruct.items():
+            if isinstance(val, str):
+                val = self.ffi.new('char[]', getattr(self, key).encode())
+            try:
+                setattr(self._cstruct, key, val)
+            except TypeError:
+                print('For key %s, value %s:' % (key, val))
+                raise
+
+        return self._cstruct
+
+    @property
+    def pystruct(self):
+        """A pure-python dictionary representation of the corresponding C structure."""
+        return {fld:self.convert(fld, getattr(self, fld)) for fld in self.fieldnames}
+
+    @property
+    def defining_dict(self):
+        """
+        Pure python dictionary representation of this class, as it would appear in C.
+
+        .. note:: This is not the same as :attr:`pystruct`, as it omits all variables that don't
+                  need to be passed to the constructor, but appear in the C struct (some can be
+                  calculated dynamically based on the inputs). It is also not the same as
+                  :attr:`self`, as it includes the 'converted' values for each variable, which are
+                  those actually passed to the C code.
+        """
+        return {k:self.convert(k, getattr(self, k)) for k in self._defaults_}
+
+    @property
+    def self(self):
+        """
+        Dictionary which if passed to its own constructor will yield an identical copy.
+
+        .. note:: This differs from :attr:`pystruct` and :attr:`defining_dict` in that it uses the
+                  hidden variable value, if it exists, instead of the exposed one. This prevents
+                  from, for example, passing a value which is 10**10**val (and recurring!).
+        """
+        dct = {}
+        for k in self._defaults_:
+            if hasattr(self, '_' + k):
+                dct[k] = getattr(self, '_' + k)
+            else:
+                dct[k] = getattr(self, k)
+
+        return dct
+
+    def __repr__(self):
+        """Full unique representation of the instance."""
+        return self.__class__.__name__ + '(' + ', '.join(sorted((k + ':' + str(v) for k, v in self.defining_dict.items()))) + ')'
+
+    def __eq__(self, other):
+        """Check whether this instance is equal to another object (by checking the __repr__)."""
+        return self.__repr__() == repr(other)
+
+    def __hash__(self):
+        """Generate a unique hsh for the instance."""
+        return hash(self.__repr__())
+
+
+class OutputStruct(StructWrapper):
+    """OutputStruct"""
+    _fields_ = []
+    _global_params = None
+    _inputs = ['user_params', 'cosmo_params', '_random_seed']
+    _filter_params = ['external_table_path']
+    _TYPEMAP = {'float32':'float *', 
+     'float64':'double *',  'int32':'int *'}
+
+    def __init__(self, *, random_seed=None, init=False, dummy=False, **kwargs):
+        super().__init__()
+        self.filled = False
+        self._random_seed = random_seed
+        for k in self._inputs:
+            if not hasattr(self, k):
+                try:
+                    setattr(self, k, kwargs.pop(k))
+                except KeyError:
+                    raise KeyError('%s requires the keyword argument %s' % (
+                     self.__class__.__name__, k))
+
+        if kwargs:
+            warnings.warn('%s received the following unexpected arguments: %s' % (
+             self.__class__.__name__, list(kwargs.keys())))
+        self.dummy = dummy
+        if init:
+            self._init_cstruct()
+
+    def _init_arrays(self):
+        """Abstract base method for initializing any arrays that the structure has."""
+        pass
+
+    @property
+    def random_seed(self):
+        """The random seed for this particular instance."""
+        if self._random_seed is None:
+            self._random_seed = int(np.random.randint(1, int(1000000000000.0)))
+        return self._random_seed
+
+    @property
+    def arrays_initialized(self):
+        """Whether all necessary arrays are initialized.
+
+        .. note:: This must be true before passing to a C function.
+        """
+        for k in self.pointer_fields:
+            if not hasattr(self, k):
+                return False
+                if getattr(self._cstruct, k) == self._ffi.NULL:
+                    return False
+
+        return True
+
+    def _init_cstruct(self):
+        if not self.filled:
+            self._init_arrays()
+        for k in self.pointer_fields:
+            setattr(self._cstruct, k, self._ary2buf(getattr(self, k)))
+
+        for k in self.primitive_fields:
+            try:
+                setattr(self._cstruct, k, getattr(self, k))
+            except AttributeError:
+                pass
+
+        if not self.arrays_initialized:
+            raise AttributeError('%s is ill-defined. It has not initialized all necessary arrays.' % self.__class__.__name__)
+
+    def _ary2buf(self, ary):
+        if not isinstance(ary, np.ndarray):
+            raise ValueError('ary must be a numpy array')
+        return self._ffi.cast(OutputStruct._TYPEMAP[ary.dtype.name], self._ffi.from_buffer(ary))
+
+    def __call__(self):
+        """Initialize/allocate a fresh C struct in memory and return it."""
+        if not self.arrays_initialized:
+            if not self.dummy:
+                self._init_cstruct()
+        return self._cstruct
+
+    def _expose(self):
+        """Expose the non-array primitives of the ctype to the top-level object."""
+        if not self.filled:
+            raise Exception('You need to have actually called the C code before the primitives can be exposed.')
+        for k in self.primitive_fields:
+            setattr(self, k, getattr(self._cstruct, k))
+
+    @property
+    def _fname_skeleton(self):
+        """The filename without specifying the random seed."""
+        return self._name + '_' + self._md5 + '_r{seed}.h5'
+
+    @property
+    def filename(self):
+        """The base filename of this object."""
+        if self._random_seed is None:
+            raise AttributeError('filename not defined until random_seed has been set')
+        return self._fname_skeleton.format(seed=(self.random_seed))
+
+    def _get_fname(self, direc=None):
+        direc = path.expanduser(direc or )
+        return path.join(direc, self.filename)
+
+    def _find_file_without_seed(self, direc):
+        allfiles = glob.glob(path.join(direc, self._fname_skeleton.format(seed='*')))
+        if allfiles:
+            return allfiles[0]
+        return
+
+    def find_existing(self, direc=None):
+        """
+        Try to find existing boxes which match the parameters of this instance.
+
+        Parameters
+        ----------
+        direc : str, optional
+            The directory in which to search for the boxes. By default, this is the
+            centrally-managed directory, given by the ``config.yml`` in ``~/.21cmfast/``.
+
+        Returns
+        -------
+        str
+            The filename of an existing set of boxes, or None.
+        """
+        direc = path.expanduser(direc or )
+        f = self._random_seed or self._find_file_without_seed(direc)
+        if f:
+            if self._check_parameters(f):
+                return f
+            else:
+                f = self._get_fname(direc)
+                if path.exists(f):
+                    if self._check_parameters(f):
+                        return f
+
+    def _check_parameters(self, fname):
+        with h5py.File(fname, 'r') as (f):
+            for k in self._inputs + ['_global_params']:
+                q = getattr(self, k)
+                kfile = k.lstrip('_')
+                if q is None:
+                    continue
+                if isinstance(q, StructWithDefaults) or isinstance(q, StructInstanceWrapper):
+                    grp = f[kfile]
+                    if isinstance(q, StructWithDefaults):
+                        dct = q.self
+                    else:
+                        dct = q
+                    for kk, v in dct.items():
+                        if kk not in self._filter_params:
+                            file_v = grp.attrs[kk]
+                            if file_v == 'none':
+                                file_v = None
+                            if file_v != v:
+                                logger.debug('For file %s:' % fname)
+                                logger.debug('\tThough md5 and seed matched, the parameter %s did not match, with values %s and %s in file and user respectively' % (
+                                 kk, file_v, v))
+                                return False
+
+                elif f.attrs[kfile] != q:
+                    return False
+
+        return True
+
+    def exists(self, direc=None):
+        """
+        Return a bool indicating whether a box matching the parameters of this instance is in cache.
+
+        Parameters
+        ----------
+        direc : str, optional
+            The directory in which to search for the boxes. By default, this is the
+            centrally-managed directory, given by the ``config.yml`` in ``~/.21cmfast/``.
+        """
+        return self.find_existing(direc) is not None
+
+    def write(self, direc=None, fname=None):
+        """
+        Write the struct in standard HDF5 format.
+
+        Parameters
+        ----------
+        direc : str, optional
+            The directory in which to search for the boxes. By default, this is the
+            centrally-managed directory, given by the ``config.yml`` in ``~/.21cmfast/``.
+        fname : str, optional
+            The filename to write to. By default creates a unique filename from the hash.
+        """
+        if not self.filled:
+            raise IOError('The boxes have not yet been computed.')
+        else:
+            if not self._random_seed:
+                raise ValueError("Attempting to write when no random seed has been set. Struct has been 'filled' inconsistently.")
+            try:
+                direc = path.expanduser(direc or )
+                fname = path.join(direc, fname) if fname else self._get_fname(direc)
+                with h5py.File(fname, 'w') as (f):
+                    for k in self._inputs + ['_global_params']:
+                        q = getattr(self, k)
+                        kfile = k.lstrip('_')
+                        if isinstance(q, StructWithDefaults) or isinstance(q, StructInstanceWrapper):
+                            grp = f.create_group(kfile)
+                            if isinstance(q, StructWithDefaults):
+                                dct = q.self
+                            else:
+                                dct = q
+                            for kk, v in dct.items():
+                                if kk not in self._filter_params:
+                                    grp.attrs[kk] = 'none' if v is None else v
+
+                        else:
+                            f.attrs[kfile] = q
+
+                    boxes = f.create_group(self._name)
+                    for k in self.pointer_fields:
+                        boxes.create_dataset(k, data=(getattr(self, k)))
+
+                    for k in self.primitive_fields:
+                        boxes.attrs[k] = getattr(self, k)
+
+            except OSError as e:
+                try:
+                    logger.warning('When attempting to write {} to file, write failed with the following error. Continuing without caching.')
+                    logger.warning(e)
+                finally:
+                    e = None
+                    del e
+
+    def read(self, direc=None):
+        """
+        Try find and read existing boxes from cache, which match the parameters of this instance.
+
+        Parameters
+        ----------
+        direc : str, optional
+            The directory in which to search for the boxes. By default, this is the
+            centrally-managed directory, given by the ``config.yml`` in ``~/.21cmfast/``.
+        """
+        if self.filled:
+            raise IOError('This data is already filled, no need to read in.')
+        else:
+            pth = self.find_existing(direc)
+            if pth is None:
+                raise IOError('No boxes exist for these parameters.')
+            self.arrays_initialized or self._init_cstruct()
+        with h5py.File(pth, 'r') as (f):
+            try:
+                boxes = f[self._name]
+            except KeyError:
+                raise IOError('While trying to read in %s, the file exists, but does not have the correct structure.' % self._name)
+
+            for k in boxes.keys():
+                getattr(self, k)[...] = boxes[k][...]
+
+            for k in boxes.attrs.keys():
+                setattr(self, k, boxes.attrs[k])
+
+            seed = f.attrs['random_seed']
+            self._random_seed = seed
+        self.filled = True
+        self._expose()
+
+    def __repr__(self):
+        """Return a fully unique representation of the instance."""
+        return self._seedless_repr() + '_random_seed={}'.format(self._random_seed)
+
+    def _seedless_repr(self):
+        return self._name + '(' + '; '.join([repr(v) if isinstance(v, StructWithDefaults) else v.filtered_repr(self._filter_params) if isinstance(v, StructInstanceWrapper) else k.lstrip('_') + ':' + repr(v) for k, v in [(k, getattr(self, k)) for k in self._inputs + ['_global_params'] if k != '_random_seed']]) + ')'
+
+    def __str__(self):
+        """Return a human-readable representation of the instance."""
+        return self._name + '(' + ';\n\t'.join([repr(v) if isinstance(v, StructWithDefaults) else k.lstrip('_') + ':' + repr(v) for k, v in [(k, getattr(self, k)) for k in self._inputs]]) + ')'
+
+    def __hash__(self):
+        """Return a unique hsh for this instance, even global params and random seed."""
+        return hash(repr(self))
+
+    @property
+    def _md5(self):
+        """Return a unique hsh of the object, *not* taking into account the random seed."""
+        return md5(self._seedless_repr().encode()).hexdigest()
+
+    def __eq__(self, other):
+        """Check equality with another object via its __repr__."""
+        return repr(self) == repr(other)
+
+
+class StructInstanceWrapper:
+    """StructInstanceWrapper"""
+
+    def __init__(self, wrapped, ffi):
+        self._cobj = wrapped
+        self._ffi = ffi
+        for nm, tp in self._ffi.typeof(self._cobj).fields:
+            setattr(self, nm, getattr(self._cobj, nm))
+
+        self._ctype = self._ffi.typeof(self._cobj).cname.split()[(-1)]
+
+    def __setattr__(self, name, value):
+        """Set an attribute of the instance, attempting to change it in the C struct as well."""
+        try:
+            setattr(self._cobj, name, value)
+        except AttributeError:
+            pass
+
+        object.__setattr__(self, name, value)
+
+    def items(self):
+        """Yield (name, value) pairs for each element of the struct."""
+        for nm, tp in self._ffi.typeof(self._cobj).fields:
+            yield (
+             nm, getattr(self, nm))
+
+    def keys(self):
+        """Return a list of names of elements in the struct."""
+        return [nm for nm, tp in self.items()]
+
+    def __repr__(self):
+        """Return a unique representation of the instance."""
+        return self._ctype + '(' + ';'.join([k + '=' + str(v) for k, v in sorted(self.items())]) + ')'
+
+    def filtered_repr(self, filter_params):
+        """Get a fully unique representation of the instance that filters out some parametes.
+
+        Parameters
+        ----------
+        filter_params : list of str
+            The parameter names which should not appear in the representation.
+        """
+        return self._ctype + '(' + ';'.join([k + '=' + str(v) for k, v in sorted(self.items()) if k not in filter_params]) + ')'

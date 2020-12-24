@@ -1,0 +1,27 @@
+from distutils.core import setup
+setup(
+  name = 'SmartRegex',
+  packages = ['smartregex'],
+  version = '1.0',
+  license='MIT',
+  description = 'Automatically parse input based on typical regex patterns. Extensible library for custom parsing for any input.',
+  author = 'Andrei Oprisan',
+  author_email = 'andrei@oprisan.com',
+  url = 'https://github.com/andreioprisan/smartregex',
+  download_url = 'https://github.com/andreioprisan/smartregex/archive/v_10.tar.gz',
+  keywords = ['regex', 'smart regex', 'email regex', 'phone regex', 'address regex', 'ip regex', 'url regex', 'automatic regex', 'text parse'],
+  classifiers=[
+    'Development Status :: 5 - Production/Stable',
+    'Intended Audience :: Developers',
+    'Topic :: Software Development :: Build Tools',
+    'License :: OSI Approved :: MIT License',
+    'Programming Language :: Python :: 2',
+    'Programming Language :: Python :: 2.7',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.4',
+    'Programming Language :: Python :: 3.5',
+    'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
+  ],
+)

@@ -1,0 +1,5 @@
+pyyaml
+munch
+simpleeval
+cryptography
+jinja2

@@ -1,0 +1,112 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /usr/local/lib/python3.6/dist-packages/pyFTS/partitioners/FCM.py
+# Compiled at: 2019-01-28 08:22:24
+# Size of source mod 2**32: 5150 bytes
+__doc__ = '\nS. T. Li, Y. C. Cheng, and S. Y. Lin, “A FCM-based deterministic forecasting model for fuzzy time series,”\nComput. Math. Appl., vol. 56, no. 12, pp. 3052–3063, Dec. 2008. DOI: 10.1016/j.camwa.2008.07.033.\n'
+import numpy as np, math, random as rnd, functools, operator
+from pyFTS.common import FuzzySet, Membership
+from pyFTS.partitioners import partitioner
+
+def fuzzy_distance(x, y):
+    if isinstance(x, list):
+        tmp = functools.reduce(operator.add, [(x[k] - y[k]) ** 2 for k in range(0, len(x))])
+    else:
+        tmp = (x - y) ** 2
+    return math.sqrt(tmp)
+
+
+def membership(val, vals):
+    soma = 0
+    for k in vals:
+        if k == 0:
+            k = 1
+        soma = soma + (val / k) ** 2
+
+    return soma
+
+
+def fuzzy_cmeans(k, dados, tam, m, deltadist=0.001):
+    tam_dados = len(dados)
+    centroides = [dados[rnd.randint(0, tam_dados - 1)] for kk in range(0, k)]
+    grupos = [[0 for kk in range(0, k)] for xx in range(0, tam_dados)]
+    alteracaomedia = 1000
+    m_exp = 1 / (m - 1)
+    iteracoes = 0
+    while iteracoes < 1000 and alteracaomedia > deltadist:
+        alteracaomedia = 0
+        inst_count = 0
+        for instancia in dados:
+            dist_grupos = [0 for xx in range(0, k)]
+            grupo_count = 0
+            for grupo in centroides:
+                dist_grupos[grupo_count] = fuzzy_distance(grupo, instancia)
+                grupo_count = grupo_count + 1
+
+            dist_grupos_total = functools.reduce(operator.add, [xk for xk in dist_grupos])
+            for grp in range(0, k):
+                if dist_grupos[grp] == 0:
+                    grupos[inst_count][grp] = 1
+                else:
+                    grupos[inst_count][grp] = 1 / membership(dist_grupos[grp], dist_grupos)
+
+            inst_count = inst_count + 1
+
+        grupo_count = 0
+        for grupo in centroides:
+            if tam > 1:
+                oldgrp = [xx for xx in grupo]
+                for atr in range(0, tam):
+                    soma = functools.reduce(operator.add, [grupos[xk][grupo_count] * dados[xk][atr] for xk in range(0, tam_dados)])
+                    norm = functools.reduce(operator.add, [grupos[xk][grupo_count] for xk in range(0, tam_dados)])
+                    centroides[grupo_count][atr] = soma / norm
+
+            else:
+                oldgrp = grupo
+                soma = functools.reduce(operator.add, [grupos[xk][grupo_count] * dados[xk] for xk in range(0, tam_dados)])
+                norm = functools.reduce(operator.add, [grupos[xk][grupo_count] for xk in range(0, tam_dados)])
+                centroides[grupo_count] = soma / norm
+            alteracaomedia = alteracaomedia + fuzzy_distance(oldgrp, grupo)
+            grupo_count = grupo_count + 1
+
+        alteracaomedia = alteracaomedia / k
+        iteracoes = iteracoes + 1
+
+    return centroides
+
+
+class FCMPartitioner(partitioner.Partitioner):
+    """FCMPartitioner"""
+
+    def __init__(self, **kwargs):
+        (super(FCMPartitioner, self).__init__)(name='FCM', **kwargs)
+
+    def build(self, data):
+        sets = {}
+        kwargs = {'type':self.type, 
+         'variable':self.variable}
+        centroids = fuzzy_cmeans(self.partitions, data, 1, 2)
+        centroids.append(self.max)
+        centroids.append(self.min)
+        centroids = list(set(centroids))
+        centroids.sort()
+        for c in np.arange(1, len(centroids) - 1):
+            _name = self.get_name(c)
+            if self.membership_function == Membership.trimf:
+                sets[_name] = (FuzzySet.FuzzySet)(_name, (Membership.trimf), 
+                 [
+                  round(centroids[(c - 1)], 3), round(centroids[c], 3),
+                  round(centroids[(c + 1)], 3)], 
+                 (round(centroids[c], 3)), **kwargs)
+            else:
+                if self.membership_function == Membership.trapmf:
+                    q1 = (round(centroids[c], 3) - round(centroids[(c - 1)], 3)) / 2
+                    q2 = (round(centroids[(c + 1)], 3) - round(centroids[c], 3)) / 2
+                    sets[_name] = (FuzzySet.FuzzySet)(_name, (Membership.trimf), 
+                     [
+                      round(centroids[(c - 1)], 3), round(centroids[c], 3) - q1,
+                      round(centroids[c], 3) + q2, round(centroids[(c + 1)], 3)], 
+                     (round(centroids[c], 3)), **kwargs)
+
+        return sets

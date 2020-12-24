@@ -1,0 +1,3 @@
+pandas
+setuptools
+color_log

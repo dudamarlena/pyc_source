@@ -1,0 +1,26 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.5 (62131)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/globenet/exceptions.py
+# Compiled at: 2008-08-24 07:46:59
+
+
+class RequireLogin(Exception):
+    pass
+
+
+class Redirect(Exception):
+
+    def __init__(self, url):
+        self.url = url
+
+
+class Error(Exception):
+
+    def __init__(self, code, content):
+        self.code = code
+        self.content = content
+
+    def __str__(self):
+        return 'ERROR ' + repr(self.code) + ' ' + repr(self.content)

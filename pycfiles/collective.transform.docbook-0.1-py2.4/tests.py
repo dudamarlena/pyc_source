@@ -1,0 +1,43 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/collective/transform/docbook/tests.py
+# Compiled at: 2009-03-11 14:36:00
+import unittest
+from zope.testing import doctestunit
+from zope.component import testing
+from Testing import ZopeTestCase as ztc
+from Products.Five import zcml
+from Products.Five import fiveconfigure
+from Products.PloneTestCase import PloneTestCase as ptc
+from Products.PloneTestCase.layer import PloneSite
+ptc.setupPloneSite(extension_profiles=('collective.transform.docbook:default', ))
+import collective.transform.docbook
+
+class TestCase(ptc.PloneTestCase):
+    __module__ = __name__
+
+    class layer(PloneSite):
+        __module__ = __name__
+
+        @classmethod
+        def setUp(cls):
+            fiveconfigure.debug_mode = True
+            zcml.load_config('configure.zcml', collective.transform.docbook)
+            fiveconfigure.debug_mode = False
+
+        @classmethod
+        def tearDown(cls):
+            pass
+
+    def performTransform(self, orig, targetMimetype='text/html', mimetype='application/docbook+xml'):
+        return self.portal.portal_transforms.convertTo(targetMimetype, orig, context=self.portal, mimetype=mimetype).getData()
+
+
+def test_suite():
+    return unittest.TestSuite([ztc.ZopeDocFileSuite('README.txt', package='collective.transform.docbook', test_class=TestCase)])
+
+
+if __name__ == '__main__':
+    unittest.main(defaultTest='DocBookTestCase')

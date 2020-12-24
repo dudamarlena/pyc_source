@@ -1,0 +1,11 @@
+aiodns
+aiohttp
+aioslack
+aiosqlite
+appdirs
+attrs
+cchardet
+click
+ent
+peony-twitter
+toml

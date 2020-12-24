@@ -1,0 +1,9 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/quincy/Code/valuehorizon-people/people/tests/models_tests.py
+# Compiled at: 2015-05-27 12:39:59
+"""Tests for the models of the people app."""
+from django.test import TestCase
+from django.core.validators import ValidationError

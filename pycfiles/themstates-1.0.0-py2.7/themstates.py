@@ -1,0 +1,119 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.14-x86_64/egg/themstates/themstates.py
+# Compiled at: 2019-07-20 03:38:15
+from collections import defaultdict
+
+class TransitionDefinition(Exception):
+    pass
+
+
+class NotCallableAction(Exception):
+    pass
+
+
+class StateMachine:
+    __INIT = '__INIT'
+    __RESET = '__RESET'
+
+    def __init__(self):
+        self._transitions = defaultdict(set)
+        self._actions = defaultdict(set)
+        self._history = []
+
+    def start(self, start_state, payload=None):
+        """ Defines and sets up start state of the state machine"""
+        self._start_state = start_state
+        self._transitions[self._start_state]
+        self._history.append((StateMachine.__INIT, self._start_state))
+        self._execute_actions(StateMachine.__INIT, self._start_state, payload)
+
+    def define(self, transition):
+        """Adds a transition to the state machine
+
+        transition : string
+        transition must follow grammar : <state -> event -> new_state>
+        """
+        source, event, target = self._parse_transition(transition.lower())
+        self._transitions[source].add((event, target))
+
+    def add_action(self, state, action_fn):
+        if callable(action_fn):
+            self._actions[state].add(action_fn)
+        else:
+            raise NotCallableAction(action_fn)
+
+    def handle(self, event, payload):
+        """
+        Processes event with given payload
+
+        Payload is passed to action callable
+        Note first state is changed then actions on new current state 
+        are called in no specific order
+        """
+        allowed_events = self._transitions[self.get_current_state()]
+        for e, t in allowed_events:
+            if e == event.lower():
+                self._history.append((e, t))
+                self._execute_actions(e, t, payload)
+
+    def reset(self, payload=None):
+        self._history.append((StateMachine.__RESET, self._start_state))
+        self._execute_actions(StateMachine.__RESET, self._start_state, payload)
+
+    def get_states(self):
+        return list(self._transitions.keys())
+
+    def get_actionable_states(self):
+        return list(self._actions.keys())
+
+    def get_last_state(self):
+        """Returns previous state (not current)"""
+        if len(self._history) > 1:
+            return self._history[(-2)][1]
+        else:
+            return
+            return
+
+    def get_current_state(self):
+        return self._history[(-1)][1]
+
+    def get_history(self):
+        return self._history
+
+    def _execute_actions(self, event, state, payload):
+        for a in self._actions[state]:
+            a(event.lower(), payload)
+
+    def _parse_transition(self, t):
+        l = [ each.strip() for each in t.split('->') ]
+        if len(l) is not 3:
+            raise TransitionDefinition(t)
+        return (
+         l[0], l[1], l[2])
+
+
+if __name__ == '__main__':
+    sm = StateMachine()
+    sm.define('neutral -> gearup -> first')
+    sm.define('first -> gearup -> second')
+    sm.define('first -> geardown -> neutral')
+    sm.define('second -> geardown -> first')
+
+    def some_action_function(event, payload):
+        print (
+         event, payload)
+
+
+    sm.add_action('first', some_action_function)
+    sm.start('neutral')
+    print sm.get_last_state()
+    sm.handle('gearup', 'changed gear')
+    print sm.get_last_state()
+    sm.handle('gearup', 'changed gear')
+    print sm.get_last_state()
+    sm.handle('geardown', 'changed gear')
+    sm.reset()
+    print sm.get_history()

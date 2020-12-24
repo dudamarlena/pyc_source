@@ -1,0 +1,8 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/vilmos/Projects/python-iptables/iptc/version.py
+# Compiled at: 2018-04-16 20:29:03
+__pkgname__ = 'python-iptables'
+__version__ = '0.14.0-dev'

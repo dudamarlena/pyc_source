@@ -1,0 +1,82 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/itcc/tools/xpermutations.py
+# Compiled at: 2008-04-20 13:19:45
+"""xpermutations.py
+Copy from: http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/190465
+And modify `xuniqueCombinations' by myself(Li Daobing)
+
+Generators for calculating a) the permutations of a sequence and
+b) the combinations and selections of a number of elements from a
+sequence. Uses Python 2.2 generators.
+
+Similar solutions found also in comp.lang.python
+
+Keywords: generator, combination, permutation, selection
+
+See also: http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/105962
+See also: http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/66463
+See also: http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/66465
+"""
+from __future__ import generators
+__revision__ = '$Rev$'
+__version__ = '1.0'
+
+def xcombinations(items, n):
+    if n == 0:
+        yield []
+    else:
+        for i in xrange(len(items)):
+            for cc in xcombinations(items[:i] + items[i + 1:], n - 1):
+                yield [
+                 items[i]] + cc
+
+
+def xuniqueCombinations(items, n):
+    if n == 0:
+        yield []
+    else:
+        for i in xrange(len(items) - n + 1):
+            for cc in xuniqueCombinations(items[i + 1:], n - 1):
+                yield [
+                 items[i]] + cc
+
+
+def xselections(items, n):
+    if n == 0:
+        yield []
+    else:
+        for i in xrange(len(items)):
+            for ss in xselections(items, n - 1):
+                yield [
+                 items[i]] + ss
+
+
+def xpermutations(items):
+    return xcombinations(items, len(items))
+
+
+if __name__ == '__main__':
+    print "Permutations of 'love'"
+    for p in xpermutations(['l', 'o', 'v', 'e']):
+        print ('').join(p)
+
+    print
+    print "Combinations of 2 letters from 'love'"
+    for c in xcombinations(['l', 'o', 'v', 'e'], 2):
+        print ('').join(c)
+
+    print
+    print "Unique Combinations of 2 letters from 'love'"
+    for uc in xuniqueCombinations(['l', 'o', 'v', 'e'], 2):
+        print ('').join(uc)
+
+    print
+    print "Selections of 2 letters from 'love'"
+    for s in xselections(['l', 'o', 'v', 'e'], 2):
+        print ('').join(s)
+
+    print
+    print map(('').join, list(xpermutations('done')))

@@ -1,0 +1,62 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.12-x86_64/egg/cmislib/cmis_services.py
+# Compiled at: 2016-12-29 16:44:56
+"""
+This module contains the base Binding class and other service objects.
+"""
+from cmislib.exceptions import CmisException, RuntimeException, ObjectNotFoundException, InvalidArgumentException, PermissionDeniedException, NotSupportedException, UpdateConflictException
+
+class Binding(object):
+    """
+    Represents the binding used to communicate with the CMIS server.
+    """
+
+    def getRepositoryService(self):
+        """
+        Returns the repository service specific to this binding.
+        """
+        pass
+
+    def _processCommonErrors(self, error, url):
+        """
+        Maps HTTPErrors that are common to all to exceptions. Only errors
+        that are truly global, like 401 not authorized, should be handled
+        here. Callers should handle the rest.
+        """
+        if error['status'] == '401':
+            raise PermissionDeniedException(error['status'], url)
+        elif error['status'] == '400':
+            raise InvalidArgumentException(error['status'], url)
+        elif error['status'] == '404':
+            raise ObjectNotFoundException(error['status'], url)
+        elif error['status'] == '403':
+            raise PermissionDeniedException(error['status'], url)
+        elif error['status'] == '405':
+            raise NotSupportedException(error['status'], url)
+        elif error['status'] == '409':
+            raise UpdateConflictException(error['status'], url)
+        elif error['status'] == '500':
+            raise RuntimeException(error['status'], url)
+        else:
+            raise CmisException(error['status'], url)
+
+
+class RepositoryServiceIfc(object):
+    """
+    Defines the interface for the repository service.
+    """
+
+    def getRepositories(self, client):
+        """
+        Returns a list of repositories for this server.
+        """
+        pass
+
+    def getRepositoryInfo(self):
+        """
+        Returns the repository information for this server.
+        """
+        pass

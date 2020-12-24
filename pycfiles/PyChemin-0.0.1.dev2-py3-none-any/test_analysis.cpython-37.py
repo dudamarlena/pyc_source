@@ -1,0 +1,40 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /home/gufranco/Documents/PyChemia/tests/test_analysis.py
+# Compiled at: 2020-01-17 14:28:36
+# Size of source mod 2**32: 966 bytes
+import pychemia, os
+from .samples import Al2O3
+
+def test_analysis():
+    """
+    Test (pychemia.analysis.analysis)                           :
+    """
+    st = Al2O3()
+    sa = pychemia.analysis.StructureAnalysis(st, radius=20)
+    struc_dist_x, fp_oganov = sa.fp_oganov(delta=0.1, sigma=0.1)
+    assert len(fp_oganov) == 3
+
+
+def test_match():
+    """
+    Test (pychemia.analysis.match)                              :
+    """
+    st = Al2O3()
+    st2 = st.supercell((2, 3, 4))
+    sm = pychemia.analysis.StructureMatch(st, st2)
+    sm.match_size()
+    sm.match_shape()
+    assert sm.structure1.natom == sm.structure2.natom
+
+
+def test_distances():
+    """
+    Test (pychemia.analysis.match)                              :
+    """
+    print(os.getcwd())
+    st = pychemia.io.xyz.load('tests/data/xyz/chlorophyll.xyz')
+    sa = pychemia.analysis.StructureAnalysis(st)
+    distances = sa.all_distances()
+    assert len(distances) == int(st.natom * (st.natom + 1) / 2)

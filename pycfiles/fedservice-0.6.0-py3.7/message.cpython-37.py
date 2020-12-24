@@ -1,0 +1,252 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.9-x86_64/egg/fedservice/message.py
+# Compiled at: 2020-01-25 04:23:03
+# Size of source mod 2**32: 10431 bytes
+""" Classes and functions used to describe information in an OpenID Connect Federation."""
+import logging
+from cryptojwt.exception import Expired
+from cryptojwt.jwt import utc_time_sans_frac
+from oidcmsg.exception import MissingRequiredAttribute
+from oidcmsg.message import Message
+from oidcmsg.message import OPTIONAL_LIST_OF_SP_SEP_STRINGS
+from oidcmsg.message import OPTIONAL_LIST_OF_STRINGS
+from oidcmsg.message import REQUIRED_LIST_OF_STRINGS
+from oidcmsg.message import SINGLE_OPTIONAL_ANY
+from oidcmsg.message import SINGLE_OPTIONAL_INT
+from oidcmsg.message import SINGLE_OPTIONAL_JSON
+from oidcmsg.message import SINGLE_OPTIONAL_STRING
+from oidcmsg.message import SINGLE_REQUIRED_INT
+from oidcmsg.message import SINGLE_REQUIRED_STRING
+from oidcmsg.message import msg_ser
+from oidcmsg.oidc import JsonWebToken
+from oidcmsg.oidc import ProviderConfigurationResponse
+from oidcmsg.oidc import RegistrationResponse
+from oidcmsg.oidc import SINGLE_OPTIONAL_BOOLEAN
+from oidcmsg.oidc import SINGLE_OPTIONAL_DICT
+from oidcmsg.oidc import deserialize_from_one_of
+from oidcmsg.oidc import dict_deser
+from oidcmsg.oidc import msg_ser_json
+from fedservice.exception import WrongSubject
+SINGLE_REQUIRED_DICT = (
+ dict, True, msg_ser_json, dict_deser, False)
+LOGGER = logging.getLogger(__name__)
+
+def registration_response_deser(val, sformat='json'):
+    """Deserializes a JSON object (most likely) into a RegistrationResponse."""
+    return deserialize_from_one_of(val, RegistrationResponse, sformat)
+
+
+def provider_info_deser(val, sformat='json'):
+    """Deserializes a JSON object (most likely) into a ProviderConfigurationResponse."""
+    return deserialize_from_one_of(val, ProviderConfigurationResponse, sformat)
+
+
+OPTIONAL_CLIENT_METADATA = (
+ Message, False, msg_ser, registration_response_deser, False)
+OPTIONAL_PROVIDER_METADATA = (Message, False, msg_ser, provider_info_deser, False)
+
+class AuthorizationServerMetadata(Message):
+    __doc__ = 'Metadata for an OAuth2 Authorization Server.'
+    c_param = {'issuer':SINGLE_REQUIRED_STRING, 
+     'authorization_endpoint':SINGLE_OPTIONAL_STRING, 
+     'token_endpoint':SINGLE_OPTIONAL_STRING, 
+     'jwks_uri':SINGLE_OPTIONAL_STRING, 
+     'registration_endpoint':SINGLE_OPTIONAL_STRING, 
+     'scopes_supported':SINGLE_OPTIONAL_JSON, 
+     'response_types_supported':SINGLE_OPTIONAL_JSON, 
+     'response_modes_supported':SINGLE_OPTIONAL_JSON, 
+     'grant_types_supported':SINGLE_OPTIONAL_JSON, 
+     'token_endpoint_auth_methods_supported':SINGLE_OPTIONAL_JSON, 
+     'token_endpoint_auth_signing_alg_values_supported':SINGLE_OPTIONAL_JSON, 
+     'service_documentation':SINGLE_OPTIONAL_STRING, 
+     'ui_locales_supported':SINGLE_OPTIONAL_JSON, 
+     'op_policy_uri':SINGLE_OPTIONAL_STRING, 
+     'revocation_endpoint':SINGLE_OPTIONAL_STRING, 
+     'revocation_endpoint_auth_methods_supported':SINGLE_OPTIONAL_JSON, 
+     'revocation_endpoint_auth_signing_alg_values_supported':SINGLE_OPTIONAL_JSON, 
+     'introspection_endpoint':SINGLE_OPTIONAL_STRING, 
+     'introspection_endpoint_auth_methods_supported':SINGLE_OPTIONAL_JSON, 
+     'introspection_endpoint_auth_signing_alg_values_supported':SINGLE_OPTIONAL_JSON, 
+     'code_challenge_methods_supported':SINGLE_OPTIONAL_JSON}
+
+
+def auth_server_info_deser(val, sformat='json'):
+    """Deserializes a JSON object (most likely) into an AuthorizationServerMetadata."""
+    return deserialize_from_one_of(val, AuthorizationServerMetadata, sformat)
+
+
+OPTIONAL_AUTH_SERVER_METADATA = (
+ Message, False, msg_ser, auth_server_info_deser, False)
+
+class NamingConstraints(Message):
+    __doc__ = 'Class representing naming constraints.'
+    c_param = {'permitted':OPTIONAL_LIST_OF_STRINGS, 
+     'excluded':OPTIONAL_LIST_OF_STRINGS}
+
+
+def naming_constraints_deser(val, sformat='json'):
+    """Deserializes a JSON object (most likely) into an NamingConstraints."""
+    return deserialize_from_one_of(val, NamingConstraints, sformat)
+
+
+SINGLE_OPTIONAL_NAMING_CONSTRAINTS = (
+ Message, False, msg_ser, naming_constraints_deser, False)
+
+class FederationEntity(Message):
+    __doc__ = 'Class representing a Federation Entity.'
+    c_param = {'federation_api_endpoint':SINGLE_OPTIONAL_STRING, 
+     'name':SINGLE_OPTIONAL_STRING, 
+     'contacts':OPTIONAL_LIST_OF_STRINGS, 
+     'policy_url':SINGLE_OPTIONAL_STRING, 
+     'homepage_uri':SINGLE_OPTIONAL_STRING, 
+     'trust_anchor_id':SINGLE_OPTIONAL_STRING}
+
+
+def federation_entity_deser(val, sformat='json'):
+    """Deserializes a JSON object (most likely) into a FederationEntity."""
+    return deserialize_from_one_of(val, FederationEntity, sformat)
+
+
+OPTIONAL_FEDERATION_ENTITY_METADATA = (
+ Message, False, msg_ser,
+ federation_entity_deser, False)
+
+class OauthClientMetadata(Message):
+    __doc__ = 'Metadata for an OAuth2 Client.'
+    c_param = {'redirect_uris':OPTIONAL_LIST_OF_STRINGS, 
+     'token_endpoint_auth_method':SINGLE_OPTIONAL_STRING, 
+     'grant_type':OPTIONAL_LIST_OF_STRINGS, 
+     'response_types':OPTIONAL_LIST_OF_STRINGS, 
+     'client_name':SINGLE_OPTIONAL_STRING, 
+     'client_uri':SINGLE_OPTIONAL_STRING, 
+     'logo_uri':SINGLE_OPTIONAL_STRING, 
+     'scope':OPTIONAL_LIST_OF_SP_SEP_STRINGS, 
+     'contacts':OPTIONAL_LIST_OF_STRINGS, 
+     'tos_uri':SINGLE_OPTIONAL_STRING, 
+     'policy_uri':SINGLE_OPTIONAL_STRING, 
+     'jwks_uri':SINGLE_OPTIONAL_STRING, 
+     'jwks':SINGLE_OPTIONAL_JSON, 
+     'software_id':SINGLE_OPTIONAL_STRING, 
+     'software_version':SINGLE_OPTIONAL_STRING}
+
+
+def oauth_client_metadata_deser(val, sformat='json'):
+    """Deserializes a JSON object (most likely) into a OauthClientMetadata."""
+    return deserialize_from_one_of(val, OauthClientMetadata, sformat)
+
+
+OPTIONAL_OAUTH_CLIENT_METADATA = (
+ Message, False, msg_ser,
+ oauth_client_metadata_deser, False)
+
+class OauthClientInformationResponse(OauthClientMetadata):
+    __doc__ = 'The information returned by a OAuth2 Server about an OAuth2 client.'
+    c_param = OauthClientMetadata.c_param.copy()
+    c_param.update({'client_id':SINGLE_REQUIRED_STRING, 
+     'client_secret':SINGLE_OPTIONAL_STRING, 
+     'client_id_issued_at':SINGLE_OPTIONAL_INT, 
+     'client_secret_expires_at':SINGLE_OPTIONAL_INT})
+
+    def verify(self, **kwargs):
+        (super(OauthClientInformationResponse, self).verify)(**kwargs)
+        if 'client_secret' in self:
+            if 'client_secret_expires_at' not in self:
+                raise MissingRequiredAttribute('client_secret_expires_at is a MUST if client_secret is present')
+
+
+class Metadata(Message):
+    __doc__ = 'The different types of metadata that an entity in a federation can belong to.'
+    c_param = {'openid_relying_party':OPTIONAL_CLIENT_METADATA, 
+     'openid_provider':OPTIONAL_PROVIDER_METADATA, 
+     'oauth_authorization_server':OPTIONAL_AUTH_SERVER_METADATA, 
+     'oauth_client':OPTIONAL_OAUTH_CLIENT_METADATA, 
+     'federation_entity':OPTIONAL_FEDERATION_ENTITY_METADATA}
+
+
+def metadata_deser(val, sformat='json'):
+    """Deserializes a JSON object (most likely) into a MetadataPolicy."""
+    return deserialize_from_one_of(val, Metadata, sformat)
+
+
+SINGLE_REQUIRED_METADATA = (
+ Message, True, msg_ser, metadata_deser, False)
+SINGLE_OPTIONAL_METADATA = (Message, False, msg_ser, metadata_deser, False)
+
+class MetadataPolicy(Message):
+    __doc__ = 'The metadata policy verbs.'
+    c_param = {'subset_of':OPTIONAL_LIST_OF_STRINGS, 
+     'one_of':OPTIONAL_LIST_OF_STRINGS, 
+     'superset_of':OPTIONAL_LIST_OF_STRINGS, 
+     'add':OPTIONAL_LIST_OF_STRINGS, 
+     'value':SINGLE_OPTIONAL_ANY, 
+     'default':SINGLE_OPTIONAL_ANY, 
+     'essential':SINGLE_OPTIONAL_BOOLEAN}
+
+
+def metadata_policy_deser(val, sformat='json'):
+    """Deserializes a JSON object (most likely) into a MetadataPolicy."""
+    return deserialize_from_one_of(val, MetadataPolicy, sformat)
+
+
+SINGLE_REQUIRED_METADATA_POLICY = (
+ Message, True, msg_ser, metadata_policy_deser, False)
+SINGLE_OPTIONAL_METADATA_POLICY = (Message, False, msg_ser, metadata_policy_deser, False)
+
+class Constraints(Message):
+    __doc__ = 'The types of constraints that can be applied to a trust chain.'
+    c_param = {'max_path_length':SINGLE_OPTIONAL_INT, 
+     'naming_constraints':SINGLE_OPTIONAL_NAMING_CONSTRAINTS}
+
+
+def constrains_deser(val, sformat='json'):
+    """Deserializes a JSON object (most likely) into a Constraints."""
+    return deserialize_from_one_of(val, Constraints, sformat)
+
+
+SINGLE_REQUIRED_CONSTRAINS = (
+ Message, True, msg_ser, constrains_deser, False)
+SINGLE_OPTIONAL_CONSTRAINS = (Message, False, msg_ser, constrains_deser, False)
+
+class EntityStatement(JsonWebToken):
+    __doc__ = 'The Entity Statement'
+    c_param = JsonWebToken.c_param.copy()
+    c_param.update({'sub':SINGLE_REQUIRED_STRING, 
+     'iss':SINGLE_REQUIRED_STRING, 
+     'exp':SINGLE_REQUIRED_INT, 
+     'iat':SINGLE_REQUIRED_INT, 
+     'jti':SINGLE_OPTIONAL_STRING, 
+     'authority_hints':REQUIRED_LIST_OF_STRINGS, 
+     'metadata':SINGLE_OPTIONAL_METADATA, 
+     'metadata_policy':SINGLE_OPTIONAL_METADATA_POLICY, 
+     'constraints':SINGLE_OPTIONAL_CONSTRAINS, 
+     'sub_meta':SINGLE_OPTIONAL_DICT, 
+     'jwks':SINGLE_OPTIONAL_DICT, 
+     'crit':SINGLE_OPTIONAL_STRING, 
+     'policy_language_crit':OPTIONAL_LIST_OF_STRINGS})
+
+
+class TrustMark(JsonWebToken):
+    c_param = JsonWebToken.c_param.copy()
+    c_param.update({'sub':SINGLE_REQUIRED_STRING, 
+     'iss':SINGLE_REQUIRED_STRING, 
+     'iat':SINGLE_REQUIRED_INT, 
+     'id':SINGLE_REQUIRED_STRING, 
+     'mark':SINGLE_OPTIONAL_STRING, 
+     'exp':SINGLE_OPTIONAL_INT, 
+     'ref':SINGLE_OPTIONAL_STRING})
+
+    def verify(self, **kwargs):
+        (super(TrustMark, self).verify)(**kwargs)
+        entity_id = kwargs.get('entity_id')
+        if entity_id is not None:
+            if entity_id != self['sub']:
+                raise WrongSubject('Mismatch between subject in trust mark and entity_id of entity')
+        exp = kwargs.get('exp', 0)
+        if exp:
+            _now = utc_time_sans_frac()
+            if _now > exp:
+                raise Expired()
+        return True

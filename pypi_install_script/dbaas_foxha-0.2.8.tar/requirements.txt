@@ -1,0 +1,2 @@
+foxha==0.9.2
+dbaas_credentials==1.1.3

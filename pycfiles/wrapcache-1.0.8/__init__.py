@@ -1,0 +1,90 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: C:\dev_ws\wrapcache\wrapcache\__init__.py
+# Compiled at: 2016-01-11 20:30:54
+__version__ = '1.0.5'
+__license__ = 'MIT'
+import time, sys, hashlib
+try:
+    import cPickle as pickle
+except:
+    import pickle
+
+from functools import wraps
+from wrapcache.adapter.CacheException import CacheExpiredException
+from wrapcache.adapter.MemoryAdapter import MemoryAdapter
+
+def _wrap_key(function, args, kws):
+    """
+        get the key from the function input.
+        """
+    return hashlib.md5(pickle.dumps((function.__name__, args, kws))).hexdigest()
+
+
+def keyof(function, *args, **kws):
+    """
+        get the function cache key
+        """
+    return _wrap_key(function, args, kws)
+
+
+def get(key, adapter=MemoryAdapter):
+    """
+        get the cache value
+        """
+    try:
+        return pickle.loads(adapter().get(key))
+    except CacheExpiredException:
+        return
+
+    return
+
+
+def remove(key, adapter=MemoryAdapter):
+    """
+        remove cache by key 
+        """
+    return pickle.loads(adapter().remove(key))
+
+
+def set(key, value, timeout=-1, adapter=MemoryAdapter):
+    """
+        set cache by code, must set timeout length
+        """
+    if adapter(timeout=timeout).set(key, pickle.dumps(value)):
+        return value
+    else:
+        return
+        return
+
+
+def flush(adapter=MemoryAdapter):
+    """
+        clear all the caches
+        """
+    return adapter().flush()
+
+
+def wrapcache(timeout=-1, adapter=MemoryAdapter):
+    """
+        the Decorator to cache Function.
+        """
+
+    def _wrapcache(function):
+
+        @wraps(function)
+        def __wrapcache(*args, **kws):
+            hash_key = _wrap_key(function, args, kws)
+            try:
+                adapter_instance = adapter()
+                return pickle.loads(adapter_instance.get(hash_key))
+            except CacheExpiredException:
+                value = function(*args, **kws)
+                set(hash_key, value, timeout, adapter)
+                return value
+
+        return __wrapcache
+
+    return _wrapcache

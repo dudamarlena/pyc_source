@@ -1,0 +1,87 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/musy/Projects/vtkplotter/vtkplotter/docs.py
+# Compiled at: 2020-05-02 09:39:51
+"""
+.. role:: raw-html-m2r(raw)
+   :format: html
+
+.. note:: **Please check out the** `git repository <https://github.com/marcomusy/vtkplotter>`_.
+
+    A full list of examples can be found in directories:
+
+    - `examples/basic <https://github.com/marcomusy/vtkplotter/blob/master/vtkplotter/examples/basic>`_ ,
+    - `examples/advanced <https://github.com/marcomusy/vtkplotter/blob/master/vtkplotter/examples/advanced>`_ ,
+    - `examples/volumetric <https://github.com/marcomusy/vtkplotter/blob/master/vtkplotter/examples/volumetric>`_,
+    - `examples/simulations <https://github.com/marcomusy/vtkplotter/blob/master/vtkplotter/examples/simulations>`_.
+    - `examples/other <https://github.com/marcomusy/vtkplotter/blob/master/vtkplotter/examples/other>`_
+    - `examples/other/dolfin <https://github.com/marcomusy/vtkplotter/blob/master/vtkplotter/examples/other/dolfin>`_.
+
+:raw-html-m2r:`<br />`
+
+.. image:: https://user-images.githubusercontent.com/32848391/51558920-ec436e00-1e80-11e9-9d96-aa9b7c72d58b.png
+
+:raw-html-m2r:`<br />`
+
+.. image:: https://user-images.githubusercontent.com/32848391/58046205-e9157180-7b44-11e9-892e-7b7d3316a622.gif
+
+:raw-html-m2r:`<br />`
+"""
+from __future__ import division, print_function
+__all__ = []
+
+def onelinetip():
+    import vtk, sys
+    from vtkplotter import colors, __version__
+    dlf = ' | python ' + str(sys.version_info[0]) + '.' + str(sys.version_info[1])
+    msg = ' vtkplotter ' + __version__ + ' '
+    colors.printc(msg, invert=1, dim=1, end='')
+    msg = '| vtk ' + vtk.vtkVersion().GetVTKVersion()
+    msg += dlf
+    msg += ' | press h for help.'
+    colors.printc(msg, invert=0, dim=1)
+
+
+def tips():
+    from vtkplotter import colors
+    msg = ' ==========================================================\n'
+    msg += '| Press: i     print info about selected object            |\n'
+    msg += '|        m     minimise opacity of selected mesh           |\n'
+    msg += '|        .,    reduce/increase opacity                     |\n'
+    msg += '|        /     maximize opacity                            |\n'
+    msg += '|        w/s   toggle wireframe/solid style                |\n'
+    msg += '|        p/P   change point size of vertices               |\n'
+    msg += '|        l     toggle edges line visibility                |\n'
+    msg += '|        x     toggle mesh visibility                      |\n'
+    msg += '|        X     invoke a cutter widget tool                 |\n'
+    msg += '|        1-3   change mesh color                           |\n'
+    msg += '|        4     use data array as colors, if present        |\n'
+    msg += '|        5     change background color                     |\n'
+    msg += '|        0-9   (on keypad) change axes style               |\n'
+    msg += '|        k     cycle available lighting styles             |\n'
+    msg += '|        K     cycle available shading styles              |\n'
+    msg += '|        o/O   add/remove light to scene and rotate it     |\n'
+    msg += '|        n     show surface mesh normals                   |\n'
+    msg += '|        a     toggle interaction to Actor Mode            |\n'
+    msg += '|        j     toggle interaction to Joystick Mode         |\n'
+    msg += '|        r     reset camera position                       |\n'
+    msg += '|        C     print current camera info                   |\n'
+    msg += '|        S     save a screenshot                           |\n'
+    msg += '|        E     export rendering window to numpy file       |\n'
+    msg += '|        q     return control to python script             |\n'
+    msg += '|        Esc   close the rendering window and continue     |\n'
+    msg += '|        F1    abort execution and exit python kernel      |\n'
+    msg += '| Mouse: Left-click    rotate scene / pick actors          |\n'
+    msg += '|        Middle-click  pan scene                           |\n'
+    msg += '|        Right-click   zoom scene in or out                |\n'
+    msg += '|        Cntrl-click   rotate scene perpendicularly        |\n'
+    msg += '|----------------------------------------------------------|\n'
+    msg += '| Check out documentation at:  https://vtkplotter.embl.es  |\n'
+    msg += ' ==========================================================\n'
+    colors.printc(msg, dim=1)
+
+
+x3d_html = '\n<html>\n<head>\n    <title> My X3DOM web page </title>\n    <script type=\'text/javascript\' src=\'https://www.x3dom.org/download/x3dom.js\'> </script>\n    <link rel=\'stylesheet\' type=\'text/css\' href=\'https://www.x3dom.org/download/x3dom.css\'/>\n</head>\n<body><font face="Verdana" size="3">\n\n<h1>My x3d rendering web page</h1>\n<p>\n    This example loads a 3D scene from file ~fileoutput generated by\n    <a href="https://github.com/marcomusy/vtkplotter">vtkplotter</a>\n    (see e.g. <a href="https://github.com/marcomusy/vtkplotter/blob/master/vtkplotter/examples/other/export_x3d.py">export_x3d.py</a>).\n\n    <br/>\n    <br/> - Press t to reset viewpoint.\n    <br/> - Press i to reset camera distance.\n    <br/> - Right-click and drag mouse to zoom.\n    <br/> - Middle-click and drag mouse to pan.\n</p>\n\n<x3d width=\'~widthpx\' height=\'~heightpx\'>\n    <scene>\n        <Inline url="~fileoutput" />\n    </scene>\n</x3d>\n\n<br clear="all">\n<br/>PS: This should work with Firefox/IE.\nWith Chrome, webgl might not be active by default, then try:<br/><i>\ngoogle-chrome --enable-webgl --use-gl=desktop\n--log-level=0 --allow-file-access-from-files --allow-file-access ~fileoutput\n</i>\n</font></body>\n</html>\n'
+_defs = ''

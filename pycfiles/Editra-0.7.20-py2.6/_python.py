@@ -1,0 +1,219 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.3-i386/egg/Editra/src/syntax/_python.py
+# Compiled at: 2011-10-01 11:27:09
+"""
+FILE: python.py
+AUTHOR: Cody Precord
+@summary: Lexer configuration module for Python.
+
+"""
+__author__ = 'Cody Precord <cprecord@editra.org>'
+__svnid__ = '$Id: _python.py 69016 2011-09-06 20:00:06Z CJP $'
+__revision__ = '$Revision: 69016 $'
+import wx.stc as stc, keyword, synglob, syndata
+INDENT_KW = ('def', 'if', 'elif', 'else', 'for', 'while', 'class', 'try', 'except',
+             'finally', 'with')
+UNINDENT_KW = ('return', 'raise', 'break', 'continue', 'pass', 'exit', 'quit')
+KEYWORDS = keyword.kwlist
+KEYWORDS.extend(['True', 'False', 'None', 'self'])
+PY_KW = (0, (' ').join(KEYWORDS))
+try:
+    import __builtin__
+    BUILTINS = dir(__builtin__)
+except:
+    BUILTINS = list()
+
+BUILTINS = list(set(BUILTINS))
+PY_BIN = (
+ 1, (' ').join(sorted(BUILTINS)))
+SYNTAX_ITEMS = [
+ (
+  stc.STC_P_DEFAULT, 'default_style'),
+ (
+  stc.STC_P_CHARACTER, 'char_style'),
+ (
+  stc.STC_P_CLASSNAME, 'class_style'),
+ (
+  stc.STC_P_COMMENTBLOCK, 'comment_style'),
+ (
+  stc.STC_P_COMMENTLINE, 'comment_style'),
+ (
+  stc.STC_P_DECORATOR, 'decor_style'),
+ (
+  stc.STC_P_DEFNAME, 'keyword3_style'),
+ (
+  stc.STC_P_IDENTIFIER, 'default_style'),
+ (
+  stc.STC_P_NUMBER, 'number_style'),
+ (
+  stc.STC_P_OPERATOR, 'operator_style'),
+ (
+  stc.STC_P_STRING, 'string_style'),
+ (
+  stc.STC_P_STRINGEOL, 'stringeol_style'),
+ (
+  stc.STC_P_TRIPLE, 'string_style'),
+ (
+  stc.STC_P_TRIPLEDOUBLE, 'string_style'),
+ (
+  stc.STC_P_WORD, 'keyword_style'),
+ (
+  stc.STC_P_WORD2, 'userkw_style')]
+FOLD = ('fold', '1')
+FOLD_QUOTES = ('fold.quotes.python', '1')
+FOLD_COMMENTS = ('fold.comment.python', '1')
+TIMMY = ('tab.timmy.whinge.level', '1')
+
+class SyntaxData(syndata.SyntaxDataBase):
+    """SyntaxData object for Python"""
+
+    def __init__(self, langid):
+        super(SyntaxData, self).__init__(langid)
+        self.SetLexer(stc.STC_LEX_PYTHON)
+        self.RegisterFeature(synglob.FEATURE_AUTOINDENT, AutoIndenter)
+
+    def GetKeywords(self):
+        """Returns Specified Keywords List """
+        return [
+         PY_KW, PY_BIN]
+
+    def GetSyntaxSpec(self):
+        """Syntax Specifications """
+        return SYNTAX_ITEMS
+
+    def GetProperties(self):
+        """Returns a list of Extra Properties to set """
+        return [
+         FOLD, TIMMY, FOLD_QUOTES, FOLD_COMMENTS]
+
+    def GetCommentPattern(self):
+        """Returns a list of characters used to comment a block of code """
+        return [
+         '#']
+
+
+def AutoIndenter(estc, pos, ichar):
+    """Auto indent python code.
+    @param estc: EditraStyledTextCtrl
+    @param pos: current carat position
+    @param ichar: Indentation character
+
+    """
+    line = estc.GetCurrentLine()
+    spos = estc.PositionFromLine(line)
+    text = estc.GetTextRange(spos, pos)
+    eolch = estc.GetEOLChar()
+    inspace = text.isspace()
+    if inspace:
+        estc.AddText(eolch + text.replace(eolch, ''))
+        return
+    else:
+        if not len(text):
+            estc.AddText(eolch)
+            return
+
+        def BackTrack(tmp_text, tline):
+            bcount = [ tmp_text.count(brac) for brac in ')}]({[' ]
+            bRecurse = False
+            for (idx, val) in enumerate(bcount[:3]):
+                if val > bcount[(idx + 3)]:
+                    bRecurse = True
+                    break
+
+            if bRecurse:
+                tline = tline - 1
+                if tline < 0:
+                    return tmp_text
+                spos = estc.PositionFromLine(tline)
+                tmp_text = estc.GetTextRange(spos, pos)
+                BackTrack(tmp_text, tline)
+            return tmp_text
+
+        text = BackTrack(text, line)
+        pos = PosOpenBracket(text)
+        if pos > -1:
+            rval = eolch + (pos + 1) * ' '
+            estc.AddText(rval)
+            return
+        indent = estc.GetLineIndentation(line)
+        if ichar == '\t':
+            tabw = estc.GetTabWidth()
+        else:
+            tabw = estc.GetIndent()
+        i_space = indent / tabw
+        end_spaces = (indent - tabw * i_space) * ' '
+        tokens = filter(None, text.strip().split())
+        if tokens and not inspace:
+            if tokens[(-1)].endswith(':'):
+                if tokens[0].rstrip(':') in INDENT_KW:
+                    i_space += 1
+            elif tokens[(-1)].endswith('\\'):
+                i_space += 1
+            elif len(tokens[(-1)]) and tokens[(-1)][(-1)] in '}])':
+                ptok = tokens[(-1)][(-1)]
+                paren_pos = pos - (len(text) - text.rfind(ptok))
+                (oparen, cparen) = estc.GetBracePair(paren_pos)
+                if cparen >= 0:
+                    line = estc.LineFromPosition(cparen)
+                    indent = estc.GetLineIndentation(line)
+                    i_space = indent / tabw
+                    end_spaces = (indent - tabw * i_space) * ' '
+            elif tokens[0] in UNINDENT_KW:
+                i_space = max(i_space - 1, 0)
+        rval = eolch + ichar * i_space + end_spaces
+        if inspace and ichar != '\t':
+            rpos = indent - (pos - spos)
+            if rpos < len(rval) and rpos > 0:
+                rval = rval[:-rpos]
+            elif rpos >= len(rval):
+                rval = eolch
+        estc.AddText(rval)
+        return
+
+
+def KeywordString():
+    """Returns the specified Keyword String
+    @note: not used by most modules
+
+    """
+    return PY_KW[1]
+
+
+def PosOpenBracket(text):
+    """Returns the position of the right most open bracket in text.
+    Brackets inside strings are ignored. In case of no open bracket
+    the returned value is -1
+    @param text: The line preceding the new line to be indented.
+    @return res: The position of right most open bracket.
+    @note: Used by AutoIndenter
+
+    """
+    brackets = [[], [], [], [], [], []]
+    quotes = '\'"'
+    in_string = False
+    for (pos, char) in enumerate(text):
+        if in_string:
+            in_string = not char == quote
+        else:
+            if char == '#':
+                break
+            typ = ('([{)]}').find(char)
+            if typ > -1:
+                brackets[typ].append(pos)
+            else:
+                typ = quotes.find(char)
+                if typ > -1:
+                    in_string = True
+                    quote = quotes[typ]
+
+    res = -1
+    for typ in range(3):
+        opn, cls = brackets[typ], brackets[(typ + 3)]
+        nopn, ncls = len(opn), len(cls)
+        if nopn > ncls:
+            res = max(res, opn[(nopn - ncls - 1)])
+
+    return res

@@ -1,0 +1,12 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: c:\repos\testlibs\pyglobal\pyglobal\__meta__.py
+# Compiled at: 2020-05-05 12:33:49
+# Size of source mod 2**32: 274 bytes
+name = 'pyglobal'
+version = '0.0.1'
+description = 'Global accessors for things like settings. This could be used across applications and modules to share data.'
+url = 'https://github.com/justengel/pyglobal'
+author = 'Justin Engel'
+author_email = 'jtengel08@gmail.com'

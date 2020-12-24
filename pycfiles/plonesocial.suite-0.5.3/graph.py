@@ -1,0 +1,68 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /home/gyst/plonesocial.buildout/src/plonesocial.network/plonesocial/network/graph.py
+# Compiled at: 2013-03-04 10:35:03
+import logging
+from BTrees import OOBTree
+from persistent import Persistent
+from Acquisition import Explicit
+from zope.interface import implements
+from interfaces import INetworkGraph
+logger = logging.getLogger('plonesocial.network')
+
+class NetworkGraph(Persistent, Explicit):
+    """Stores a social network graph of users
+    following/unfollowing/blocking eachother.
+
+    Users are referenced as string userids.
+
+    Return values are BTrees.OOBTree.OOTreeSet iterables.
+    """
+    implements(INetworkGraph)
+
+    def __init__(self, context=None):
+        self._following = OOBTree.OOBTree()
+        self._followers = OOBTree.OOBTree()
+
+    def set_follow(self, actor, other):
+        """User <actor> subscribes to user <other>"""
+        assert actor == str(actor)
+        assert other == str(other)
+        self._following.insert(actor, OOBTree.OOTreeSet())
+        self._followers.insert(other, OOBTree.OOTreeSet())
+        self._following[actor].insert(other)
+        self._followers[other].insert(actor)
+
+    def set_unfollow(self, actor, other):
+        """User <actor> unsubscribes from user <other>"""
+        assert actor == str(actor)
+        assert other == str(other)
+        try:
+            self._following[actor].remove(other)
+        except KeyError:
+            pass
+
+        try:
+            self._followers[other].remove(actor)
+        except KeyError:
+            pass
+
+    def get_following(self, actor):
+        """List all users that <actor> subscribes to"""
+        assert actor == str(actor)
+        try:
+            return self._following[actor]
+        except KeyError:
+            return ()
+
+    def get_followers(self, actor):
+        assert actor == str(actor)
+        try:
+            return self._followers[actor]
+        except KeyError:
+            return ()
+
+    def clear(self):
+        self._following = OOBTree.OOBTree()
+        self._followers = OOBTree.OOBTree()

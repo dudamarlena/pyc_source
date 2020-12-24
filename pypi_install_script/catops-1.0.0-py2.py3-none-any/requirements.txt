@@ -1,0 +1,3 @@
+slacker
+catops>=0.1.9
+

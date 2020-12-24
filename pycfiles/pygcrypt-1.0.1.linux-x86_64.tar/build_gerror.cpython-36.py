@@ -1,0 +1,19 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/okhin/git/orage.io/pygcrypt/env/lib/python3.6/site-packages/pygcrypt/build_gerror.py
+# Compiled at: 2017-03-12 10:38:05
+# Size of source mod 2**32: 3573 bytes
+from ctypes.util import find_library
+from cffi import FFI
+gerror_ffi = FFI()
+gerror_ffi.set_source('pygcrypt._gerror', '\n        #include <gpg-error.h>\n        ',
+  libraries=[
+ 'gpg-error'])
+gerror_ffi.cdef('\n        /* The error source type gpg_err_source_t. */\n        typedef enum { ... } gpg_err_source_t;\n\n        /* The error code type gpg_err_code_t.  */\n        typedef enum { ... } gpg_err_code_t;\n\n        /* The error value type gpg_error_t.  */\n        typedef unsigned int gpg_error_t;\n        ')
+gerror_ffi.cdef('\n        /* Initialization function.  */\n\n        /* Initialize the library.  This function should be run early.  */\n        gpg_error_t gpg_err_init (void);\n\n        /* See the source on how to use the deinit function; it is usually not\n           required.  */\n        void gpg_err_deinit (int mode);\n\n        /* Register blocking system I/O clamping functions.  */\n        void gpgrt_set_syscall_clamp (void (*pre)(void), void (*post)(void));\n\n        /* Register a custom malloc/realloc/free function.  */\n        void gpgrt_set_alloc_func  (void *(*f)(void *a, size_t n));\n        ')
+gerror_ffi.cdef('\n        /* String functions.  */\n\n        /* Return a pointer to a string containing a description of the error\n           code in the error value ERR.  This function is not thread-safe.  */\n        const char *gpg_strerror (gpg_error_t err);\n\n        /* Return the error string for ERR in the user-supplied buffer BUF of\n           size BUFLEN.  This function is, in contrast to gpg_strerror,\n           thread-safe if a thread-safe strerror_r() function is provided by\n           the system.  If the function succeeds, 0 is returned and BUF\n           contains the string describing the error.  If the buffer was not\n           large enough, ERANGE is returned and BUF contains as much of the\n           beginning of the error string as fits into the buffer.  */\n        int gpg_strerror_r (gpg_error_t err, char *buf, size_t buflen);\n\n        /* Return a pointer to a string containing a description of the error\n           source in the error value ERR.  */\n        const char *gpg_strsource (gpg_error_t err);\n        ')
+gerror_ffi.cdef('\n        /* Mapping of system errors (errno).  */\n\n        /* Retrieve the error code for the system error ERR.  This returns\n           GPG_ERR_UNKNOWN_ERRNO if the system error is not mapped (report\n           this). */\n        gpg_err_code_t gpg_err_code_from_errno (int err);\n\n\n        /* Retrieve the system error for the error code CODE.  This returns 0\n           if CODE is not a system error code.  */\n        int gpg_err_code_to_errno (gpg_err_code_t code);\n\n\n        /* Retrieve the error code directly from the ERRNO variable.  This\n           returns GPG_ERR_UNKNOWN_ERRNO if the system error is not mapped\n           (report this) and GPG_ERR_MISSING_ERRNO if ERRNO has the value 0. */\n        gpg_err_code_t gpg_err_code_from_syserror (void);\n\n\n        /* Set the ERRNO variable.  This function is the preferred way to set\n           ERRNO due to peculiarities on WindowsCE.  */\n        void gpg_err_set_errno (int err);\n\n        /* Return or check the version.  Both functions are identical.  */\n        const char *gpgrt_check_version (const char *req_version);\n        const char *gpg_error_check_version (const char *req_version);\n\n        ')
+gerror_ffi.cdef('\n        /* Thread functions.  */\n\n        gpg_err_code_t gpgrt_yield (void);\n        ')
+gerror_ffi.compile()

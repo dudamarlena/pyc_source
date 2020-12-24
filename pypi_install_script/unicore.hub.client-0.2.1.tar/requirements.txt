@@ -1,0 +1,6 @@
+argparse
+mock
+requests>=2.5.3
+responses>=0.3.0
+six
+wsgiref

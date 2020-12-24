@@ -1,0 +1,193 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/paste/webkit/FakeWebware/MiscUtils/PickleCache.py
+# Compiled at: 2006-10-22 17:01:01
+"""
+PickleCache provides tools for keeping fast-loading cached versions of
+files so that subsequent loads are faster. This is similar to how Python
+silently caches .pyc files next to .py files.
+
+The typical scenario is that you have a type of text file that gets
+"translated" to Pythonic data (dictionaries, tuples, instances, ints,
+etc.). By caching the Python data on disk in pickle format, you can
+avoid the expensive translation on subsequent reads of the file.
+
+Two real life cases are MiscUtils.DataTable, which loads and represents
+comma-separated files, and MiddleKit which has an object model file.
+So for examples on using this module, load up the following files and
+search for "Pickle":
+        Webware/MiscUtils/DataTable.py
+        MiddleKit/Core/Model.py
+
+The cached file is named the same as the original file with
+'.pickle.cache' suffixed. The utility of '.pickle' is to denote the file
+format and the utilty of '.cache' is to provide '*.cache' as a simple
+pattern that can be removed, ignored by backup scripts, etc.
+
+The treatment of the cached file is silent and friendly just like
+Python's approach to .pyc files. If it cannot be read or written for
+various reasons (cache is out of date, permissions are bad, wrong python
+version, etc.), then it will be silently ignored.
+
+GRANULARITY
+
+In constructing the test suite, I discovered that if the source file is
+newly written less than 1 second after the cached file, then the fact
+that the source file is newer will not be detected and the cache will
+still be used. I believe this is a limitation of the granularity of
+os.path.getmtime(). If anyone knows of a more granular solution, please
+let me know.
+
+This would only be a problem in programmatic situations where the source
+file was rapidly being written and read. I think that's fairly rare.
+
+PYTHON VERSION
+
+These operations do nothing if you don't have Python 2.2 or greater.
+
+SEE ALSO
+        http://www.python.org/doc/current/lib/module-pickle.html
+
+- wordwrap bar --------------------------------------------------------
+"""
+verbose = 0
+import os, sys, time
+from types import DictType
+from pprint import pprint
+try:
+    from cPickle import load, dump
+except ImportError:
+    from pickle import load, dump
+
+havePython22OrGreater = sys.version_info[0] > 2 or sys.version_info[0] == 2 and sys.version_info[1] >= 2
+s = '\ndef readPickleCache(filename, pickleVersion=1, source=None, verbose=None):\n\treturn _reader.read(filename, pickleVersion, source, verbose)\n\ndef writePickleCache(data, filename, pickleVersion=1, source=None, verbose=None):\n\treturn _writer.write(data, filename, pickleVersion, source, verbose)\n'
+
+class PickleCache:
+    """
+        Just a simple abstract base class for PickleCacheReader and
+        PickleCacheWriter.
+        """
+    __module__ = __name__
+    verbose = verbose
+
+    def picklePath(self, filename):
+        return filename + '.pickle.cache'
+
+
+class PickleCacheReader(PickleCache):
+    __module__ = __name__
+
+    def read(self, filename, pickleVersion=1, source=None, verbose=None):
+        """
+                Returns the data from the pickle cache version of the filename, if it can read. Otherwise returns None which also indicates that writePickleCache() should be subsequently called after the original file is read.
+                """
+        if verbose is None:
+            v = self.verbose
+        else:
+            v = verbose
+        if v:
+            print '>> PickleCacheReader.read() - verbose is on'
+        assert filename
+        if not os.path.exists(filename):
+            open(filename)
+        if not havePython22OrGreater:
+            return
+        didReadPickle = 0
+        shouldDeletePickle = 0
+        data = None
+        picklePath = self.picklePath(filename)
+        if os.path.exists(picklePath):
+            if os.path.getmtime(picklePath) < os.path.getmtime(filename):
+                shouldDeletePickle = 1
+            else:
+                try:
+                    file = open(picklePath)
+                except IOError, e:
+                    pass
+                else:
+                    try:
+                        dict = load(file)
+                    except EOFError:
+                        shouldDeletePickle = 1
+                    else:
+                        file.close()
+                        assert isinstance(dict, DictType), 'type=%r dict=%r' % (type(dict), dict)
+                        for key in ('source', 'data', 'pickle version', 'python version'):
+                            assert dict.has_key(key), key
+
+                        if source and dict['source'] != source:
+                            shouldDeletePickle = 1
+                        elif dict['pickle version'] != pickleVersion:
+                            shouldDeletePickle = 1
+                        elif dict['python version'] != sys.version_info:
+                            shouldDeletePickle = 1
+                        else:
+                            if v > 1:
+                                print 'display full dict:'
+                                pprint(dict)
+                            data = dict['data']
+                            didReadPickle = 1
+        if shouldDeletePickle:
+            try:
+                os.remove(picklePath)
+            except OSError, e:
+                if v:
+                    print 'failed to remove: %s: %s' % (e.__class__.__name__, e)
+
+        if v:
+            print 'done reading data'
+            print
+        return data
+
+
+class PickleCacheWriter(PickleCache):
+    __module__ = __name__
+    writeSleepInterval = 0.1
+
+    def write(self, data, filename, pickleVersion=1, source=None, verbose=None):
+        if verbose is None:
+            v = self.verbose
+        else:
+            v = verbose
+        if v:
+            print '>> PickleCacheWriter.write() - verbose is on'
+        assert filename
+        sourceTimestamp = os.path.getmtime(filename)
+        if not havePython22OrGreater:
+            return
+        picklePath = self.picklePath(filename)
+        dict = {'source': source, 'python version': sys.version_info, 'pickle version': pickleVersion, 'data': data}
+        if v > 1:
+            print 'display full dict:'
+            pprint(dict)
+        try:
+            if v:
+                print 'about to open for write %r' % picklePath
+            file = open(picklePath, 'w')
+        except IOError, e:
+            if v:
+                print 'error. not writing. %s: %s' % (e.__class__.__name__, e)
+        else:
+            while 1:
+                dump(dict, file, 1)
+                file.close()
+                if os.path.getmtime(picklePath) == sourceTimestamp:
+                    if v:
+                        print 'timestamps are identical. sleeping %0.2f seconds' % self.writeSleepInterval
+                    time.sleep(self.writeSleepInterval)
+                    file = open(picklePath, 'w')
+                else:
+                    break
+
+        if v:
+            print 'done writing data'
+            print
+        return
+
+
+_reader = PickleCacheReader()
+readPickleCache = _reader.read
+_writer = PickleCacheWriter()
+writePickleCache = _writer.write

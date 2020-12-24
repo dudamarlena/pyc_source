@@ -1,0 +1,30 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: dialogs/dialog_snapeda_error.py
+# Compiled at: 2017-11-14 10:49:13
+import wx, wx.xrc
+
+class DialogSnapedaError(wx.Dialog):
+
+    def __init__(self, parent):
+        wx.Dialog.__init__(self, parent, id=wx.ID_ANY, title='Error connecting to SnapEda', pos=wx.DefaultPosition, size=wx.Size(598, 207), style=wx.DEFAULT_DIALOG_STYLE)
+        self.SetSizeHintsSz(wx.DefaultSize, wx.DefaultSize)
+        bSizer1 = wx.BoxSizer(wx.VERTICAL)
+        self.m_textCtrl1 = wx.TextCtrl(self, wx.ID_ANY, "Error connecting to snapeda.\n\nConfigure your SnapEda credentials in the configuration window.\n\nIf you don't have SnapEda credentials you can create some at:\nhttps://www.snapeda.com/account/signup/?next=/account/login/%3Fnext%3D/account/\n", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE | wx.TE_READONLY | wx.STATIC_BORDER)
+        self.m_textCtrl1.SetFont(wx.Font(wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString))
+        self.m_textCtrl1.SetForegroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNTEXT))
+        self.m_textCtrl1.SetBackgroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOWFRAME))
+        bSizer1.Add(self.m_textCtrl1, 1, wx.ALL | wx.EXPAND, 5)
+        m_sdbSizer1 = wx.StdDialogButtonSizer()
+        self.m_sdbSizer1OK = wx.Button(self, wx.ID_OK)
+        m_sdbSizer1.AddButton(self.m_sdbSizer1OK)
+        m_sdbSizer1.Realize()
+        bSizer1.Add(m_sdbSizer1, 0, wx.ALIGN_CENTER_HORIZONTAL, 5)
+        self.SetSizer(bSizer1)
+        self.Layout()
+        self.Centre(wx.BOTH)
+
+    def __del__(self):
+        pass

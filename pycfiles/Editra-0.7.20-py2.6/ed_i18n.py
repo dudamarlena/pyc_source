@@ -1,0 +1,116 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.3-i386/egg/Editra/src/ed_i18n.py
+# Compiled at: 2012-04-11 20:39:05
+"""
+This file is a module for managing translations and the internationalization of
+the program.
+
+METHODS:
+  - L{GetAvailLocales}: Returns a list of canonical names of available locales
+  - L{GetLocaleDict}: Returns a dictionary consisting of canonical names for
+                      keys and language ids for values.
+
+"""
+__author__ = 'Cody Precord <cprecord@editra.org>'
+__svnid__ = '$Id: ed_i18n.py 71189 2012-04-12 00:37:04Z CJP $'
+__revision__ = '$Revision: 71189 $'
+import os, wx, wx.lib.langlistctrl as langlist, wx.combo, glob, ed_glob
+OPT_NO_OP = 0
+OPT_DESCRIPT = 1
+
+def GetAvailLocales():
+    """Gets a list of the available locales that have been installed
+    for the editor. Returning a list of strings that represent the
+    canonical names of each language.
+    @return: list of all available local/languages available
+
+    """
+    avail_loc = list()
+    loc = glob.glob(os.path.join(ed_glob.CONFIG['LANG_DIR'], '*'))
+    for path in loc:
+        the_path = os.path.join(path, 'LC_MESSAGES', ed_glob.PROG_NAME + '.mo')
+        if os.path.exists(the_path):
+            avail_loc.append(os.path.basename(path))
+
+    return avail_loc
+
+
+def GetLocaleDict(loc_list, opt=OPT_NO_OP):
+    """Takes a list of cannonical locale names and by default returns a
+    dictionary of available language values using the canonical name as
+    the key. Supplying the Option OPT_DESCRIPT will return a dictionary
+    of language id's with languages description as the key.
+    @param loc_list: list of locals
+    @keyword opt: option for configuring return data
+    @return: dict of locales mapped to wx.LANGUAGE_*** values
+
+    """
+    lang_dict = dict()
+    for lang in [ x for x in dir(wx) if x.startswith('LANGUAGE_') ]:
+        langId = getattr(wx, lang)
+        langOk = False
+        try:
+            langOk = wx.Locale.IsAvailable(langId)
+        except wx.PyAssertionError:
+            continue
+
+        if langOk:
+            loc_i = wx.Locale.GetLanguageInfo(langId)
+            if loc_i:
+                if loc_i.CanonicalName in loc_list:
+                    if opt == OPT_DESCRIPT:
+                        lang_dict[loc_i.Description] = langId
+                    else:
+                        lang_dict[loc_i.CanonicalName] = langId
+
+    return lang_dict
+
+
+def GetLangId(lang_n):
+    """Gets the ID of a language from the description string. If the
+    language cannot be found the function simply returns the default language
+    @param lang_n: Canonical name of a language
+    @return: wx.LANGUAGE_*** id of language
+
+    """
+    if lang_n == 'Default':
+        return wx.LANGUAGE_ENGLISH_US
+    lang_desc = GetLocaleDict(GetAvailLocales(), OPT_DESCRIPT)
+    return lang_desc.get(lang_n, wx.LANGUAGE_DEFAULT)
+
+
+class LangListCombo(wx.combo.BitmapComboBox):
+    """Combines a langlist and a BitmapComboBox"""
+
+    def __init__(self, parent, id_, default=None):
+        """Creates a combobox with a list of all translations for the
+        editor as well as displaying the countries flag next to the item
+        in the list.
+
+        @param default: The default item to show in the combo box
+
+        """
+        lang_ids = GetLocaleDict(GetAvailLocales()).values()
+        lang_items = langlist.CreateLanguagesResourceLists(langlist.LC_ONLY, lang_ids)
+        wx.combo.BitmapComboBox.__init__(self, parent, id_, size=wx.Size(250, 26), style=wx.CB_READONLY)
+        for lang_d in lang_items[1]:
+            bit_m = lang_items[0].GetBitmap(lang_items[1].index(lang_d))
+            self.Append(lang_d, bit_m)
+
+        if default:
+            self.SetValue(default)
+
+
+if __name__ == '__main__':
+    APP = wx.PySimpleApp(False)
+    OUT = list()
+    for LANG in [ x for x in dir(wx) if x.startswith('LANGUAGE') ]:
+        LOC_I = wx.Locale.GetLanguageInfo(getattr(wx, LANG))
+        if LOC_I:
+            OUT.append((LOC_I.Description, LOC_I.CanonicalName))
+
+    for LANG in sorted(OUT):
+        print LANG

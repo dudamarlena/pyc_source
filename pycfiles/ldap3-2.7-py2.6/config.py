@@ -1,0 +1,297 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win-amd64\egg\ldap3\utils\config.py
+# Compiled at: 2020-02-23 02:01:39
+"""
+"""
+from sys import stdin, getdefaultencoding
+from .. import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, NO_ATTRIBUTES, SEQUENCE_TYPES
+from ..core.exceptions import LDAPConfigurationParameterError
+_CLASSES_EXCLUDED_FROM_CHECK = [
+ 'subschema']
+_ATTRIBUTES_EXCLUDED_FROM_CHECK = [ALL_ATTRIBUTES,
+ ALL_OPERATIONAL_ATTRIBUTES,
+ NO_ATTRIBUTES,
+ 'ldapSyntaxes',
+ 'matchingRules',
+ 'matchingRuleUse',
+ 'dITContentRules',
+ 'dITStructureRules',
+ 'nameForms',
+ 'altServer',
+ 'namingContexts',
+ 'supportedControl',
+ 'supportedExtension',
+ 'supportedFeatures',
+ 'supportedCapabilities',
+ 'supportedLdapVersion',
+ 'supportedSASLMechanisms',
+ 'vendorName',
+ 'vendorVersion',
+ 'subschemaSubentry',
+ 'ACL']
+_UTF8_ENCODED_SYNTAXES = ['1.2.840.113556.1.4.904',
+ '1.2.840.113556.1.4.1362',
+ '1.3.6.1.4.1.1466.115.121.1.12',
+ '1.3.6.1.4.1.1466.115.121.1.15',
+ '1.3.6.1.4.1.1466.115.121.1.41',
+ '1.3.6.1.4.1.1466.115.121.1.58',
+ '2.16.840.1.113719.1.1.5.1.6',
+ '2.16.840.1.113719.1.1.5.1.14',
+ '2.16.840.1.113719.1.1.5.1.15',
+ '2.16.840.1.113719.1.1.5.1.23',
+ '2.16.840.1.113719.1.1.5.1.25']
+_UTF8_ENCODED_TYPES = []
+_ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF = [
+ 'msds-memberOfTransitive', 'msds-memberTransitive', 'entryDN']
+_IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF = ['instanceType', 'nTSecurityDescriptor', 'objectCategory']
+_CASE_INSENSITIVE_ATTRIBUTE_NAMES = True
+_CASE_INSENSITIVE_SCHEMA_NAMES = True
+_ABSTRACTION_OPERATIONAL_ATTRIBUTE_PREFIX = 'OA_'
+_POOLING_LOOP_TIMEOUT = 10
+_RESPONSE_SLEEPTIME = 0.05
+_RESPONSE_WAITING_TIMEOUT = 3
+_SOCKET_SIZE = 4096
+_CHECK_AVAILABILITY_TIMEOUT = 2.5
+_RESET_AVAILABILITY_TIMEOUT = 5
+_RESTARTABLE_SLEEPTIME = 2
+_RESTARTABLE_TRIES = 30
+_REUSABLE_THREADED_POOL_SIZE = 5
+_REUSABLE_THREADED_LIFETIME = 3600
+_DEFAULT_THREADED_POOL_NAME = 'REUSABLE_DEFAULT_POOL'
+_ADDRESS_INFO_REFRESH_TIME = 300
+_ADDITIONAL_SERVER_ENCODINGS = ['latin-1', 'koi8-r']
+_ADDITIONAL_CLIENT_ENCODINGS = ['utf-8']
+_IGNORE_MALFORMED_SCHEMA = False
+_DEFAULT_SERVER_ENCODING = 'utf-8'
+if stdin and hasattr(stdin, 'encoding') and stdin.encoding:
+    _DEFAULT_CLIENT_ENCODING = stdin.encoding
+elif getdefaultencoding():
+    _DEFAULT_CLIENT_ENCODING = getdefaultencoding()
+else:
+    _DEFAULT_CLIENT_ENCODING = 'utf-8'
+PARAMETERS = ['CASE_INSENSITIVE_ATTRIBUTE_NAMES',
+ 'CASE_INSENSITIVE_SCHEMA_NAMES',
+ 'ABSTRACTION_OPERATIONAL_ATTRIBUTE_PREFIX',
+ 'POOLING_LOOP_TIMEOUT',
+ 'RESPONSE_SLEEPTIME',
+ 'RESPONSE_WAITING_TIMEOUT',
+ 'SOCKET_SIZE',
+ 'CHECK_AVAILABILITY_TIMEOUT',
+ 'RESTARTABLE_SLEEPTIME',
+ 'RESTARTABLE_TRIES',
+ 'REUSABLE_THREADED_POOL_SIZE',
+ 'REUSABLE_THREADED_LIFETIME',
+ 'DEFAULT_THREADED_POOL_NAME',
+ 'ADDRESS_INFO_REFRESH_TIME',
+ 'RESET_AVAILABILITY_TIMEOUT',
+ 'DEFAULT_CLIENT_ENCODING',
+ 'DEFAULT_SERVER_ENCODING',
+ 'CLASSES_EXCLUDED_FROM_CHECK',
+ 'ATTRIBUTES_EXCLUDED_FROM_CHECK',
+ 'UTF8_ENCODED_SYNTAXES',
+ 'UTF8_ENCODED_TYPES',
+ 'ADDITIONAL_SERVER_ENCODINGS',
+ 'ADDITIONAL_CLIENT_ENCODINGS',
+ 'IGNORE_MALFORMED_SCHEMA',
+ 'ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF',
+ 'IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF']
+
+def get_config_parameter(parameter):
+    global _ABSTRACTION_OPERATIONAL_ATTRIBUTE_PREFIX
+    global _ADDITIONAL_CLIENT_ENCODINGS
+    global _ADDITIONAL_SERVER_ENCODINGS
+    global _ADDRESS_INFO_REFRESH_TIME
+    global _ATTRIBUTES_EXCLUDED_FROM_CHECK
+    global _ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF
+    global _CASE_INSENSITIVE_ATTRIBUTE_NAMES
+    global _CASE_INSENSITIVE_SCHEMA_NAMES
+    global _CHECK_AVAILABILITY_TIMEOUT
+    global _CLASSES_EXCLUDED_FROM_CHECK
+    global _DEFAULT_CLIENT_ENCODING
+    global _DEFAULT_SERVER_ENCODING
+    global _DEFAULT_THREADED_POOL_NAME
+    global _IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF
+    global _IGNORE_MALFORMED_SCHEMA
+    global _POOLING_LOOP_TIMEOUT
+    global _RESET_AVAILABILITY_TIMEOUT
+    global _RESPONSE_SLEEPTIME
+    global _RESPONSE_WAITING_TIMEOUT
+    global _RESTARTABLE_SLEEPTIME
+    global _RESTARTABLE_TRIES
+    global _REUSABLE_THREADED_LIFETIME
+    global _REUSABLE_THREADED_POOL_SIZE
+    global _SOCKET_SIZE
+    global _UTF8_ENCODED_SYNTAXES
+    global _UTF8_ENCODED_TYPES
+    if parameter == 'CASE_INSENSITIVE_ATTRIBUTE_NAMES':
+        return _CASE_INSENSITIVE_ATTRIBUTE_NAMES
+    if parameter == 'CASE_INSENSITIVE_SCHEMA_NAMES':
+        return _CASE_INSENSITIVE_SCHEMA_NAMES
+    if parameter == 'ABSTRACTION_OPERATIONAL_ATTRIBUTE_PREFIX':
+        return _ABSTRACTION_OPERATIONAL_ATTRIBUTE_PREFIX
+    if parameter == 'POOLING_LOOP_TIMEOUT':
+        return _POOLING_LOOP_TIMEOUT
+    if parameter == 'RESPONSE_SLEEPTIME':
+        return _RESPONSE_SLEEPTIME
+    if parameter == 'RESPONSE_WAITING_TIMEOUT':
+        return _RESPONSE_WAITING_TIMEOUT
+    if parameter == 'SOCKET_SIZE':
+        return _SOCKET_SIZE
+    if parameter == 'CHECK_AVAILABILITY_TIMEOUT':
+        return _CHECK_AVAILABILITY_TIMEOUT
+    if parameter == 'RESTARTABLE_SLEEPTIME':
+        return _RESTARTABLE_SLEEPTIME
+    if parameter == 'RESTARTABLE_TRIES':
+        return _RESTARTABLE_TRIES
+    if parameter == 'REUSABLE_THREADED_POOL_SIZE':
+        return _REUSABLE_THREADED_POOL_SIZE
+    if parameter == 'REUSABLE_THREADED_LIFETIME':
+        return _REUSABLE_THREADED_LIFETIME
+    if parameter == 'DEFAULT_THREADED_POOL_NAME':
+        return _DEFAULT_THREADED_POOL_NAME
+    if parameter == 'ADDRESS_INFO_REFRESH_TIME':
+        return _ADDRESS_INFO_REFRESH_TIME
+    if parameter == 'RESET_AVAILABILITY_TIMEOUT':
+        return _RESET_AVAILABILITY_TIMEOUT
+    if parameter in ('DEFAULT_CLIENT_ENCODING', 'DEFAULT_ENCODING'):
+        return _DEFAULT_CLIENT_ENCODING
+    if parameter == 'DEFAULT_SERVER_ENCODING':
+        return _DEFAULT_SERVER_ENCODING
+    if parameter == 'CLASSES_EXCLUDED_FROM_CHECK':
+        if isinstance(_CLASSES_EXCLUDED_FROM_CHECK, SEQUENCE_TYPES):
+            return _CLASSES_EXCLUDED_FROM_CHECK
+        else:
+            return [
+             _CLASSES_EXCLUDED_FROM_CHECK]
+    elif parameter == 'ATTRIBUTES_EXCLUDED_FROM_CHECK':
+        if isinstance(_ATTRIBUTES_EXCLUDED_FROM_CHECK, SEQUENCE_TYPES):
+            return _ATTRIBUTES_EXCLUDED_FROM_CHECK
+        else:
+            return [
+             _ATTRIBUTES_EXCLUDED_FROM_CHECK]
+    elif parameter == 'UTF8_ENCODED_SYNTAXES':
+        if isinstance(_UTF8_ENCODED_SYNTAXES, SEQUENCE_TYPES):
+            return _UTF8_ENCODED_SYNTAXES
+        else:
+            return [
+             _UTF8_ENCODED_SYNTAXES]
+    elif parameter == 'UTF8_ENCODED_TYPES':
+        if isinstance(_UTF8_ENCODED_TYPES, SEQUENCE_TYPES):
+            return _UTF8_ENCODED_TYPES
+        else:
+            return [
+             _UTF8_ENCODED_TYPES]
+    elif parameter in ('ADDITIONAL_SERVER_ENCODINGS', 'ADDITIONAL_ENCODINGS'):
+        if isinstance(_ADDITIONAL_SERVER_ENCODINGS, SEQUENCE_TYPES):
+            return _ADDITIONAL_SERVER_ENCODINGS
+        else:
+            return [
+             _ADDITIONAL_SERVER_ENCODINGS]
+    elif parameter in ('ADDITIONAL_CLIENT_ENCODINGS', ):
+        if isinstance(_ADDITIONAL_CLIENT_ENCODINGS, SEQUENCE_TYPES):
+            return _ADDITIONAL_CLIENT_ENCODINGS
+        else:
+            return [
+             _ADDITIONAL_CLIENT_ENCODINGS]
+    else:
+        if parameter == 'IGNORE_MALFORMED_SCHEMA':
+            return _IGNORE_MALFORMED_SCHEMA
+        if parameter == 'ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF':
+            if isinstance(_ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF, SEQUENCE_TYPES):
+                return _ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF
+            else:
+                return [
+                 _ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF]
+        elif parameter == 'IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF':
+            if isinstance(_IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF, SEQUENCE_TYPES):
+                return _IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF
+            else:
+                return [
+                 _IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF]
+    raise LDAPConfigurationParameterError('configuration parameter %s not valid' % parameter)
+
+
+def set_config_parameter(parameter, value):
+    global _ABSTRACTION_OPERATIONAL_ATTRIBUTE_PREFIX
+    global _ADDITIONAL_CLIENT_ENCODINGS
+    global _ADDITIONAL_SERVER_ENCODINGS
+    global _ADDRESS_INFO_REFRESH_TIME
+    global _ATTRIBUTES_EXCLUDED_FROM_CHECK
+    global _ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF
+    global _CASE_INSENSITIVE_ATTRIBUTE_NAMES
+    global _CASE_INSENSITIVE_SCHEMA_NAMES
+    global _CHECK_AVAILABILITY_TIMEOUT
+    global _CLASSES_EXCLUDED_FROM_CHECK
+    global _DEFAULT_CLIENT_ENCODING
+    global _DEFAULT_SERVER_ENCODING
+    global _DEFAULT_THREADED_POOL_NAME
+    global _IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF
+    global _IGNORE_MALFORMED_SCHEMA
+    global _POOLING_LOOP_TIMEOUT
+    global _RESET_AVAILABILITY_TIMEOUT
+    global _RESPONSE_SLEEPTIME
+    global _RESPONSE_WAITING_TIMEOUT
+    global _RESTARTABLE_SLEEPTIME
+    global _RESTARTABLE_TRIES
+    global _REUSABLE_THREADED_LIFETIME
+    global _REUSABLE_THREADED_POOL_SIZE
+    global _SOCKET_SIZE
+    global _UTF8_ENCODED_SYNTAXES
+    global _UTF8_ENCODED_TYPES
+    if parameter == 'CASE_INSENSITIVE_ATTRIBUTE_NAMES':
+        _CASE_INSENSITIVE_ATTRIBUTE_NAMES = value
+    elif parameter == 'CASE_INSENSITIVE_SCHEMA_NAMES':
+        _CASE_INSENSITIVE_SCHEMA_NAMES = value
+    elif parameter == 'ABSTRACTION_OPERATIONAL_ATTRIBUTE_PREFIX':
+        _ABSTRACTION_OPERATIONAL_ATTRIBUTE_PREFIX = value
+    elif parameter == 'POOLING_LOOP_TIMEOUT':
+        _POOLING_LOOP_TIMEOUT = value
+    elif parameter == 'RESPONSE_SLEEPTIME':
+        _RESPONSE_SLEEPTIME = value
+    elif parameter == 'RESPONSE_WAITING_TIMEOUT':
+        _RESPONSE_WAITING_TIMEOUT = value
+    elif parameter == 'SOCKET_SIZE':
+        _SOCKET_SIZE = value
+    elif parameter == 'CHECK_AVAILABILITY_TIMEOUT':
+        _CHECK_AVAILABILITY_TIMEOUT = value
+    elif parameter == 'RESTARTABLE_SLEEPTIME':
+        _RESTARTABLE_SLEEPTIME = value
+    elif parameter == 'RESTARTABLE_TRIES':
+        _RESTARTABLE_TRIES = value
+    elif parameter == 'REUSABLE_THREADED_POOL_SIZE':
+        _REUSABLE_THREADED_POOL_SIZE = value
+    elif parameter == 'REUSABLE_THREADED_LIFETIME':
+        _REUSABLE_THREADED_LIFETIME = value
+    elif parameter == 'DEFAULT_THREADED_POOL_NAME':
+        _DEFAULT_THREADED_POOL_NAME = value
+    elif parameter == 'ADDRESS_INFO_REFRESH_TIME':
+        _ADDRESS_INFO_REFRESH_TIME = value
+    elif parameter == 'RESET_AVAILABILITY_TIMEOUT':
+        _RESET_AVAILABILITY_TIMEOUT = value
+    elif parameter in ('DEFAULT_CLIENT_ENCODING', 'DEFAULT_ENCODING'):
+        _DEFAULT_CLIENT_ENCODING = value
+    elif parameter == 'DEFAULT_SERVER_ENCODING':
+        _DEFAULT_SERVER_ENCODING = value
+    elif parameter == 'CLASSES_EXCLUDED_FROM_CHECK':
+        _CLASSES_EXCLUDED_FROM_CHECK = value
+    elif parameter == 'ATTRIBUTES_EXCLUDED_FROM_CHECK':
+        _ATTRIBUTES_EXCLUDED_FROM_CHECK = value
+    elif parameter == 'UTF8_ENCODED_SYNTAXES':
+        _UTF8_ENCODED_SYNTAXES = value
+    elif parameter == 'UTF8_ENCODED_TYPES':
+        _UTF8_ENCODED_TYPES = value
+    elif parameter in ('ADDITIONAL_SERVER_ENCODINGS', 'ADDITIONAL_ENCODINGS'):
+        _ADDITIONAL_SERVER_ENCODINGS = value if isinstance(value, SEQUENCE_TYPES) else [value]
+    elif parameter in ('ADDITIONAL_CLIENT_ENCODINGS', ):
+        _ADDITIONAL_CLIENT_ENCODINGS = value if isinstance(value, SEQUENCE_TYPES) else [value]
+    elif parameter == 'IGNORE_MALFORMED_SCHEMA':
+        _IGNORE_MALFORMED_SCHEMA = value
+    elif parameter == 'ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF':
+        _ATTRIBUTES_EXCLUDED_FROM_OBJECT_DEF = value
+    elif parameter == 'IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF':
+        _IGNORED_MANDATORY_ATTRIBUTES_IN_OBJECT_DEF = value
+    else:
+        raise LDAPConfigurationParameterError('unable to set configuration parameter %s' % parameter)

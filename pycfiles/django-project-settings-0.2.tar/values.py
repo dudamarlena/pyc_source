@@ -1,0 +1,86 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /data/PROGETTI/saxix/django-project-settings/project_settings/values.py
+# Compiled at: 2014-10-10 05:53:53
+from django import forms
+import six
+from datetime import datetime, date
+from django.forms import NumberInput, TextInput, DateInput, CheckboxInput, PasswordInput
+from .models import Setting
+from django.conf import settings as django_settings
+
+class Value(forms.Field):
+
+    def __init__(self, default, editable=False, label=None, prefix=None, name=None, description=None, choices=None):
+        self.default = default
+        self.name = name
+        self.prefix = prefix
+        self.editable = editable
+        self.description = description
+        self.choices = choices
+        self.label = label
+        self.formfield = self.formfield()
+
+    def validate(self, value):
+        return self.formfield.validate(value)
+
+
+class IntegerValue(Value):
+    formfield = forms.IntegerField
+
+
+class StringValue(Value):
+    formfield = forms.CharField
+
+
+class PasswordValue(Value):
+    formfield = forms.PasswordInput
+
+
+class TextValue(Value):
+    widget = TextInput
+    func = unicode
+
+
+class ListValue(Value):
+    formfield = forms.CharField
+    func = list
+
+
+class DateValue(Value):
+    formfield = forms.DateField
+
+
+class BoolValue(Value):
+    formfield = forms.BooleanField
+
+
+class ClassValue(Value):
+    formfield = forms.BooleanField
+
+
+default_mapping = (
+ (
+  (
+   bool,), BoolValue),
+ (
+  (
+   list, tuple), ListValue),
+ (
+  (
+   six.string_types,), StringValue),
+ (
+  (
+   datetime, date), DateValue),
+ (
+  (
+   int, long), IntegerValue))
+
+def get_descriptor(value):
+    if isinstance(value, Value):
+        return value
+    for types, descriptor in default_mapping:
+        if isinstance(value, types):
+            return descriptor(value)

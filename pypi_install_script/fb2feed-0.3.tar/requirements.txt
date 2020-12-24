@@ -1,0 +1,6 @@
+aiohttp==3.3.2
+MechanicalSoup==0.10.0
+feedgen==0.7.0
+pytz==2018.5
+xdg==3.0.2
+youtube-dl==2018.7.10

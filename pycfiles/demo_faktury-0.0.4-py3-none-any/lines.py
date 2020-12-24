@@ -1,0 +1,86 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: <demo_faktury-0.0.4>\lines.py
+# Compiled at: 2020-03-26 17:02:32
+# Size of source mod 2**32: 3358 bytes
+"""
+Plugin to extract individual lines from an invoice.
+
+Initial work and maintenance by Holger Brunn @hbrunn
+"""
+import re, logging
+logger = logging.getLogger(__name__)
+DEFAULT_OPTIONS = {'field_separator':'\\s+', 
+ 'line_separator':'\\n'}
+
+def extract(self, content, output):
+    """Try to extract lines from the invoice"""
+    plugin_settings = DEFAULT_OPTIONS.copy()
+    plugin_settings.update(self['lines'])
+    self['lines'] = plugin_settings
+    assert 'start' in self['lines'], 'Lines start regex missing'
+    assert 'end' in self['lines'], 'Lines end regex missing'
+    assert 'line' in self['lines'], 'Line regex missing'
+    start = re.search(self['lines']['start'], content)
+    end = re.search(self['lines']['end'], content)
+    if not (start and end):
+        logger.warning('no lines found - start %s, end %s', start, end)
+        return
+    content = content[start.end():end.start()]
+    lines = []
+    current_row = {}
+    if 'first_line' not in self['lines']:
+        if 'last_line' not in self['lines']:
+            self['lines']['first_line'] = self['lines']['line']
+    for line in re.split(self['lines']['line_separator'], content):
+        if line.strip('').strip('\n'):
+            if not line:
+                continue
+            else:
+                if 'first_line' in self['lines']:
+                    match = re.search(self['lines']['first_line'], line)
+                    if match:
+                        if 'last_line' not in self['lines']:
+                            if current_row:
+                                lines.append(current_row)
+                            current_row = {}
+                        if current_row:
+                            lines.append(current_row)
+                        current_row = {field:value.strip() if value else '' for field, value in match.groupdict().items()}
+                        continue
+                if 'last_line' in self['lines']:
+                    match = re.search(self['lines']['last_line'], line)
+                    if match:
+                        for field, value in match.groupdict().items():
+                            current_row[field] = '%s%s%s' % (
+                             current_row.get(field, ''),
+                             current_row.get(field, '') and '\n' or '',
+                             value.strip() if value else '')
+
+                        if current_row:
+                            lines.append(current_row)
+                        current_row = {}
+                        continue
+            match = re.search(self['lines']['line'], line)
+            if match:
+                for field, value in match.groupdict().items():
+                    current_row[field] = '%s%s%s' % (
+                     current_row.get(field, ''),
+                     current_row.get(field, '') and '\n' or '',
+                     value.strip() if value else '')
+
+                continue
+            logger.debug("ignoring *%s* because it doesn't match anything", line)
+
+    if current_row:
+        lines.append(current_row)
+    types = self['lines'].get('types', [])
+    for row in lines:
+        for name in row.keys():
+            if name in types:
+                row[name] = self.coerce_type(row[name], types[name])
+
+    if lines:
+        output['lines'] = lines

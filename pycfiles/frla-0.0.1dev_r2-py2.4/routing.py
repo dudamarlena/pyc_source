@@ -1,0 +1,23 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/frla/config/routing.py
+# Compiled at: 2008-09-22 07:47:18
+"""Routes configuration
+
+The more specific and detailed routes should be defined first so they
+may take precedent over the more generic routes. For more information
+refer to the routes manual at http://routes.groovie.org/docs/
+"""
+from pylons import config
+from routes import Mapper
+
+def make_map():
+    """Create, configure and return the routes Mapper"""
+    map = Mapper(directory=config['pylons.paths']['controllers'], always_scan=config['debug'])
+    map.connect('error/:action/:id', controller='error')
+    map.connect(':controller/:action/:id')
+    map.connect('*url', controller='template', action='view')
+    map.connect('', controller='hello', action='index')
+    return map

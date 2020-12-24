@@ -1,0 +1,4 @@
+dependency_management~=0.3.1
+docopt==0.6.2
+termcolor==1.1.0
+coala>=0.10.0.dev20170208181921

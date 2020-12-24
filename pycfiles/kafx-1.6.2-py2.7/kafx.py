@@ -1,0 +1,170 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\kafx\kafx.py
+# Compiled at: 2012-03-28 00:12:16
+import os, subprocess as s, ctypes
+from OpenGL.GLUT import *
+from OpenGL.GLU import *
+from OpenGL.GL import *
+import traceback
+traceback.sys.stdout = open('kafx_log.txt', 'w', 0)
+traceback.sys.stderr = open('error_log.txt', 'w', 0)
+import kafx_main as kf
+from libs import video
+
+class Encoder:
+    running = False
+    texture = None
+    cuadro = 0
+
+    def __init__(self, module, profile=False, d3=False):
+        self.cwd = os.getcwd()
+        if self.cwd not in os.sys.path:
+            os.sys.path.insert(0, self.cwd)
+        self.module = module
+        self.profile = profile
+        self.d3 = d3
+        kf.SetProfiling(bool(self.profile))
+        try:
+            self.conf = __import__(module)
+            print ('Module imported', module, self.conf)
+        except Exception as e:
+            print e
+            print "I couldn't import " + module + "(.py) check that it's an existing file, the name is correct and hasn't errors"
+            exit(-1)
+
+        self.start_frame = self.conf.start_frame
+        self.getVideoInfo()
+        self.in_args = [
+         'ffmpeg', '-i', self.conf.video_in,
+         '-pix_fmt', 'rgb32', '-f', 'rawvideo', '-y', '-']
+        if self.d3:
+            self.conf.out_parameters.insert(-2, '-vf')
+            self.conf.out_parameters.insert(-2, 'vflip')
+        self.out_args = [
+         'ffmpeg', '-r', str(self.fps), '-pix_fmt', 'rgb32',
+         '-s', str(self.w) + 'x' + str(self.h), '-f', 'rawvideo', '-i', '-'] + self.conf.out_parameters
+        self.dec = s.Popen(self.in_args, bufsize=self.framesize, stdout=s.PIPE, stderr=open('in_err.txt', 'w'))
+        self.enc = s.Popen(self.out_args, bufsize=self.framesize, stdin=s.PIPE)
+
+    def Go(self):
+        self.running = True
+        glutInit()
+        glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
+        glutInitWindowSize(self.w, self.h)
+        glutCreateWindow('KIckAss FX OpenGL! || Free As A Bird')
+        glutDisplayFunc(self.Display)
+        glutIdleFunc(self.Display)
+        glutReshapeFunc(self.OnReshape)
+        glClearColor(0.0, 0.0, 0.0, 1.0)
+        glShadeModel(GL_SMOOTH)
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_TEXTURE_2D)
+        glMatrixMode(GL_PROJECTION)
+        gluPerspective(1.0, 1.0, 1.0, 1.0)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        self.texture = glGenTextures(1)
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4)
+        glBindTexture(GL_TEXTURE_2D, self.texture)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, self.w, self.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, [])
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP)
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP)
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
+        kf.OnInit(self.conf.fx, self.conf.assfile, video.CS_BGR32, 0, self.w, self.h, self.fps, 1, self.duration)
+        return glutMainLoop()
+
+    def OnReshape(self, *args):
+        glutReshapeWindow(self.w, self.h)
+
+    def Stop(self):
+        print 'Leaving'
+        self.running = False
+        self.enc.terminate()
+        self.dec.terminate()
+        kf.OnDestroy()
+
+    def getVideoInfo(self):
+        from libs import asslib
+        infop = s.Popen(['ffmpeg', '-i', self.conf.video_in], stdout=s.PIPE, stderr=s.PIPE)
+        out, err = infop.communicate()
+        self.durations = '01:00:00.00'
+        self.fps = 29.97
+        self.w = 640
+        self.h = 480
+        for l in err.splitlines():
+            low = l.lower()
+            if 'duration: ' in low:
+                a = l.find(': ')
+                a += 2
+                b = l.find(',')
+                self.durations = l[a:b]
+                print self.durations
+            elif 'stream #' in low and 'video: ' in low:
+                parts = low.split(',')
+                self.w, self.h = map(int, parts[2].strip().split(' ')[0].split('x'))
+                self.fps = float(parts[4].strip().split(' ')[0])
+
+        self.stride = self.w * 4
+        self.framesize = self.stride * self.h
+        video.vi.fps = self.fps
+        video.vi.fpscof1 = self.fps / 1000.0
+        self.durationms = asslib.TimeToMS(self.durations)
+        self.duration = video.vi.MSToFrame(self.durationms)
+        print 'frames %s, fps %s, %sx%s' % (self.duration, self.fps, self.w, self.h)
+
+    def Display(self, *args):
+        if not self.running:
+            return
+        else:
+            if self.dec.poll() != None:
+                exit(-2)
+            pixels = ctypes.create_string_buffer(self.dec.stdout.read(self.framesize), self.framesize)
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+            glBindTexture(GL_TEXTURE_2D, self.texture)
+            kf.OnFrame(self.cuadro, self.stride, pixels)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, self.w, self.h, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixels)
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP)
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP)
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+            glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL)
+            glBegin(GL_QUADS)
+            glTexCoord2f(0.0, 0.0)
+            glVertex3f(-1.0, 1.0, 0.0)
+            glTexCoord2f(0.0, 1.0)
+            glVertex3f(-1.0, -1.0, 0.0)
+            glTexCoord2f(1.0, 1.0)
+            glVertex3f(1.0, -1.0, 0.0)
+            glTexCoord2f(1.0, 0.0)
+            glVertex3f(1.0, 1.0, 0.0)
+            glEnd()
+            glutSwapBuffers()
+            glutPostRedisplay()
+            if self.d3:
+                glReadPixels(0, 0, self.w, self.h, GL_BGRA, GL_UNSIGNED_BYTE, pixels)
+            self.enc.stdin.write(pixels)
+            self.cuadro += 1
+            return
+
+
+if __name__ == '__main__':
+    module = 'myconfig'
+    profile = False
+    d3 = False
+    argv = os.sys.argv
+    if len(argv) > 1:
+        module = argv[1]
+        module = os.path.split(module)[(-1)]
+        module = module.split('.')[0]
+    if len(argv) > 2:
+        profile = bool(argv[2])
+    if len(argv) > 3:
+        d3 = bool(argv[3])
+    enc = Encoder(module, profile, d3)
+    enc.Go()
+    enc.Stop()

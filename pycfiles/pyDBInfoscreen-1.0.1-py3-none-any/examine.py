@@ -1,0 +1,54 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-i686/egg/pydbgr/processor/command/examine.py
+# Compiled at: 2013-03-22 02:05:21
+import os
+from import_relative import import_relative
+Mbase_cmd = import_relative('base_cmd', top_name='pydbgr')
+Mprint = import_relative('print', '...lib', 'pydbgr')
+
+class ExamineCommand(Mbase_cmd.DebuggerCommand):
+    """**examine** *expr1* [*expr2* ...]
+   
+Examine value, type and object attributes of an expression. 
+
+In contrast to normal Python expressions, expressions should not have
+blanks which would cause shlex to see them as different tokens.
+
+**Examples:**
+
+    examine x+1   # ok
+    examine x + 1 # not ok
+
+See also `print`, `pp`, and `whatis`.
+"""
+    __module__ = __name__
+    aliases = ('x', )
+    category = 'data'
+    min_args = 1
+    max_args = None
+    name = os.path.basename(__file__).split('.')[0]
+    need_stack = True
+    short_help = 'Examine value, type and object attributes of an expression'
+
+    def run(self, args):
+        for arg in args[1:]:
+            s = Mprint.print_obj(arg, self.proc.curframe)
+            self.msg(s)
+
+
+if __name__ == '__main__':
+    import inspect
+    cmdproc = import_relative('cmdproc', '..')
+    debugger = import_relative('debugger', '...')
+    d = debugger.Debugger()
+    cp = d.core.processor
+    cp.curframe = inspect.currentframe()
+    command = ExamineCommand(cp)
+    command.run(['examine', '10'])
+    me = []
+    print '=' * 30
+    command.run(['examine', 'me'])
+    print '=' * 30
+    command.run(['examine', 'Mbase_cmd.DebuggerCommand'])

@@ -1,0 +1,251 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\banta\test\test_main.py
+# Compiled at: 2012-10-26 17:43:02
+from __future__ import absolute_import, print_function, unicode_literals
+import sys
+EXCEPTIONS = 0
+
+def my_excepthook(type, value, tback):
+    global EXCEPTIONS
+    EXCEPTIONS += 1
+    sys.__excepthook__(type, value, tback)
+
+
+sys.excepthook = my_excepthook
+import py.test
+from PySide.QtTest import QTest as _qtt
+import PySide.QtCore as _qc, PySide.QtGui as _qg, banta
+app = None
+w = None
+print_result = None
+
+def setup_module(module):
+    global app
+    global w
+    if app is None:
+        app = banta.App()
+        w = app.window
+        w.showMaximized()
+    return
+
+
+def teardown_module(module):
+    app.exit()
+
+
+class TestBanta():
+
+    def test_loads(self):
+        assert app is not None
+        assert isinstance(app, banta.App)
+        assert banta.db.DB.printer is not None
+        k = banta.db.updates.UPDATES.keys()
+        k.sort()
+        assert banta.db.DB.root[b'version'] == k[(-1)] + 1
+        return
+
+    @_qc.Slot(list)
+    def printing_finished(self, results):
+        self.print_results = results
+        self.el.quit()
+
+    def close_dialog_yes(self):
+        dialog = app.activeWindow()
+        yes_button = dialog.button(_qg.QMessageBox.Yes)
+        _qtt.mouseClick(yes_button, _qc.Qt.LeftButton)
+
+    def test_print(self):
+        global EXCEPTIONS
+        EXCEPTIONS = 0
+        try:
+            last_bill = banta.db.DB.bills.maxKey()
+        except ValueError:
+            last_bill = 0
+
+        _qtt.mouseClick(w.cb_clients, _qc.Qt.LeftButton)
+        _qtt.keyClicks(w.cb_clients, b'Consumidor\t', 0, 1)
+        assert w.lBCliDetail.text() == b'[00000000] Consumidor Final (Consumidor Final)'
+        self.print_results = None
+        self.el = _qc.QEventLoop()
+        timer = _qc.QTimer()
+        timer.timeout.connect(self.el.quit)
+        app.modules[b'printer'].tprinter.printingFinished.connect(self.printing_finished)
+        _qc.QTimer().singleShot(500, self.close_dialog_yes)
+        _qtt.mouseClick(w.bBillPrint, _qc.Qt.LeftButton)
+        self.el.exec_()
+        assert self.print_results
+        assert self.print_results[0]
+        assert last_bill < banta.db.DB.bills.maxKey()
+        assert self.print_results[1].idn == banta.db.DB.bills.maxKey()
+        print_resutls = self.print_results
+        e = EXCEPTIONS
+        assert not e
+        return
+
+    def test_printA(self):
+        pass
+
+    def test_newClient(self):
+        global EXCEPTIONS
+        EXCEPTIONS = 0
+        _qtt.mouseClick(w.bCliNew, _qc.Qt.LeftButton)
+        mod = w.v_clients.model()
+        r = mod.rowCount()
+        idx = mod.index(r - 1, 1)
+        idn = idx.data(_qc.Qt.UserRole)
+        assert idn > -1
+        assert idn in banta.db.DB.clients
+        name = idx.data()
+        assert name == b'Nuevo cliente'
+        mod.setData(idx, b'Juan\n\t\rMocho')
+        name = idx.data()
+        assert name == b'Juan   Mocho'
+        e = EXCEPTIONS
+        assert not e
+
+    def test_delClient(self):
+        global EXCEPTIONS
+        EXCEPTIONS = 0
+        t_cli = b'Juan   Mocho'
+        cli_mod = w.v_clients.model()
+        i_start = cli_mod.index(0, 1)
+        matches = cli_mod.match(i_start, _qc.Qt.EditRole, t_cli, -1)
+        assert len(matches)
+        i = matches[0]
+        c = cli_mod.data(i, _qc.Qt.EditRole)
+        assert t_cli == c
+        idn = cli_mod.data(i, _qc.Qt.UserRole)
+        w.v_clients.selectionModel().clearSelection()
+        w.v_clients.selectRow(i.row())
+        w.v_clients.scrollTo(i)
+        _qtt.mouseClick(w.bCliDelete, _qc.Qt.LeftButton)
+        assert idn not in banta.db.DB.clients
+        e = EXCEPTIONS
+        assert not e
+
+    def test_billChangeProduct(self):
+        pass
+
+    def test_newProduct(self):
+        global EXCEPTIONS
+        EXCEPTIONS = 0
+        tp_code = b'test11'
+
+        def __enterProduct():
+            dialog = app.activeWindow()
+            dialog.setTextValue(tp_code)
+            _qtt.keyClick(dialog, _qc.Qt.Key_Enter)
+
+        if tp_code in banta.db.DB.products:
+            del banta.db.DB.products[tp_code]
+        _qc.QTimer().singleShot(200, __enterProduct)
+        _qtt.mouseClick(w.bProdNew, _qc.Qt.LeftButton)
+        assert tp_code in banta.db.DB.products
+        e = EXCEPTIONS
+        assert not e
+
+    def test_delProduct(self):
+        global EXCEPTIONS
+        EXCEPTIONS = 0
+        tp_code = b'test11'
+        assert tp_code in banta.db.DB.products
+        mod = w.v_products.model()
+        i_start = mod.index(0, 0)
+        matches = mod.match(i_start, _qc.Qt.UserRole, tp_code, -1)
+        assert len(matches)
+        i = matches[0]
+        p = mod.data(i, _qc.Qt.EditRole)
+        assert tp_code == p
+        w.v_products.selectionModel().clearSelection()
+        w.v_products.selectRow(i.row())
+        w.v_products.scrollTo(i)
+        _qtt.mouseClick(w.bProdDelete, _qc.Qt.LeftButton)
+        assert tp_code not in banta.db.DB.products
+        e = EXCEPTIONS
+        assert not e
+
+    def test_newProvider(self):
+        global EXCEPTIONS
+        EXCEPTIONS = 0
+        tp_code = b'test11'
+
+        def __enterProvider():
+            dialog = app.activeWindow()
+            dialog.setTextValue(tp_code)
+            _qtt.keyClick(dialog, _qc.Qt.Key_Enter)
+
+        if tp_code in banta.db.DB.providers:
+            del banta.db.DB.providers[tp_code]
+        _qc.QTimer().singleShot(200, __enterProvider)
+        _qtt.mouseClick(w.bProvNew, _qc.Qt.LeftButton)
+        assert tp_code in banta.db.DB.providers
+        e = EXCEPTIONS
+        if e:
+            import traceback
+            traceback.print_last()
+        assert not e
+
+    def test_delProvider(self):
+        global EXCEPTIONS
+        EXCEPTIONS = 0
+        code = b'test11'
+        assert code in banta.db.DB.providers
+        mod = w.vProviders.model()
+        i_start = mod.index(0, 0)
+        matches = mod.match(i_start, _qc.Qt.UserRole, code, -1)
+        assert len(matches)
+        i = matches[0]
+        p = i.data(_qc.Qt.EditRole)
+        assert code == p
+        w.vProviders.selectionModel().clearSelection()
+        w.vProviders.selectRow(i.row())
+        w.vProviders.scrollTo(i)
+        _qtt.mouseClick(w.bProvDelete, _qc.Qt.LeftButton)
+        assert code not in banta.db.DB.providers
+        e = EXCEPTIONS
+        assert not e
+
+    def test_mostrarFacturas(self):
+        global EXCEPTIONS
+        EXCEPTIONS = 0
+        success, bill, number, error = self.print_results
+        assert bill.idn
+        _qtt.mouseClick(w.bProvDelete, _qc.Qt.LeftButton)
+        bill_mod = app.modules[b'bill list']
+        e = EXCEPTIONS
+        assert not e
+
+    def setup_method(self, method):
+        pass
+
+    @classmethod
+    def setup_class(cls):
+        """ setup any state specific to the execution of the given class (which
+                usually contains tests).
+                """
+        pass
+
+    @classmethod
+    def teardown_class(cls):
+        """ teardown any state that was previously setup with a call to
+                setup_class.
+                """
+        pass
+
+    def setup_method(self, method):
+        """ setup any state tied to the execution of the given method in a
+                class. setup_method is invoked for every test method of a class.
+                """
+        pass
+
+    def teardown_method(self, method):
+        """ teardown any state that was previously setup with a setup_method
+                call.
+                """
+        pass
+
+
+thanks = b' Thanks to:\nntome @ freenode.net\nhpk @ freenode.net/#pylib\n'

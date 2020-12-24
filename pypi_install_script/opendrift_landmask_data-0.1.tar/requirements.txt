@@ -1,0 +1,9 @@
+cartopy
+setuptools
+setuptools_scm
+wheel
+twine
+rasterio
+shapely[vectorized]
+pyepsg
+

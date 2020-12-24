@@ -1,0 +1,10 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: D:\FilePkl\latihan_django\11agustus\djangoproj\djangoproj\urls.py
+# Compiled at: 2014-08-20 23:28:45
+from django.conf.urls import patterns, include, url
+from django.contrib import admin
+admin.autodiscover()
+urlpatterns = patterns('', url('^djangoapp/(?P<slug>[-\\w]+)/$', 'djangoapp.views.command', name='app'), url('^form/process/$', 'djangoapp.views.handlerrequest', name='hasil_post'), url('^form/$', 'djangoapp.views.form', name='form'), url('^contact/', 'form.views.contact', name='contact'), url('^search-form/$', 'djangoapp.views.search_form', name='search_form'), url('^uagood/', 'djangoapp.views.uagood', name='uagood'), url('^uabad/', 'djangoapp.views.uabad', name='uabad'), url('^admin/', include(admin.site.urls)), url('^$', 'djangoapp.views.home', name='home'), url('^copy-form/', 'djangoapp.views.copyform', name='copyform'), url('^copy/', 'djangoapp.views.copy', name='copy'), url('^execute/', 'djangoapp.views.execpy', name='execute'), url('^add/', 'djangoapp.views.add', name='add'), url('^makedir-form/', 'djangoapp.views.makedirform', name='makedirform'), url('^makedir/', 'djangoapp.views.makedir', name='makedir'), url('^removdir-form/', 'djangoapp.views.removdirform', name='removdirform'), url('^removdir/', 'djangoapp.views.removdir', name='removdir'), url('^deletedir-form/', 'djangoapp.views.deletedirform', name='deletedirform'), url('^deletedir/', 'djangoapp.views.deletedir', name='deletedir'), url('^createfile-form/', 'djangoapp.views.createfileform', name='createfileform'), url('^createfile/', 'djangoapp.views.createfile', name='createfile'), url('^deletefile-form/', 'djangoapp.views.deletefileform', name='deletefileform'), url('^deletefile/', 'djangoapp.views.deletefile', name='deletefile'))

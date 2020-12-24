@@ -1,0 +1,4 @@
+napalm-base==0.18.0
+bnclient==0.3
+future
+paramiko==2.1.1

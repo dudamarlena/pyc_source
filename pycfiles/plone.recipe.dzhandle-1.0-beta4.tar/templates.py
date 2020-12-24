@@ -1,0 +1,10 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.macosx-10.3-i386/egg/plone/recipe/deliverance/templates.py
+# Compiled at: 2008-04-05 13:29:50
+__doc__ = 'Various templates used to generate files\n'
+DELIVERANCE_INI = '[DEFAULT]\ndebug = %(debug)s\n#error_email = \n\n[server:main]\nuse = egg:Paste#http\nhost = %(host)s\nport = %(port)s\n\n[app:main]\nuse = egg:Deliverance#proxy\nwrap_href = %(proxy)s\nmount /.deliverance = %(location)s\ntheme_uri = %(theme)s\nrule_uri = %(rules)s\ntransparent = %(transparent)s\nrelocate_content = %(rewrite)s\nserializer = %(serializer)s\n\n[exe]\ncommand = serve\npid_file = %(directory)s/var/run/%(name)s.pid\nlog_file = %(directory)s/var/log/%(name)s.log\ndaemon = true\n#user = username\n#group = groupname\n'
+DEFAULT_RULES = '<?xml version="1.0" encoding="UTF-8"?>\n<rules xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="http://www.plone.org/deliverance" >\n  <xi:include href="standardrules.xml" />\n\n  <copy theme="//div[@id=\'content\']" content="//*[@id=\'portal-columns\']" />\n</rules>\n'
+STANDARD_RULES = '<?xml version="1.0" encoding="UTF-8"?>\n<rules xmlns:xi="http://www.w3.org/2001/XInclude" xmlns="http://www.plone.org/deliverance">\n  <prepend theme="//head" content="//head/link" nocontent="ignore" /> \n  <prepend theme="//head" content="//head/style" nocontent="ignore" /> \n  <append theme="//head" content="//head/script" nocontent="ignore" />    \n  <append theme="//head" content="//head/meta" nocontent="ignore" />\n  <append-or-replace theme="//head" content="//head/title"\n   nocontent="ignore" />\n</rules>\n'
+DEFAULT_THEME = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">\n<html>\n<head>\n<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-15">\n<title>The Theme</title>\n</head>\n\n<body>\n<h1>A theme</h1>\n\n<div id="content">\n</div>\n\n\n<hr>\n<address></address>\n<!-- hhmts start -->Last modified: Fri Mar 16 09:33:37 CDT 2007 <!-- hhmts end -->\n</body> </html>\n'

@@ -1,0 +1,79 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.14-x86_64/egg/discordrouter/router.py
+# Compiled at: 2019-06-09 21:06:04
+# Size of source mod 2**32: 1884 bytes
+from functools import wraps
+from chatbottokenizer import Tokenizer
+
+def message(router: 'Router', template: str, help: str=''):
+
+    def decorator(func):
+        router.add(template, func, help)
+
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            await func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def guide(router: 'Router'):
+
+    def decorator(func):
+        router.set_guide(func)
+
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            await func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+class Router:
+    commands = []
+    guide = None
+
+    def __init__(self, name: str, auto_help=False):
+        self.name = name
+        self.auto_help = auto_help
+
+    def add(self, template, func, hlp):
+        self.commands.append((template, func, hlp))
+
+    def set_guide(self, func):
+        self.guide = func
+
+    def set_name(self, name: str) -> None:
+        self.name = name
+
+    def _create_help(self):
+        output = [f"{self.name} {tmpl} - {hlp}" for tmpl, _, hlp in self.commands]
+        output = '\n'.join(output)
+        output = f"```{output}```"
+        return output
+
+    async def __call__(self, _self, message: 'discord.Message'):
+        tokens = Tokenizer(self.name, message.content)
+        if not tokens.to_bot():
+            return
+        else:
+            for tmpl, func, _ in self.commands:
+                if tokens.match(tmpl):
+                    await func(_self,
+                      items=(tokens.items()),
+                      message=message,
+                      send=(message.channel.send))
+                    return
+
+            if self.auto_help:
+                await message.channel.send(self._create_help())
+            else:
+                if self.guide != None:
+                    await self.guide(_self, message=message, send=(message.channel.send))

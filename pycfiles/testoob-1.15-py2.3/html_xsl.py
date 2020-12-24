@@ -1,0 +1,7 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.3 (62011)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/testoob/reporting/html_xsl.py
+# Compiled at: 2009-10-07 18:08:46
+XSL = ('\n<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">\n  <xsl:param name="date" select="\'unknown\'"/>\n  <xsl:template match="/">\n    <html>\n      <head><title>Testoob report</title></head>\n      <body>\n        <h2>Summarized results for tests performed on date <xsl:value-of select="$date"/></h2>\n        <table border="1" >\n          <tr><td>Name</td><td>Time</td><td>Result</td><td>Info</td></tr>\n          <xsl:for-each select="results/testsuites/testcase">\n            <tr>\n              <td><xsl:value-of select="@name"/></td>\n              <td><xsl:value-of select="@time"/></td>\n              <xsl:choose>\n                <xsl:when test="result=\'success\'">\n                  <td><font color="green">Success</font></td>\n                </xsl:when>\n                <xsl:otherwise>\n                  <td><font color="red"><xsl:value-of select="result"/></font></td>\n                  <td>\n                    <pre>\n                      <xsl:value-of select="failure"/><xsl:value-of select="error"/>\n                    </pre>\n                  </td>\n                </xsl:otherwise>\n              </xsl:choose>\n\n            </tr>\n          </xsl:for-each>\n        </table>\n      </body>\n    </html>\n  </xsl:template>\n</xsl:stylesheet>\n').strip()

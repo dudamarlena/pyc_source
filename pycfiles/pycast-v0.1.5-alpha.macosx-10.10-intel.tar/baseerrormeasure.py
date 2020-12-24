@@ -1,0 +1,211 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Library/Python/2.7/site-packages/pycast/errors/baseerrormeasure.py
+# Compiled at: 2015-05-28 03:51:46
+from pycast.common import PyCastObject
+from pycast.common.decorators import optimized
+
+class BaseErrorMeasure(PyCastObject):
+    """Baseclass for all error measures."""
+
+    def __init__(self, minimalErrorCalculationPercentage=60):
+        """Initializes the error measure.
+
+        :param integer minimalErrorCalculationPercentage:    The number of entries in an
+            original TimeSeries that have to have corresponding partners in the calculated
+            TimeSeries. Corresponding partners have the same time stamp.
+            Valid values are in [0.0, 100.0].
+
+        :raise: Raises a :py:exc:`ValueError` if minimalErrorCalculationPercentage is not
+            in [0.0, 100.0].
+        """
+        super(BaseErrorMeasure, self).__init__()
+        if not 0.0 <= minimalErrorCalculationPercentage <= 100.0:
+            raise ValueError('minimalErrorCalculationPercentage has to be in [0.0, 100.0].')
+        self._minimalErrorCalculationPercentage = minimalErrorCalculationPercentage / 100.0
+        self._errorValues = []
+        self._errorDates = []
+
+    @optimized
+    def initialize(self, originalTimeSeries, calculatedTimeSeries):
+        """Initializes the ErrorMeasure.
+
+        During initialization, all :py:meth:`BaseErrorMeasure.local_errors` are calculated.
+
+        :param TimeSeries originalTimeSeries:    TimeSeries containing the original data.
+        :param TimeSeries calculatedTimeSeries:    TimeSeries containing calculated data.
+            Calculated data is smoothed or forecasted data.
+
+        :return:    Return :py:const:`True` if the error could be calculated, :py:const:`False`
+            otherwise based on the minimalErrorCalculationPercentage.
+        :rtype: boolean
+
+        :raise:    Raises a :py:exc:`StandardError` if the error measure is initialized multiple times.
+        """
+        if 0 < len(self._errorValues):
+            raise StandardError('An ErrorMeasure can only be initialized once.')
+        originalTimeSeries.sort_timeseries()
+        calculatedTimeSeries.sort_timeseries()
+        append = self._errorValues.append
+        appendDate = self._errorDates.append
+        local_error = self.local_error
+        minCalcIdx = 0
+        for orgPair in originalTimeSeries:
+            for calcIdx in xrange(minCalcIdx, len(calculatedTimeSeries)):
+                calcPair = calculatedTimeSeries[calcIdx]
+                if calcPair[0] != orgPair[0]:
+                    continue
+                append(local_error(orgPair[1:], calcPair[1:]))
+                appendDate(orgPair[0])
+
+        if len(filter(lambda item: item != None, self._errorValues)) < self._minimalErrorCalculationPercentage * len(originalTimeSeries):
+            self._errorValues = []
+            self._errorDates = []
+            return False
+        return True
+
+    def _get_error_values(self, startingPercentage, endPercentage, startDate, endDate):
+        """Gets the defined subset of self._errorValues.
+
+        Both parameters will be correct at this time.
+
+        :param float startingPercentage: Defines the start of the interval. This has to be a value in [0.0, 100.0].
+            It represents the value, where the error calculation should be started. 
+            25.0 for example means that the first 25% of all calculated errors will be ignored.
+        :param float endPercentage:    Defines the end of the interval. This has to be a value in [0.0, 100.0].
+            It represents the value, after which all error values will be ignored. 90.0 for example means that
+            the last 10% of all local errors will be ignored.
+        :param float startDate: Epoch representing the start date used for error calculation.
+        :param float endDate: Epoch representing the end date used in the error calculation.
+
+        :return:    Returns a list with the defined error values.
+        :rtype: list
+
+        :raise:    Raises a ValueError if startDate or endDate do not represent correct boundaries for error calculation.
+        """
+        if None != startDate:
+            possibleDates = filter(lambda date: date >= startDate, self._errorDates)
+            if 0 == len(possibleDates):
+                raise ValueError('%s does not represent a valid startDate.' % startDate)
+            startIdx = self._errorDates.index(min(possibleDates))
+        else:
+            startIdx = int(startingPercentage * len(self._errorValues) / 100.0)
+        if None != endDate:
+            possibleDates = filter(lambda date: date <= endDate, self._errorDates)
+            if 0 == len(possibleDates):
+                raise ValueError('%s does not represent a valid endDate.' % endDate)
+            endIdx = self._errorDates.index(max(possibleDates)) + 1
+        else:
+            endIdx = int(endPercentage * len(self._errorValues) / 100.0)
+        return self._errorValues[startIdx:endIdx]
+
+    def get_error(self, startingPercentage=0.0, endPercentage=100.0, startDate=None, endDate=None):
+        """Calculates the error for the given interval (startingPercentage, endPercentage) between the TimeSeries 
+        given during :py:meth:`BaseErrorMeasure.initialize`.
+
+        :param float startingPercentage: Defines the start of the interval. This has to be a value in [0.0, 100.0].
+            It represents the value, where the error calculation should be started. 
+            25.0 for example means that the first 25% of all calculated errors will be ignored.
+        :param float endPercentage:    Defines the end of the interval. This has to be a value in [0.0, 100.0].
+            It represents the value, after which all error values will be ignored. 90.0 for example means that
+            the last 10% of all local errors will be ignored.
+        :param float startDate: Epoch representing the start date used for error calculation.
+        :param float endDate: Epoch representing the end date used in the error calculation.
+
+        :return:    Returns a float representing the error.
+        :rtype: float
+
+        :raise:    Raises a :py:exc:`ValueError` in one of the following cases:
+            
+            - startingPercentage not in [0.0, 100.0]
+            - endPercentage      not in [0.0, 100.0]
+            - endPercentage < startingPercentage
+
+        :raise:    Raises a :py:exc:`StandardError` if :py:meth:`BaseErrorMeasure.initialize` was not successfull before.
+        """
+        if len(self._errorValues) == 0:
+            raise StandardError('The last call of initialize(...) was not successfull.')
+        if not 0.0 <= startingPercentage <= 100.0:
+            raise ValueError('startingPercentage has to be in [0.0, 100.0].')
+        if not 0.0 <= endPercentage <= 100.0:
+            raise ValueError('endPercentage has to be in [0.0, 100.0].')
+        if endPercentage < startingPercentage:
+            raise ValueError('endPercentage has to be greater or equal than startingPercentage.')
+        return self._calculate(startingPercentage, endPercentage, startDate, endDate)
+
+    def _calculate(self, startingPercentage, endPercentage, startDate, endDate):
+        """This is the error calculation function that gets called by :py:meth:`BaseErrorMeasure.get_error`.
+
+        Both parameters will be correct at this time.
+
+        :param float startingPercentage: Defines the start of the interval. This has to be a value in [0.0, 100.0].
+            It represents the value, where the error calculation should be started. 
+            25.0 for example means that the first 25% of all calculated errors will be ignored.
+        :param float endPercentage:    Defines the end of the interval. This has to be a value in [0.0, 100.0].
+            It represents the value, after which all error values will be ignored. 90.0 for example means that
+            the last 10% of all local errors will be ignored.
+        :param float startDate: Epoch representing the start date used for error calculation.
+        :param float endDate: Epoch representing the end date used in the error calculation.
+
+        :return:    Returns a float representing the error.
+        :rtype: float
+
+        :raise:    Raises a :py:exc:`NotImplementedError` if the child class does not overwrite this method.
+        """
+        raise NotImplementedError
+
+    def local_error(self, originalValue, calculatedValue):
+        """Calculates the error between the two given values.
+
+        :param list originalValue:    List containing the values of the original data.
+        :param list calculatedValue:    List containing the values of the calculated TimeSeries that
+            corresponds to originalValue.
+
+        :return:    Returns the error measure of the two given values.
+        :rtype:     numeric
+
+        :raise:    Raises a :py:exc:`NotImplementedError` if the child class does not overwrite this method.
+        """
+        raise NotImplementedError
+
+    def confidence_interval(self, confidenceLevel):
+        """Calculates for which value confidenceLevel% of the errors are closer to 0.
+
+        :param float confidenceLevel: percentage of the errors that should be
+            smaller than the returned value for overestimations and larger than
+            the returned value for underestimations.
+            confidenceLevel has to be in [0.0, 1.0]
+
+        :return:    return a tuple containing the underestimation and overestimation for
+            the given confidenceLevel
+        :rtype:     tuple
+
+        :warning:    Index is still not calculated correctly
+        """
+        if not (confidenceLevel >= 0 and confidenceLevel <= 1):
+            raise ValueError('Parameter percentage has to be in [0,1]')
+        underestimations = []
+        overestimations = []
+        for error in self._errorValues:
+            if error is None:
+                continue
+            if error >= 0:
+                overestimations.append(error)
+            if error <= 0:
+                underestimations.append(error)
+
+        overestimations.sort()
+        underestimations.sort(reverse=True)
+        overIdx = int(len(overestimations) * confidenceLevel) - 1
+        underIdx = int(len(underestimations) * confidenceLevel) - 1
+        overestimation = 0.0
+        underestimation = 0.0
+        if overIdx >= 0:
+            overestimation = overestimations[overIdx]
+        else:
+            print len(overestimations), confidenceLevel
+        if underIdx >= 0:
+            underestimation = underestimations[underIdx]
+        return (underestimation, overestimation)

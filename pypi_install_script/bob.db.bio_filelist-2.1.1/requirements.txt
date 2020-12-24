@@ -1,0 +1,4 @@
+setuptools
+bob.core
+bob.io.base
+bob.db.base

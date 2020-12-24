@@ -1,0 +1,143 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.12-x86_64/egg/dicom_tools/pyqtgraph/GraphicsScene/exportDialog.py
+# Compiled at: 2018-05-21 04:28:19
+# Size of source mod 2**32: 5223 bytes
+from ..Qt import QtCore, QtGui, USE_PYSIDE, USE_PYQT5
+from .. import exporters
+from .. import functions as fn
+import graphicsItems.ViewBox as ViewBox
+import graphicsItems.PlotItem as PlotItem
+if USE_PYSIDE:
+    from . import exportDialogTemplate_pyside as exportDialogTemplate
+else:
+    if USE_PYQT5:
+        from . import exportDialogTemplate_pyqt5 as exportDialogTemplate
+    else:
+        from . import exportDialogTemplate_pyqt as exportDialogTemplate
+
+class ExportDialog(QtGui.QWidget):
+
+    def __init__(self, scene):
+        QtGui.QWidget.__init__(self)
+        self.setVisible(False)
+        self.setWindowTitle('Export')
+        self.shown = False
+        self.currentExporter = None
+        self.scene = scene
+        self.selectBox = QtGui.QGraphicsRectItem()
+        self.selectBox.setPen(fn.mkPen('y', width=3, style=(QtCore.Qt.DashLine)))
+        self.selectBox.hide()
+        self.scene.addItem(self.selectBox)
+        self.ui = exportDialogTemplate.Ui_Form()
+        self.ui.setupUi(self)
+        self.ui.closeBtn.clicked.connect(self.close)
+        self.ui.exportBtn.clicked.connect(self.exportClicked)
+        self.ui.copyBtn.clicked.connect(self.copyClicked)
+        self.ui.itemTree.currentItemChanged.connect(self.exportItemChanged)
+        self.ui.formatList.currentItemChanged.connect(self.exportFormatChanged)
+
+    def show(self, item=None):
+        if item is not None:
+            while not isinstance(item, ViewBox):
+                if not isinstance(item, PlotItem):
+                    if item is not None:
+                        item = item.parentItem()
+
+            if isinstance(item, ViewBox):
+                if isinstance(item.parentItem(), PlotItem):
+                    item = item.parentItem()
+            self.updateItemList(select=item)
+        self.setVisible(True)
+        self.activateWindow()
+        self.raise_()
+        self.selectBox.setVisible(True)
+        if not self.shown:
+            self.shown = True
+            vcenter = self.scene.getViewWidget().geometry().center()
+            self.setGeometry(vcenter.x() - self.width() / 2, vcenter.y() - self.height() / 2, self.width(), self.height())
+
+    def updateItemList(self, select=None):
+        self.ui.itemTree.clear()
+        si = QtGui.QTreeWidgetItem(['Entire Scene'])
+        si.gitem = self.scene
+        self.ui.itemTree.addTopLevelItem(si)
+        self.ui.itemTree.setCurrentItem(si)
+        si.setExpanded(True)
+        for child in self.scene.items():
+            if child.parentItem() is None:
+                self.updateItemTree(child, si, select=select)
+
+    def updateItemTree(self, item, treeItem, select=None):
+        si = None
+        if isinstance(item, ViewBox):
+            si = QtGui.QTreeWidgetItem(['ViewBox'])
+        else:
+            if isinstance(item, PlotItem):
+                si = QtGui.QTreeWidgetItem(['Plot'])
+            elif si is not None:
+                si.gitem = item
+                treeItem.addChild(si)
+                treeItem = si
+                if si.gitem is select:
+                    self.ui.itemTree.setCurrentItem(si)
+            for ch in item.childItems():
+                self.updateItemTree(ch, treeItem, select=select)
+
+    def exportItemChanged(self, item, prev):
+        if item is None:
+            return
+        elif item.gitem is self.scene:
+            newBounds = self.scene.views()[0].viewRect()
+        else:
+            newBounds = item.gitem.sceneBoundingRect()
+        self.selectBox.setRect(newBounds)
+        self.selectBox.show()
+        self.updateFormatList()
+
+    def updateFormatList(self):
+        current = self.ui.formatList.currentItem()
+        if current is not None:
+            current = str(current.text())
+        self.ui.formatList.clear()
+        self.exporterClasses = {}
+        gotCurrent = False
+        for exp in exporters.listExporters():
+            self.ui.formatList.addItem(exp.Name)
+            self.exporterClasses[exp.Name] = exp
+            if exp.Name == current:
+                self.ui.formatList.setCurrentRow(self.ui.formatList.count() - 1)
+                gotCurrent = True
+
+        if not gotCurrent:
+            self.ui.formatList.setCurrentRow(0)
+
+    def exportFormatChanged(self, item, prev):
+        if item is None:
+            self.currentExporter = None
+            self.ui.paramTree.clear()
+            return
+        else:
+            expClass = self.exporterClasses[str(item.text())]
+            exp = expClass(item=(self.ui.itemTree.currentItem().gitem))
+            params = exp.parameters()
+            if params is None:
+                self.ui.paramTree.clear()
+            else:
+                self.ui.paramTree.setParameters(params)
+        self.currentExporter = exp
+        self.ui.copyBtn.setEnabled(exp.allowCopy)
+
+    def exportClicked(self):
+        self.selectBox.hide()
+        self.currentExporter.export()
+
+    def copyClicked(self):
+        self.selectBox.hide()
+        self.currentExporter.export(copy=True)
+
+    def close(self):
+        self.selectBox.setVisible(False)
+        self.setVisible(False)

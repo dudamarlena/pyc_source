@@ -1,0 +1,6 @@
+flask>=0.7
+peewee
+flask-admin<1.6
+flask-login>=0.4
+wtf-peewee
+simplejson

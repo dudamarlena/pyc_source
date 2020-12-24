@@ -1,0 +1,88 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3350)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /tmp/pip-build-jqog4noo/pygments/pygments/lexers/special.py
+# Compiled at: 2016-12-29 05:31:34
+# Size of source mod 2**32: 3069 bytes
+"""
+    pygments.lexers.special
+    ~~~~~~~~~~~~~~~~~~~~~~~
+
+    Special lexers.
+
+    :copyright: Copyright 2006-2015 by the Pygments team, see AUTHORS.
+    :license: BSD, see LICENSE for details.
+"""
+import re
+from pygments.lexer import Lexer
+from pygments.token import Token, Error, Text
+from pygments.util import get_choice_opt, text_type, BytesIO
+__all__ = [
+ 'TextLexer', 'RawTokenLexer']
+
+class TextLexer(Lexer):
+    __doc__ = '\n    "Null" lexer, doesn\'t highlight anything.\n    '
+    name = 'Text only'
+    aliases = ['text']
+    filenames = ['*.txt']
+    mimetypes = ['text/plain']
+
+    def get_tokens_unprocessed(self, text):
+        yield (
+         0, Text, text)
+
+
+_ttype_cache = {}
+line_re = re.compile(b'.*?\n')
+
+class RawTokenLexer(Lexer):
+    __doc__ = '\n    Recreate a token stream formatted with the `RawTokenFormatter`.  This\n    lexer raises exceptions during parsing if the token stream in the\n    file is malformed.\n\n    Additional options accepted:\n\n    `compress`\n        If set to ``"gz"`` or ``"bz2"``, decompress the token stream with\n        the given compression algorithm before lexing (default: ``""``).\n    '
+    name = 'Raw token data'
+    aliases = ['raw']
+    filenames = []
+    mimetypes = ['application/x-pygments-tokens']
+
+    def __init__(self, **options):
+        self.compress = get_choice_opt(options, 'compress', [
+         '', 'none', 'gz', 'bz2'], '')
+        Lexer.__init__(self, **options)
+
+    def get_tokens(self, text):
+        if isinstance(text, text_type):
+            text = text.encode('ascii')
+        if self.compress == 'gz':
+            import gzip
+            gzipfile = gzip.GzipFile('', 'rb', 9, BytesIO(text))
+            text = gzipfile.read()
+        elif self.compress == 'bz2':
+            import bz2
+            text = bz2.decompress(text)
+        text = text.strip(b'\n') + b'\n'
+        for i, t, v in self.get_tokens_unprocessed(text):
+            yield (
+             t, v)
+
+    def get_tokens_unprocessed(self, text):
+        length = 0
+        for match in line_re.finditer(text):
+            try:
+                ttypestr, val = match.group().split(b'\t', 1)
+            except ValueError:
+                val = match.group().decode('ascii', 'replace')
+                ttype = Error
+            else:
+                ttype = _ttype_cache.get(ttypestr)
+                if not ttype:
+                    ttype = Token
+                    ttypes = ttypestr.split('.')[1:]
+                    for ttype_ in ttypes:
+                        if not ttype_ or not ttype_[0].isupper():
+                            raise ValueError('malformed token name')
+                        ttype = getattr(ttype, ttype_)
+
+                    _ttype_cache[ttypestr] = ttype
+                val = val[2:-2].decode('unicode-escape')
+            yield (
+             length, ttype, val)
+            length += len(val)

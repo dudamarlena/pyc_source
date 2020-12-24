@@ -1,0 +1,148 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/hysia/Code/Pocsuite/pocsuite/thirdparty/requests/packages/urllib3/exceptions.py
+# Compiled at: 2018-11-28 03:20:10
+
+
+class HTTPError(Exception):
+    """Base exception used by this module."""
+
+
+class HTTPWarning(Warning):
+    """Base warning used by this module."""
+
+
+class PoolError(HTTPError):
+    """Base exception for errors caused within a pool."""
+
+    def __init__(self, pool, message):
+        self.pool = pool
+        HTTPError.__init__(self, '%s: %s' % (pool, message))
+
+    def __reduce__(self):
+        return (
+         self.__class__, (None, None))
+
+
+class RequestError(PoolError):
+    """Base exception for PoolErrors that have associated URLs."""
+
+    def __init__(self, pool, url, message):
+        self.url = url
+        PoolError.__init__(self, pool, message)
+
+    def __reduce__(self):
+        return (
+         self.__class__, (None, self.url, None))
+
+
+class SSLError(HTTPError):
+    """Raised when SSL certificate fails in an HTTPS connection."""
+
+
+class ProxyError(HTTPError):
+    """Raised when the connection to a proxy fails."""
+
+
+class DecodeError(HTTPError):
+    """Raised when automatic decoding based on Content-Type fails."""
+
+
+class ProtocolError(HTTPError):
+    """Raised when something unexpected happens mid-request/response."""
+
+
+ConnectionError = ProtocolError
+
+class MaxRetryError(RequestError):
+    """Raised when the maximum number of retries is exceeded.
+
+    :param pool: The connection pool
+    :type pool: :class:`~urllib3.connectionpool.HTTPConnectionPool`
+    :param string url: The requested Url
+    :param exceptions.Exception reason: The underlying error
+
+    """
+
+    def __init__(self, pool, url, reason=None):
+        self.reason = reason
+        message = 'Max retries exceeded with url: %s (Caused by %r)' % (
+         url, reason)
+        RequestError.__init__(self, pool, url, message)
+
+
+class HostChangedError(RequestError):
+    """Raised when an existing pool gets a request for a foreign host."""
+
+    def __init__(self, pool, url, retries=3):
+        message = 'Tried to open a foreign host with url: %s' % url
+        RequestError.__init__(self, pool, url, message)
+        self.retries = retries
+
+
+class TimeoutStateError(HTTPError):
+    """ Raised when passing an invalid state to a timeout """
+
+
+class TimeoutError(HTTPError):
+    """ Raised when a socket timeout error occurs.
+
+    Catching this error will catch both :exc:`ReadTimeoutErrors
+    <ReadTimeoutError>` and :exc:`ConnectTimeoutErrors <ConnectTimeoutError>`.
+    """
+
+
+class ReadTimeoutError(TimeoutError, RequestError):
+    """Raised when a socket timeout occurs while receiving data from a server"""
+
+
+class ConnectTimeoutError(TimeoutError):
+    """Raised when a socket timeout occurs while connecting to a server"""
+
+
+class EmptyPoolError(PoolError):
+    """Raised when a pool runs out of connections and no more are allowed."""
+
+
+class ClosedPoolError(PoolError):
+    """Raised when a request enters a pool after the pool has been closed."""
+
+
+class LocationValueError(ValueError, HTTPError):
+    """Raised when there is something wrong with a given URL input."""
+
+
+class LocationParseError(LocationValueError):
+    """Raised when get_host or similar fails to parse the URL input."""
+
+    def __init__(self, location):
+        message = 'Failed to parse: %s' % location
+        HTTPError.__init__(self, message)
+        self.location = location
+
+
+class ResponseError(HTTPError):
+    """Used as a container for an error reason supplied in a MaxRetryError."""
+    GENERIC_ERROR = 'too many error responses'
+    SPECIFIC_ERROR = 'too many {status_code} error responses'
+
+
+class SecurityWarning(HTTPWarning):
+    """Warned when perfoming security reducing actions"""
+
+
+class InsecureRequestWarning(SecurityWarning):
+    """Warned when making an unverified HTTPS request."""
+
+
+class SystemTimeWarning(SecurityWarning):
+    """Warned when system time is suspected to be wrong"""
+
+
+class InsecurePlatformWarning(SecurityWarning):
+    """Warned when certain SSL configuration is not available on a platform."""
+
+
+class ResponseNotChunked(ProtocolError, ValueError):
+    """Response needs to be chunked in order to read it as chunks."""

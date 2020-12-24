@@ -1,0 +1,94 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/mygrate/daemon.py
+# Compiled at: 2014-07-18 08:23:53
+import os, os.path, sys
+from contextlib import contextmanager
+from pwd import getpwnam
+from grp import getgrnam
+
+def daemonize():
+    """Daemonizes the current process using the standard double-fork.
+    This function does not affect standard input, output, or error.
+
+    :returns: The PID of the daemonized process.
+
+    """
+    try:
+        pid = os.fork()
+        if pid > 0:
+            os._exit(0)
+    except OSError:
+        return
+
+    os.chdir('/')
+    os.setsid()
+    os.umask(0)
+    try:
+        pid = os.fork()
+        if pid > 0:
+            os._exit(0)
+    except OSError:
+        return
+
+    os.setsid()
+    return os.getpid()
+
+
+def redirect_stdio(stdout=None, stderr=None, stdin=None):
+    """Redirects standard output, error, and input to the given
+    filenames. Standard output and error are opened in append-mode, and
+    standard input is opened in read-only mode. Leaving any parameter
+    blank leaves that stream alone.
+
+    :param stdout: filename to append the standard output stream into.
+    :param stderr: filename to append the standard error stream into.
+    :param stdin: filename to read from as the standard input stream.
+
+    """
+    nullfile = getattr(os, 'devnull', '/dev/null')
+    sys.stdout.flush()
+    sys.stderr.flush()
+    si = open(stdin or nullfile, 'r')
+    so = open(stdout or nullfile, 'a+')
+    se = open(stderr or nullfile, 'a+', 0)
+    os.dup2(si.fileno(), sys.stdin.fileno())
+    os.dup2(so.fileno(), sys.stdout.fileno())
+    os.dup2(se.fileno(), sys.stderr.fileno())
+
+
+class PidFile(object):
+    """Context manager which creates a PID file containing the current process
+    id, runs the context, and then removes the PID file.
+
+    An :py:exc:`OSError` exceptions when creating the PID file will be
+    propogated without executing the context.
+
+    :param filename: The filename to use for the PID file. If ``None`` is
+                     given, the context is simply executed with no PID file
+                     created.
+
+    """
+
+    def __init__(self, filename=None):
+        super(PidFile, self).__init__()
+        if not filename:
+            self.filename = None
+        else:
+            self.filename = os.path.abspath(filename)
+        return
+
+    def __enter__(self):
+        if self.filename:
+            with open(self.filename, 'w') as (pid):
+                pid.write(('{0}\n').format(os.getpid()))
+            return self.filename
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.filename:
+            try:
+                os.unlink(self.filename)
+            except OSError:
+                pass

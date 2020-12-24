@@ -1,0 +1,3 @@
+ddt==1.2.1
+# Editable Git install with no remote (pyrgbpalette==0.0.2)
+-e c:\users\wolfgang\pycharmprojects\github.com\myplaceit\pyrgbpalette\src

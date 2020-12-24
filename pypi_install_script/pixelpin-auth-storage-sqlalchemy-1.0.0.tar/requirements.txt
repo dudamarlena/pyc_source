@@ -1,0 +1,3 @@
+six
+sqlalchemy
+pixelpin-auth-core >= 1.0.0

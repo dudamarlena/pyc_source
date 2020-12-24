@@ -1,0 +1,96 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/lib/python2.7/site-packages/fedmsg_atomic_composer/config.py
+# Compiled at: 2016-10-12 09:09:27
+"""
+The primary atomic composer configuration.
+
+The appropriate entry in the 'releases' must be passed into
+the AtomicComposer.composer method.
+
+The code at the bottom maps+expands the paths &
+commands to each of the releases, for ease of
+configuration.
+"""
+import platform
+dist = platform.dist()
+rhel6 = dist[0] == 'redhat' and int(float(dist[1])) == 6
+config = dict(releases={'f21-updates': {'name': 'f21-updates', 
+                   'repo': 'updates', 
+                   'version': '21', 
+                   'arch': 'x86_64', 
+                   'tree': 'docker-host', 
+                   'treefile': {'include': 'fedora-atomic-docker-host.json', 
+                                'ref': 'fedora-atomic/f21/x86_64/updates/docker-host', 
+                                'repos': [
+                                        'fedora-21', 'updates'], 
+                                'packages': []}, 
+                   'mock': 'fedora-21-updates-x86_64', 
+                   'git_branch': 'f21', 
+                   'repos': {}}, 
+   'f21-updates-testing': {'name': 'f21-updates-testing', 
+                           'repo': 'updates-testing', 
+                           'version': '21', 
+                           'arch': 'x86_64', 
+                           'tree': 'docker-host', 
+                           'treefile': {'include': 'fedora-atomic-docker-host.json', 
+                                        'ref': 'fedora-atomic/f21/x86_64/updates-testing/docker-host', 
+                                        'repos': [
+                                                'fedora-21', 'updates', 'updates-testing']}, 
+                           'git_branch': 'f21', 
+                           'mock': 'fedora-21-updates-testing-x86_64', 
+                           'repos': {}}, 
+   'rawhide': {'name': 'rawhide', 
+               'repo': 'rawhide', 
+               'version': 'rawhide', 
+               'arch': 'x86_64', 
+               'tree': 'docker-host', 
+               'treefile': {'include': 'fedora-atomic-docker-host.json', 
+                            'ref': 'fedora-atomic/rawhide/x86_64/docker-host', 
+                            'repos': [
+                                    'rawhide']}, 
+               'git_branch': 'f21', 
+               'mock': 'fedora-rawhide-x86_64', 
+               'repos': {}}}, repos={'rawhide': 'https://mirrors.fedoraproject.org/metalink?repo={version}&arch={arch}', 
+   'fedora-{version}': 'https://mirrors.fedoraproject.org/metalink?repo=fedora-{version}&arch={arch}', 
+   'updates': 'https://mirrors.fedoraproject.org/metalink?repo=updates-released-f{version}&arch={arch}', 
+   'updates-testing': 'https://mirrors.fedoraproject.org/metalink?repo=updates-testing-f{version}&arch={arch}'}, prod_dir='/var/lib/fedora-atomic', work_dir='{prod_dir}/work', canonical_dir='{prod_dir}/{version}', output_dir='{work_dir}/{version}/{arch}/{tree}', log_dir='{work_dir}/logs/{version}/{arch}/{repo}/{tree}', mount_dirs=[], git_repo='https://git.fedorahosted.org/git/fedora-atomic.git', git_cache='{work_dir}/fedora-atomic.git', delete_repo_files=True, mock_cmd='/usr/bin/mock -r {mock}', mock_clean=True, ostree_init='/usr/bin/ostree --repo={output_dir} init --mode=archive-z2', ostree_compose='/usr/bin/rpm-ostree compose tree' + (rhel6 and ' ' or ' --workdir-tmpfs ') + '--repo={output_dir} %s', ostree_summary='/usr/bin/ostree --repo={output_dir} summary --update', map_to_release=('prod_dir',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'work_dir',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'output_dir',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'log_dir',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'git_repo',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'git_cache',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'mock_cmd',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'ostree_init',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'ostree_compose',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'ostree_summary',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'canonical_dir',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'repos',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'rsync_in_objs',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'rsync_in_rest',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'rsync_out_objs',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'rsync_out_rest',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'mount_dirs',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'mock_clean',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'delete_repo_files'))
+for key in config.get('map_to_release', []):
+    for name, release in config['releases'].items():
+        if key in config:
+            value = config[key]
+            if isinstance(value, dict):
+                release[key] = {}
+                for k, v in value.items():
+                    k = k.format(**release)
+                    release[key][k] = v.format(**release)
+
+            elif isinstance(value, (list, tuple)):
+                release[key] = []
+                for item in value:
+                    release[key].append(item.format(**release))
+
+            elif isinstance(value, bool):
+                release[key] = value
+            else:
+                release[key] = value.format(**release)

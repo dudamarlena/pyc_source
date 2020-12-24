@@ -1,0 +1,7 @@
+requests>=2.7.0, <3.0.0
+colorama>=0.3.3, <0.5.0
+PyYAML>=3.11, <3.14.0
+patch==1.16
+node-semver==0.6.1
+distro>=1.0.2, <1.2.0
+pylint>=1.9.3,!=2.3.0

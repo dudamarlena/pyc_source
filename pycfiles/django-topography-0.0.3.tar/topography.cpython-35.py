@@ -1,0 +1,94 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3350)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/jamie/code/django-topography/topography/management/commands/topography.py
+# Compiled at: 2016-08-11 06:04:16
+# Size of source mod 2**32: 3288 bytes
+from __future__ import absolute_import
+from datetime import datetime
+from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.contrib.admindocs.views import simplify_regex
+from django.core.urlresolvers import RegexURLPattern, RegexURLResolver
+import inspect, json, os, re, sys, topography
+print(topography.__version__)
+exit()
+
+def get_version():
+    """
+    Return package version as listed in `__version__` in `init.py`.
+    """
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    init_py = open(os.path.join(current_dir, '..', '..', '__init__.py')).read()
+    return re.search('^__version__ = [\'"]([^\'"]+)[\'"]', init_py, re.MULTILINE).group(1)
+
+
+def trim(docstring):
+    """https://www.python.org/dev/peps/pep-0257/#id18"""
+    if not docstring:
+        return ''
+    lines = docstring.expandtabs().splitlines()
+    indent = sys.maxsize
+    for line in lines[1:]:
+        stripped = line.lstrip()
+        if stripped:
+            indent = min(indent, len(line) - len(stripped))
+
+    trimmed = [
+     lines[0].strip()]
+    if indent < sys.maxsize:
+        for line in lines[1:]:
+            trimmed.append(line[indent:].rstrip())
+
+    while trimmed and not trimmed[(-1)]:
+        trimmed.pop()
+
+    while trimmed and not trimmed[0]:
+        trimmed.pop(0)
+
+    return '\n'.join(trimmed)
+
+
+def inspect_function(name, function):
+    return {'name': name, 
+     'docs': trim(function.__doc__), 
+     'lines': len(inspect.getsourcelines(function)[0])}
+
+
+def inspect_methods(view_class):
+    view = view_class()
+    return [inspect_function(method_name, getattr(view, method_name.lower())) for method_name in view.allowed_methods if method_name != 'OPTIONS']
+
+
+def extract_view_info_from_class(view_class):
+    return {'name': view_class.__name__, 
+     'docs': trim(view_class.__doc__), 
+     'methods': inspect_methods(view_class)}
+
+
+def extract_view_info(view):
+    if hasattr(view, 'cls'):
+        return extract_view_info_from_class(view.cls)
+    return inspect_function(view.__name__, view)
+
+
+def extract_url_data(urls, prefix=''):
+    views = []
+    for url in urls:
+        if isinstance(url, RegexURLPattern):
+            views.append({'view': extract_view_info(url.callback), 
+             'url': simplify_regex(prefix + url.regex.pattern)})
+        if isinstance(url, RegexURLResolver):
+            views += extract_url_data(url.url_patterns, prefix=simplify_regex(prefix + url.regex.pattern))
+
+    return sorted(views, key=lambda view: view['url'])
+
+
+class Command(BaseCommand):
+
+    def handle(self, *args, **options):
+        urls = __import__(settings.ROOT_URLCONF, {}, {}, ['']).urlpatterns
+        self.stdout.write(json.dumps({'urls': extract_url_data(urls), 
+         'version': get_version(), 
+         'timestamp': datetime.utcnow().isoformat()}))

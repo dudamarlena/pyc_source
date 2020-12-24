@@ -1,0 +1,91 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: lib/pyraf_setup.py
+# Compiled at: 2018-06-15 12:09:23
+# Size of source mod 2**32: 3583 bytes
+import itertools, os, shutil, subprocess, sys
+
+def setup_hook(config):
+    """
+    This setup hook adds additional script files in the platform is Windows.
+
+    It should be noted that this can also be achieved with packaging/distutils2
+    enivronment markers, but they are not yet supported by d2to1.
+
+    TODO: Replace this hook script if/when d2to1 adds support for environment
+    markers.
+    """
+    if sys.platform.startswith('win'):
+        additional_scripts = [
+         os.path.join('scripts', 'runpyraf.py'),
+         os.path.join('scripts', 'pyraf.bat')]
+        shutil.copy2(os.path.join('scripts', 'pyraf'), additional_scripts[0])
+        config['files']['scripts'] += '\n' + '\n'.join(additional_scripts)
+
+
+def build_ext_hook(command):
+    """Adds the correct library directories for X11.  I've found that on Linux
+    (or at least RHEL5, though presumably most other common distros) this is
+    unncessary.  But on OSX it probably is.  It probably depends on what the
+    system default LD_LIBARARY_PATH is.
+    """
+    lib_dirs, inc_dirs = _find_x()
+    for ext in command.extensions:
+        for lib_dir in lib_dirs:
+            if lib_dir not in ext.library_dirs:
+                ext.library_dirs.append(lib_dir)
+
+        for inc_dir in inc_dirs:
+            if inc_dir not in ext.include_dirs:
+                ext.include_dirs.append(inc_dir)
+
+
+def _find_x(xdir=None):
+    lib_dirs = []
+    inc_dirs = []
+    if sys.platform.startswith('win'):
+        return (lib_dirs, inc_dirs)
+    else:
+        if xdir is not None:
+            lib_dirs.append(os.path.join(xdir, 'lib64'))
+            lib_dirs.append(os.path.join(xdir, 'lib'))
+            inc_dirs.append(os.path.join(xdir, 'include'))
+        else:
+            if sys.platform == 'darwin' or sys.platform.startswith('linux'):
+                lib_dirs.append('/usr/X11R6/lib64')
+                lib_dirs.append('/usr/X11R6/lib')
+                inc_dirs.append('/usr/X11R6/include')
+            else:
+                if sys.platform == 'sunos5':
+                    lib_dirs.append('/usr/openwin/lib')
+                    inc_dirs.append('/usr/openwin/include')
+                else:
+                    try:
+                        import Tkinter
+                    except:
+                        raise ImportError('Tkinter is not installed')
+
+                    tk = Tkinter.Tk()
+                    tk.withdraw()
+                    tcl_lib = os.path.join(str(tk.getvar('tcl_library')), os.pardir)
+                    tcl_inc = os.path.join(str(tk.getvar('tcl_library')), os.pardir, os.pardir, 'include')
+                    tk_lib = os.path.join(str(tk.getvar('tk_library')), os.pardir)
+                    tkv = str(Tkinter.TkVersion)[:3]
+                    if Tkinter.TkVersion < 8.3:
+                        print('Tcl/Tk v8.3 or later required\n')
+                        sys.exit(1)
+                    else:
+                        suffix = '.so'
+                        tklib = 'libtk' + tkv + suffix
+                        pipe = subprocess.Popen(['ldd', os.path.join(tk_lib, tklib)], stdout=(subprocess.PIPE))
+                        pipe.wait()
+                        lib_list = pipe.stdout.read()
+                        for lib in lib_list:
+                            if lib.startswith('libX11'):
+                                ind = lib_list.index(lib)
+                                lib_dirs.append(os.path.dirname(lib_list[(ind + 2)]))
+                                inc_dirs.append(os.path.join(os.path.dirname(lib_list[(ind + 2)]), os.pardir, 'include'))
+
+        return (
+         lib_dirs, inc_dirs)

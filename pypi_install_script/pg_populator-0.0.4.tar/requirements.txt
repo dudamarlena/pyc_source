@@ -1,0 +1,2 @@
+psycopg2>=2.7.1
+pg_populator_lib>=0.0.2

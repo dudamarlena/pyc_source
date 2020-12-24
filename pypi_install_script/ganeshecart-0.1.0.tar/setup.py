@@ -1,0 +1,36 @@
+from distutils.core import setup
+
+setup(
+    name="ganeshecart",
+    version="0.1.0",
+    author="prasanth vajja",
+    author_email="vajjaprasanth0457@gmail.com",
+    packages=["samp"],
+    include_package_data=True,
+    install_requires=[
+    "aniso8601==6.0.0",
+    "bleach==3.1.0",
+    "certifi==2019.3.9",
+    "chardet==3.0.4",
+    "Click==7.0",
+    "docutils==0.14",
+    "Flask==1.0.2",
+    "Flask-Cors==3.0.7",
+    "Flask-RESTful==0.3.7",
+    "idna==2.8",
+    "itsdangerous==1.1.0",
+    "Jinja2==2.10",
+    "MarkupSafe==1.1.1",
+    "pkginfo==1.5.0.1",
+    "Pygments==2.3.1",
+    "pytz==2018.9",
+    "readme-renderer==24.0",
+    "requests==2.21.0",
+    "requests-toolbelt==0.9.1",
+    "six==1.12.0",
+    "tqdm==4.31.1",
+    "twine==1.13.0",
+    "urllib3==1.24.1",
+    "webencodings==0.5.1",
+    "Werkzeug==0.14.1"]
+)

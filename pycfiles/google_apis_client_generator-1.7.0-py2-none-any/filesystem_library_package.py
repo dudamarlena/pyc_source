@@ -1,0 +1,70 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/dsupplee/dev/apis-client-generator/src/googleapis/codegen/filesys/filesystem_library_package.py
+# Compiled at: 2019-01-24 16:56:47
+"""A LibraryPackage that writes to the file system.
+
+This module implements the LibraryPackage interface, but writes directly to the
+file system.
+"""
+__author__ = 'aiuto@google.com (Tony Aiuto)'
+import os
+from googleapis.codegen.filesys.library_package import LibraryPackage
+
+class FilesystemLibraryPackage(LibraryPackage):
+    """The library package."""
+
+    def __init__(self, root_path):
+        """Create a new FilesystemLibraryPackage.
+
+    Args:
+      root_path: (str) A path to a directory where the files will be written.
+        The directory will be created if it does not exist.
+    Raises:
+      ValueError: If the directory exists, but is not writable.
+      OSError: If the directory does not exist and cannot be created.
+    """
+        super(FilesystemLibraryPackage, self).__init__()
+        self._MakePath(root_path)
+        self._root_path = root_path
+        self._current_file_stream = None
+        return
+
+    def StartFile(self, name):
+        """Start writing a named file to the package.
+
+    Args:
+      name: (str) path which will identify the contents in the archive.
+
+    Returns:
+      A file-like object to write the contents to.
+    """
+        self.EndFile()
+        full_path = os.path.join(self._root_path, self._file_path_prefix, name)
+        self._MakePath(os.path.dirname(full_path))
+        self._current_file_stream = open(full_path, 'w')
+        return self._current_file_stream
+
+    def EndFile(self):
+        """Flush the current output file."""
+        if self._current_file_stream:
+            self._current_file_stream.close()
+            self._current_file_stream = None
+        return
+
+    def _MakePath(self, path):
+        """Create a directory path if needed.
+
+    Args:
+      path: (str) A path to a directory where files will be written.  The
+        directory will be created if it does not exist.
+    Raises:
+      ValueError: If the directory exists, but is not writable.
+      OSError: If the directory does not exist and cannot be created.
+    """
+        if not os.access(path, os.W_OK):
+            if os.access(path, os.F_OK):
+                raise ValueError('%s exists, but is not writable' % path)
+            os.makedirs(path, 493)

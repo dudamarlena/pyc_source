@@ -1,0 +1,1066 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/toil/wdl/wdl_analysis.py
+# Compiled at: 2020-05-07 00:32:15
+# Size of source mod 2**32: 45772 bytes
+from __future__ import absolute_import
+from __future__ import print_function
+from __future__ import division
+from past.builtins import basestring
+import json, os, logging
+from collections import OrderedDict
+import toil.wdl.wdl_parser as wdl_parser
+wdllogger = logging.getLogger(__name__)
+
+class AnalyzeWDL:
+    __doc__ = '\n    Analyzes a wdl file, and associated json and/or extraneous files and restructures them\n    into 2 intermediate data structures (python dictionaries):\n        "workflows_dictionary": containing the parsed workflow information.\n        "tasks_dictionary": containing the parsed task information.\n\n    These are then fed into wdl_synthesis.py which uses them to write a native python\n    script for use with Toil.\n\n    Requires a WDL file, and a JSON file.  The WDL file contains ordered commands,\n    and the JSON file contains input values for those commands.  In addition, this\n    also takes potential accessory files like csv/tsv potentially also containing\n    variables which need to be incorporated.\n    '
+
+    def __init__(self, wdl_filename, secondary_filename, output_directory):
+        self.wdl_file = wdl_filename
+        self.secondary_file = secondary_filename
+        self.output_directory = output_directory
+        if not os.path.exists(self.output_directory):
+            try:
+                os.makedirs(self.output_directory)
+            except:
+                raise OSError('Could not create directory.  Insufficient permissions or disk space most likely.')
+
+        self.output_file = os.path.join(self.output_directory, 'toilwdl_compiled.py')
+        self.json_dict = {}
+        self.tasks_dictionary = OrderedDict()
+        self.workflows_dictionary = OrderedDict()
+        self.command_number = 0
+        self.call_number = 0
+        self.scatter_number = 0
+        self.if_number = 0
+
+    def find_asts(self, ast_root, name):
+        """
+        Finds an AST node with the given name and the entire subtree under it.
+        A function borrowed from scottfrazer.  Thank you Scott Frazer!
+
+        :param ast_root: The WDL AST.  The whole thing generally, but really
+                         any portion that you wish to search.
+        :param name: The name of the subtree you're looking for, like "Task".
+        :return: nodes representing the AST subtrees matching the "name" given.
+        """
+        nodes = []
+        if isinstance(ast_root, wdl_parser.AstList):
+            for node in ast_root:
+                nodes.extend(self.find_asts(node, name))
+
+        else:
+            if isinstance(ast_root, wdl_parser.Ast):
+                if ast_root.name == name:
+                    nodes.append(ast_root)
+                for attr_name, attr in ast_root.attributes.items():
+                    nodes.extend(self.find_asts(attr, name))
+
+        return nodes
+
+    def dict_from_YML(self, YML_file):
+        """
+        Not written yet.  Use JSON.  It's better anyway.
+
+        :param YML_file: A yml file with extension '*.yml' or '*.yaml'.
+        :return: Nothing.
+        """
+        raise NotImplementedError('.y(a)ml support is currently underwhelming.')
+
+    def dict_from_JSON(self, JSON_file):
+        """
+        Takes a WDL-mapped json file and creates a dict containing the bindings.
+        The 'return' value is only used for unittests.
+
+        :param JSON_file: A required JSON file containing WDL variable bindings.
+        :return: Returns the self.json_dict purely for unittests.
+        """
+        with open(JSON_file) as (data_file):
+            data = json.load(data_file)
+        for d in data:
+            if isinstance(data[d], basestring):
+                self.json_dict[d] = '"' + data[d] + '"'
+            else:
+                self.json_dict[d] = data[d]
+
+        return self.json_dict
+
+    def create_tasks_dict(self, ast):
+        """
+        Parse each "Task" in the AST.  This will create self.tasks_dictionary,
+        where each task name is a key.
+
+        :return: Creates the self.tasks_dictionary necessary for much of the
+        parser.  Returning it is only necessary for unittests.
+        """
+        tasks = self.find_asts(ast, 'Task')
+        for task in tasks:
+            self.parse_task(task)
+
+        return self.tasks_dictionary
+
+    def parse_task(self, task):
+        """
+        Parses a WDL task AST subtree.
+
+        Currently looks at and parses 4 sections:
+        1. Declarations (e.g. string x = 'helloworld')
+        2. Commandline (a bash command with dynamic variables inserted)
+        3. Runtime (docker image; disk; CPU; RAM; etc.)
+        4. Outputs (expected return values/files)
+
+        :param task: An AST subtree of a WDL "Task".
+        :return: Returns nothing but adds a task to the self.tasks_dictionary
+        necessary for much of the parser.
+        """
+        task_name = task.attributes['name'].source_string
+        declaration_array = []
+        for declaration_subAST in task.attr('declarations'):
+            declaration_array.append(self.parse_task_declaration(declaration_subAST))
+            self.tasks_dictionary.setdefault(task_name, OrderedDict())['inputs'] = declaration_array
+
+        for section in task.attr('sections'):
+            if section.name == 'RawCommand':
+                command_array = self.parse_task_rawcommand(section)
+                self.tasks_dictionary.setdefault(task_name, OrderedDict())['raw_commandline'] = command_array
+            if section.name == 'Runtime':
+                runtime_dict = self.parse_task_runtime(section.attr('map'))
+                self.tasks_dictionary.setdefault(task_name, OrderedDict())['runtime'] = runtime_dict
+            if section.name == 'Outputs':
+                output_array = self.parse_task_outputs(section)
+                self.tasks_dictionary.setdefault(task_name, OrderedDict())['outputs'] = output_array
+
+    def parse_task_declaration(self, declaration_subAST):
+        """
+        Parses the declaration section of the WDL task AST subtree.
+
+        Examples:
+
+        String my_name
+        String your_name
+        Int two_chains_i_mean_names = 0
+
+        :param declaration_subAST: Some subAST representing a task declaration
+                                   like: 'String file_name'
+        :return: var_name, var_type, var_value
+            Example:
+                Input subAST representing:   'String file_name'
+                Output:  var_name='file_name', var_type='String', var_value=None
+        """
+        var_name = self.parse_declaration_name(declaration_subAST.attr('name'))
+        var_type = self.parse_declaration_type(declaration_subAST.attr('type'))
+        var_expressn = self.parse_declaration_expressn((declaration_subAST.attr('expression')), es='')
+        return (
+         var_name, var_type, var_expressn)
+
+    def parse_task_rawcommand_attributes(self, code_snippet):
+        """
+
+        :param code_snippet:
+        :return:
+        """
+        attr_dict = OrderedDict()
+        if isinstance(code_snippet, wdl_parser.Terminal):
+            raise NotImplementedError
+        if isinstance(code_snippet, wdl_parser.Ast):
+            raise NotImplementedError
+        if isinstance(code_snippet, wdl_parser.AstList):
+            for ast in code_snippet:
+                if ast.name == 'CommandParameterAttr':
+                    if ast.attributes['value'].str == 'string':
+                        attr_dict[ast.attributes['key'].source_string] = "'" + ast.attributes['value'].source_string + "'"
+                    else:
+                        attr_dict[ast.attributes['key'].source_string] = ast.attributes['value'].source_string
+
+        return attr_dict
+
+    def parse_task_rawcommand(self, rawcommand_subAST):
+        """
+        Parses the rawcommand section of the WDL task AST subtree.
+
+        Task "rawcommands" are divided into many parts.  There are 2 types of
+        parts: normal strings, & variables that can serve as changeable inputs.
+
+        The following example command:
+            'echo ${variable1} ${variable2} > output_file.txt'
+
+        Has 5 parts:
+                     Normal  String: 'echo '
+                     Variable Input: variable1
+                     Normal  String: ' '
+                     Variable Input: variable2
+                     Normal  String: ' > output_file.txt'
+
+        Variables can also have additional conditions, like 'sep', which is like
+        the python ''.join() function and in WDL looks like: ${sep=" -V " GVCFs}
+        and would be translated as: ' -V '.join(GVCFs).
+
+        :param rawcommand_subAST: A subAST representing some bash command.
+        :return: A list=[] of tuples=() representing the parts of the command:
+             e.g. [(command_var, command_type, additional_conditions_list), ...]
+                  Where: command_var = 'GVCFs'
+                         command_type = 'variable'
+                         command_actions = {'sep': ' -V '}
+        """
+        command_array = []
+        for code_snippet in rawcommand_subAST.attributes['parts']:
+            if isinstance(code_snippet, wdl_parser.Terminal):
+                command_var = "r'''" + code_snippet.source_string + "'''"
+            else:
+                if isinstance(code_snippet, wdl_parser.Ast):
+                    if code_snippet.name == 'CommandParameter':
+                        code_expr = self.parse_declaration_expressn((code_snippet.attr('expr')), es='')
+                        code_attributes = self.parse_task_rawcommand_attributes(code_snippet.attr('attributes'))
+                        command_var = self.modify_cmd_expr_w_attributes(code_expr, code_attributes)
+                if isinstance(code_snippet, wdl_parser.AstList):
+                    raise NotImplementedError
+            command_array.append(command_var)
+
+        return command_array
+
+    def modify_cmd_expr_w_attributes(self, code_expr, code_attr):
+        """
+
+        :param code_expr:
+        :param code_attr:
+        :return:
+        """
+        for param in code_attr:
+            if param == 'sep':
+                code_expr = '{sep}.join(str(x) for x in {expr})'.format(sep=(code_attr[param]), expr=code_expr)
+            else:
+                if param == 'default':
+                    code_expr = '{expr} if {expr} else {default}'.format(default=(code_attr[param]), expr=code_expr)
+                else:
+                    raise NotImplementedError
+
+        return code_expr
+
+    def parse_task_runtime_key(self, i):
+        """
+
+        :param runtime_subAST:
+        :return:
+        """
+        if isinstance(i, wdl_parser.Terminal):
+            return i.source_string
+        else:
+            if isinstance(i, wdl_parser.Ast):
+                raise NotImplementedError
+            if isinstance(i, wdl_parser.AstList):
+                raise NotImplementedError
+
+    def parse_task_runtime(self, runtime_subAST):
+        """
+        Parses the runtime section of the WDL task AST subtree.
+
+        The task "runtime" section currently supports context fields for a
+        docker container, CPU resources, RAM resources, and disk resources.
+
+        :param runtime_subAST: A subAST representing runtime parameters.
+        :return: A list=[] of runtime attributes, for example:
+                 runtime_attributes = [('docker','quay.io/encode-dcc/map:v1.0'),
+                                       ('cpu','2'),
+                                       ('memory','17.1 GB'),
+                                       ('disks','local-disk 420 HDD')]
+        """
+        runtime_attributes = OrderedDict()
+        if isinstance(runtime_subAST, wdl_parser.Terminal):
+            raise NotImplementedError
+        else:
+            if isinstance(runtime_subAST, wdl_parser.Ast):
+                raise NotImplementedError
+            else:
+                if isinstance(runtime_subAST, wdl_parser.AstList):
+                    for ast in runtime_subAST:
+                        key = self.parse_task_runtime_key(ast.attr('key'))
+                        value = self.parse_declaration_expressn((ast.attr('value')), es='')
+                        if value.startswith('"'):
+                            value = self.translate_wdl_string_to_python_string(value[1:-1])
+                        runtime_attributes[key] = value
+
+        return runtime_attributes
+
+    def parse_task_outputs(self, i):
+        """
+        Parse the WDL output section.
+
+        Outputs are like declarations, with a type, name, and value.  Examples:
+
+        ------------
+        Simple Cases
+        ------------
+
+        'Int num = 7'
+            var_name: 'num'
+            var_type: 'Int'
+            var_value: 7
+
+        String idea = 'Lab grown golden eagle burgers.'
+            var_name: 'idea'
+            var_type: 'String'
+            var_value: 'Lab grown golden eagle burgers.'
+
+        File ideaFile = 'goldenEagleStemCellStartUpDisrupt.txt'
+            var_name: 'ideaFile'
+            var_type: 'File'
+            var_value: 'goldenEagleStemCellStartUpDisrupt.txt'
+
+        -------------------
+        More Abstract Cases
+        -------------------
+
+        Array[File] allOfMyTerribleIdeas = glob(*.txt)[0]
+            var_name:      'allOfMyTerribleIdeas'
+            var_type**:    'File'
+            var_value:     [*.txt]
+            var_actions:   {'index_lookup': '0', 'glob': 'None'}
+
+        **toilwdl.py converts 'Array[File]' to 'ArrayFile'
+
+        :return: output_array representing outputs generated by the job/task:
+                e.g. x = [(var_name, var_type, var_value, var_actions), ...]
+        """
+        output_array = []
+        for j in i.attributes['attributes']:
+            if j.name == 'Output':
+                var_name = self.parse_declaration_name(j.attr('name'))
+                var_type = self.parse_declaration_type(j.attr('type'))
+                var_expressn = self.parse_declaration_expressn((j.attr('expression')), es='', output_expressn=True)
+                if not (var_expressn.startswith('(') and var_expressn.endswith(')')):
+                    var_expressn = self.translate_wdl_string_to_python_string(var_expressn)
+                output_array.append((var_name, var_type, var_expressn))
+            else:
+                raise NotImplementedError
+
+        return output_array
+
+    def translate_wdl_string_to_python_string(self, some_string):
+        """
+        Parses a string representing a given job's output filename into something
+        python can read.  Replaces ${string}'s with normal variables and the rest
+        with normal strings all concatenated with ' + '.
+
+        Will not work with additional parameters, such as:
+        ${default="foo" bar}
+        or
+        ${true="foo" false="bar" Boolean baz}
+
+        This method expects to be passed only strings with some combination of
+        "${abc}" and "abc" blocks.
+
+        :param job: A list such that:
+                        (job priority #, job ID #, Job Skeleton Name, Job Alias)
+        :param some_string: e.g. '${sampleName}.vcf'
+        :return: output_string, e.g. 'sampleName + ".vcf"'
+        """
+        try:
+            output_string = ''
+            edited_string = some_string.strip()
+            if edited_string.find('${') != -1:
+                continue_loop = True
+                while continue_loop:
+                    index_start = edited_string.find('${')
+                    index_end = edited_string.find('}', index_start)
+                    stringword = edited_string[:index_start]
+                    if index_start != 0:
+                        output_string = output_string + "'" + stringword + "' + "
+                    keyword = edited_string[index_start + 2:index_end]
+                    output_string = output_string + 'str(' + keyword + ') + '
+                    edited_string = edited_string[index_end + 1:]
+                    if edited_string.find('${') == -1:
+                        continue_loop = False
+                        if edited_string:
+                            output_string = output_string + "'" + edited_string + "' + "
+
+            else:
+                output_string = "'" + edited_string + "'"
+            if output_string.endswith(' + '):
+                output_string = output_string[:-3]
+            return output_string
+        except:
+            return ''
+
+    def create_workflows_dict(self, ast):
+        """
+        Parse each "Workflow" in the AST.  This will create self.workflows_dictionary,
+        where each called job is a tuple key of the form: (priority#, job#, name, alias).
+
+        :return: Creates the self.workflows_dictionary necessary for much of the
+        parser.  Returning it is only necessary for unittests.
+        """
+        workflows = self.find_asts(ast, 'Workflow')
+        for workflow in workflows:
+            self.parse_workflow(workflow)
+
+        return self.workflows_dictionary
+
+    def parse_workflow(self, workflow):
+        """
+        Parses a WDL workflow AST subtree.
+
+        Currently looks at and parses 3 sections:
+        1. Declarations (e.g. string x = 'helloworld')
+        2. Calls (similar to a python def)
+        3. Scatter (which expects to map to a Call or multiple Calls)
+
+        Returns nothing but creates the self.workflows_dictionary necessary for much
+        of the parser.
+
+        :param workflow: An AST subtree of a WDL "Workflow".
+        :return: Returns nothing but adds a workflow to the
+                 self.workflows_dictionary necessary for much of the parser.
+        """
+        workflow_name = workflow.attr('name').source_string
+        wf_declared_dict = OrderedDict()
+        for section in workflow.attr('body'):
+            if section.name == 'Declaration':
+                var_name, var_map = self.parse_workflow_declaration(section)
+                wf_declared_dict[var_name] = var_map
+            else:
+                self.workflows_dictionary.setdefault(workflow_name, OrderedDict())['wf_declarations'] = wf_declared_dict
+                if section.name == 'Scatter':
+                    scattertask = self.parse_workflow_scatter(section)
+                    self.workflows_dictionary.setdefault(workflow_name, OrderedDict())['scatter' + str(self.scatter_number)] = scattertask
+                    self.scatter_number += 1
+                if section.name == 'Call':
+                    task = self.parse_workflow_call(section)
+                    self.workflows_dictionary.setdefault(workflow_name, OrderedDict())['call' + str(self.call_number)] = task
+                    self.call_number += 1
+            if section.name == 'If':
+                task = self.parse_workflow_if(section)
+                self.workflows_dictionary.setdefault(workflow_name, OrderedDict())['if' + str(self.if_number)] = task
+                self.if_number += 1
+
+    def parse_workflow_if(self, ifAST):
+        expression = self.parse_workflow_if_expression(ifAST.attr('expression'))
+        body = self.parse_workflow_if_body(ifAST.attr('body'))
+        return {'expression':expression,  'body':body}
+
+    def parse_workflow_if_body(self, i):
+        subworkflow_dict = OrderedDict()
+        wf_declared_dict = OrderedDict()
+        if isinstance(i, wdl_parser.Terminal):
+            raise NotImplementedError
+        else:
+            if isinstance(i, wdl_parser.Ast):
+                raise NotImplementedError
+            else:
+                if isinstance(i, wdl_parser.AstList):
+                    for ast in i:
+                        if ast.name == 'Declaration':
+                            var_name, var_map = self.parse_workflow_declaration(ast)
+                            wf_declared_dict[var_name] = var_map
+                        else:
+                            subworkflow_dict['wf_declarations'] = wf_declared_dict
+                            if ast.name == 'Scatter':
+                                scattertask = self.parse_workflow_scatter(ast)
+                                subworkflow_dict['scatter' + str(self.scatter_number)] = scattertask
+                                self.scatter_number += 1
+                            if ast.name == 'Call':
+                                task = self.parse_workflow_call(ast)
+                                subworkflow_dict['call' + str(self.call_number)] = task
+                                self.call_number += 1
+                        if ast.name == 'If':
+                            task = self.parse_workflow_if(ast)
+                            subworkflow_dict['if' + str(self.if_number)] = task
+                            self.if_number += 1
+
+        return subworkflow_dict
+
+    def parse_workflow_if_expression(self, i):
+        if isinstance(i, wdl_parser.Terminal):
+            ifthis = i.source_string
+        else:
+            if isinstance(i, wdl_parser.Ast):
+                ifthis = self.parse_declaration_expressn(i, es='')
+            else:
+                if isinstance(i, wdl_parser.AstList):
+                    raise NotImplementedError
+        return ifthis
+
+    def parse_workflow_scatter(self, scatterAST):
+        item = self.parse_workflow_scatter_item(scatterAST.attr('item'))
+        collection = self.parse_workflow_scatter_collection(scatterAST.attr('collection'))
+        body = self.parse_workflow_scatter_body(scatterAST.attr('body'))
+        return {'item':item,  'collection':collection,  'body':body}
+
+    def parse_workflow_scatter_item(self, i):
+        if isinstance(i, wdl_parser.Terminal):
+            return i.source_string
+        if isinstance(i, wdl_parser.Ast):
+            raise NotImplementedError
+        elif isinstance(i, wdl_parser.AstList):
+            raise NotImplementedError
+
+    def parse_workflow_scatter_collection(self, i):
+        if isinstance(i, wdl_parser.Terminal):
+            return i.source_string
+        else:
+            if isinstance(i, wdl_parser.Ast):
+                return self.parse_declaration_expressn(i, es='')
+            if isinstance(i, wdl_parser.AstList):
+                raise NotImplementedError
+
+    def parse_workflow_scatter_body(self, i):
+        if isinstance(i, wdl_parser.Terminal):
+            raise NotImplementedError
+        else:
+            if isinstance(i, wdl_parser.Ast):
+                raise NotImplementedError
+            else:
+                if isinstance(i, wdl_parser.AstList):
+                    scatterbody = OrderedDict()
+                    element = 0
+                    for ast in i:
+                        if ast.name == 'Declaration':
+                            var_name, var_map = self.parse_workflow_declaration(ast)
+                            scatterbody['variable' + str(element)] = var_map
+                            element += 1
+                        else:
+                            if ast.name == 'Scatter':
+                                scattertask = self.parse_workflow_scatter(ast)
+                                scatterbody['scatter' + str(self.scatter_number)] = scattertask
+                                self.scatter_number += 1
+                                raise NotImplementedError
+                            if ast.name == 'Call':
+                                task = self.parse_workflow_call(ast)
+                                scatterbody['call' + str(self.call_number)] = task
+                                self.call_number += 1
+                        if ast.name == 'If':
+                            task = self.parse_workflow_if(ast)
+                            scatterbody['if' + str(self.if_number)] = task
+                            self.if_number += 1
+
+        return scatterbody
+
+    def parse_declaration_name(self, nameAST):
+        """
+        Required.
+
+        Nothing fancy here.  Just the name of the workflow
+        function.  For example: "rnaseqexample" would be the following
+        wdl workflow's name:
+
+        workflow rnaseqexample {File y; call a {inputs: y}; call b;}
+        task a {File y}
+        task b {command{"echo 'ATCG'"}}
+
+        :param nameAST:
+        :return:
+        """
+        if isinstance(nameAST, wdl_parser.Terminal):
+            return nameAST.source_string
+        else:
+            if isinstance(nameAST, wdl_parser.Ast):
+                return nameAST.source_string
+            if isinstance(nameAST, wdl_parser.AstList):
+                raise NotImplementedError
+
+    def parse_declaration_type(self, typeAST):
+        """
+        Required.
+
+        Currently supported:
+        Types are: Boolean, Float, Int, File, String, and Array[subtype].
+        OptionalTypes are: Boolean?, Float?, Int?, File?, String?, and Array[subtype]?.
+
+        Python is not typed, so we don't need typing except to identify type: "File",
+        which Toil needs to import, so we recursively travel down to the innermost
+        type which will tell us if the variables are files that need importing.
+
+        :param typeAST:
+        :return:
+        """
+        if isinstance(typeAST, wdl_parser.Terminal):
+            return typeAST.source_string
+        if isinstance(typeAST, wdl_parser.Ast):
+            if typeAST.name == 'Type':
+                return self.parse_declaration_type(typeAST.attr('subtype'))
+            if typeAST.name == 'OptionalType':
+                return self.parse_declaration_type(typeAST.attr('innerType'))
+            raise NotImplementedError
+        elif isinstance(typeAST, wdl_parser.AstList):
+            for ast in typeAST:
+                return self.parse_declaration_type(ast)
+
+    def parse_declaration_expressn(self, expressionAST, es, output_expressn=False):
+        """
+        Expressions are optional.  Workflow declaration valid examples:
+
+        File x
+
+        or
+
+        File x = '/x/x.tmp'
+
+        :param expressionAST:
+        :return:
+        """
+        if not expressionAST:
+            return
+        else:
+            if isinstance(expressionAST, wdl_parser.Terminal):
+                if expressionAST.str == 'boolean':
+                    if expressionAST.source_string == 'false':
+                        return 'False'
+                    if expressionAST.source_string == 'true':
+                        return 'True'
+                    raise TypeError('Parsed boolean ({}) must be expressed as "true" or "false".'.format(expressionAST.source_string))
+                else:
+                    if expressionAST.str == 'string' and not output_expressn:
+                        parsed_string = self.translate_wdl_string_to_python_string(expressionAST.source_string)
+                        return '{string}'.format(string=parsed_string)
+                    else:
+                        return '{string}'.format(string=(expressionAST.source_string))
+            else:
+                if isinstance(expressionAST, wdl_parser.Ast):
+                    if expressionAST.name == 'Add':
+                        es = es + self.parse_declaration_expressn_operator((expressionAST.attr('lhs')), (expressionAST.attr('rhs')),
+                          es,
+                          operator=' + ')
+                    else:
+                        if expressionAST.name == 'Subtract':
+                            es = es + self.parse_declaration_expressn_operator((expressionAST.attr('lhs')), (expressionAST.attr('rhs')),
+                              es,
+                              operator=' - ')
+                        else:
+                            if expressionAST.name == 'Multiply':
+                                es = es + self.parse_declaration_expressn_operator((expressionAST.attr('lhs')), (expressionAST.attr('rhs')),
+                                  es,
+                                  operator=' * ')
+                            else:
+                                if expressionAST.name == 'Divide':
+                                    es = es + self.parse_declaration_expressn_operator((expressionAST.attr('lhs')), (expressionAST.attr('rhs')),
+                                      es,
+                                      operator=' / ')
+                                else:
+                                    if expressionAST.name == 'GreaterThan':
+                                        es = es + self.parse_declaration_expressn_operator((expressionAST.attr('lhs')), (expressionAST.attr('rhs')),
+                                          es,
+                                          operator=' > ')
+                                    else:
+                                        if expressionAST.name == 'LessThan':
+                                            es = es + self.parse_declaration_expressn_operator((expressionAST.attr('lhs')), (expressionAST.attr('rhs')),
+                                              es,
+                                              operator=' < ')
+                                        else:
+                                            if expressionAST.name == 'FunctionCall':
+                                                es = es + self.parse_declaration_expressn_fncall(expressionAST.attr('name'), expressionAST.attr('params'), es)
+                                            else:
+                                                if expressionAST.name == 'TernaryIf':
+                                                    es = es + self.parse_declaration_expressn_ternaryif(expressionAST.attr('cond'), expressionAST.attr('iftrue'), expressionAST.attr('iffalse'), es)
+                                                else:
+                                                    if expressionAST.name == 'MemberAccess':
+                                                        es = es + self.parse_declaration_expressn_memberaccess(expressionAST.attr('lhs'), expressionAST.attr('rhs'), es)
+                                                    else:
+                                                        if expressionAST.name == 'ArrayLiteral':
+                                                            es = es + self.parse_declaration_expressn_arrayliteral(expressionAST.attr('values'), es)
+                                                        else:
+                                                            if expressionAST.name == 'TupleLiteral':
+                                                                es = es + self.parse_declaration_expressn_tupleliteral(expressionAST.attr('values'), es)
+                                                            else:
+                                                                if expressionAST.name == 'ArrayOrMapLookup':
+                                                                    es = es + self.parse_declaration_expressn_arraymaplookup(expressionAST.attr('lhs'), expressionAST.attr('rhs'), es)
+                                                                else:
+                                                                    if expressionAST.name == 'LogicalNot':
+                                                                        es = es + self.parse_declaration_expressn_logicalnot(expressionAST.attr('expression'), es)
+                                                                    else:
+                                                                        raise NotImplementedError
+                else:
+                    if isinstance(expressionAST, wdl_parser.AstList):
+                        raise NotImplementedError
+            return '(' + es + ')'
+
+    def parse_declaration_expressn_logicalnot(self, exprssn, es):
+        if isinstance(exprssn, wdl_parser.Terminal):
+            es = es + exprssn.source_string
+        else:
+            if isinstance(exprssn, wdl_parser.Ast):
+                es = es + self.parse_declaration_expressn(exprssn, es='')
+            else:
+                if isinstance(exprssn, wdl_parser.AstList):
+                    raise NotImplementedError
+        return ' not ' + es
+
+    def parse_declaration_expressn_arraymaplookup(self, lhsAST, rhsAST, es):
+        """
+
+        :param lhsAST:
+        :param rhsAST:
+        :param es:
+        :return:
+        """
+        if isinstance(lhsAST, wdl_parser.Terminal):
+            es = es + lhsAST.source_string
+        else:
+            if isinstance(lhsAST, wdl_parser.Ast):
+                es = es + self.parse_declaration_expressn(lhsAST, es='')[1:-1]
+            else:
+                if isinstance(lhsAST, wdl_parser.AstList):
+                    raise NotImplementedError
+                if isinstance(rhsAST, wdl_parser.Terminal):
+                    indexnum = rhsAST.source_string
+                else:
+                    if isinstance(rhsAST, wdl_parser.Ast):
+                        raise NotImplementedError
+                    elif isinstance(rhsAST, wdl_parser.AstList):
+                        raise NotImplementedError
+        return es + '[{index}]'.format(index=indexnum)
+
+    def parse_declaration_expressn_memberaccess(self, lhsAST, rhsAST, es):
+        """
+        Instead of "Class.variablename", use "Class.rv('variablename')".
+
+        :param lhsAST:
+        :param rhsAST:
+        :param es:
+        :return:
+        """
+        if isinstance(lhsAST, wdl_parser.Terminal):
+            es = es + lhsAST.source_string
+        else:
+            if isinstance(lhsAST, wdl_parser.Ast):
+                raise NotImplementedError
+            else:
+                if isinstance(lhsAST, wdl_parser.AstList):
+                    raise NotImplementedError
+                es = es + '_'
+                if isinstance(rhsAST, wdl_parser.Terminal):
+                    es = es + rhsAST.source_string
+                else:
+                    if isinstance(rhsAST, wdl_parser.Ast):
+                        raise NotImplementedError
+                    elif isinstance(rhsAST, wdl_parser.AstList):
+                        raise NotImplementedError
+        return es
+
+    def parse_declaration_expressn_ternaryif(self, cond, iftrue, iffalse, es):
+        """
+        Classic if statement.  This needs to be rearranged.
+
+        In wdl, this looks like:
+        if <condition> then <iftrue> else <iffalse>
+
+        In python, this needs to be:
+        <iftrue> if <condition> else <iffalse>
+
+        :param cond:
+        :param iftrue:
+        :param iffalse:
+        :param es:
+        :return:
+        """
+        es = es + self.parse_declaration_expressn(iftrue, es='')
+        es = es + ' if ' + self.parse_declaration_expressn(cond, es='')
+        es = es + ' else ' + self.parse_declaration_expressn(iffalse, es='')
+        return es
+
+    def parse_declaration_expressn_tupleliteral(self, values, es):
+        """
+        Same in python.  Just a parenthesis enclosed tuple.
+
+        :param values:
+        :param es:
+        :return:
+        """
+        es = es + '('
+        for ast in values:
+            es = es + self.parse_declaration_expressn(ast, es='') + ', '
+
+        if es.endswith(', '):
+            es = es[:-2]
+        return es + ')'
+
+    def parse_declaration_expressn_arrayliteral(self, values, es):
+        """
+        Same in python.  Just a square bracket enclosed array.
+
+        :param values:
+        :param es:
+        :return:
+        """
+        es = es + '['
+        for ast in values:
+            es = es + self.parse_declaration_expressn(ast, es='') + ', '
+
+        if es.endswith(', '):
+            es = es[:-2]
+        return es + ']'
+
+    def parse_declaration_expressn_operator(self, lhsAST, rhsAST, es, operator):
+        """
+        Simply joins the left and right hand arguments lhs and rhs with an operator.
+
+        :param lhsAST:
+        :param rhsAST:
+        :param es:
+        :param operator:
+        :return:
+        """
+        if isinstance(lhsAST, wdl_parser.Terminal):
+            if lhsAST.str == 'string':
+                es = es + '"{string}"'.format(string=(lhsAST.source_string))
+            else:
+                es = es + '{string}'.format(string=(lhsAST.source_string))
+        else:
+            if isinstance(lhsAST, wdl_parser.Ast):
+                es = es + self.parse_declaration_expressn(lhsAST, es='')
+            else:
+                if isinstance(lhsAST, wdl_parser.AstList):
+                    raise NotImplementedError
+                es = es + operator
+                if isinstance(rhsAST, wdl_parser.Terminal):
+                    if rhsAST.str == 'string':
+                        es = es + '"{string}"'.format(string=(rhsAST.source_string))
+                    else:
+                        es = es + '{string}'.format(string=(rhsAST.source_string))
+                else:
+                    if isinstance(rhsAST, wdl_parser.Ast):
+                        es = es + self.parse_declaration_expressn(rhsAST, es='')
+                    elif isinstance(rhsAST, wdl_parser.AstList):
+                        raise NotImplementedError
+        return es
+
+    def parse_declaration_expressn_fncall(self, name, params, es):
+        """
+        Parses out cromwell's built-in function calls.
+
+        Some of these are special
+        and need minor adjustments, for example length(), which is equivalent to
+        python's len() function.  Or sub, which is equivalent to re.sub(), but
+        needs a rearrangement of input variables.
+
+        Known to be supported: sub, size, read_tsv, length, select_first.
+
+        :param name:
+        :param params:
+        :param es:
+        :return:
+        """
+        if isinstance(name, wdl_parser.Terminal):
+            if name.str:
+                if name.source_string == 'length':
+                    es = es + 'len('
+                else:
+                    if name.source_string == 'stdout':
+                        return es + 'stdout'
+                    es = es + name.source_string + '('
+            else:
+                raise NotImplementedError
+        else:
+            if isinstance(name, wdl_parser.Ast):
+                raise NotImplementedError
+            else:
+                if isinstance(name, wdl_parser.AstList):
+                    raise NotImplementedError
+            if name.source_string == 'sub':
+                es_params = self.parse_declaration_expressn_fncall_SUBparams(params)
+            else:
+                es_params = self.parse_declaration_expressn_fncall_normalparams(params)
+        if name.source_string == 'glob':
+            return es + es_params + ', tempDir)'
+        else:
+            if name.source_string == 'size':
+                return es + es_params + ', fileStore=fileStore)'
+            return es + es_params + ')'
+
+    def parse_declaration_expressn_fncall_normalparams(self, params):
+        if isinstance(params, wdl_parser.Terminal):
+            raise NotImplementedError
+        else:
+            if isinstance(params, wdl_parser.Ast):
+                raise NotImplementedError
+            elif isinstance(params, wdl_parser.AstList):
+                es_param = ''
+                for ast in params:
+                    es_param = es_param + self.parse_declaration_expressn(ast, es='') + ', '
+
+                if es_param.endswith(', '):
+                    es_param = es_param[:-2]
+                return es_param
+
+    def parse_declaration_expressn_fncall_SUBparams(self, params):
+        """
+        Needs rearrangement:
+
+        0 1 2
+        WDL native params: sub(input, pattern, replace)
+
+        1 2 0
+        Python's re.sub() params: sub(pattern, replace, input)
+
+        :param params:
+        :param es:
+        :return:
+        """
+        if isinstance(params, wdl_parser.Terminal):
+            raise NotImplementedError
+        else:
+            if isinstance(params, wdl_parser.Ast):
+                raise NotImplementedError
+            elif isinstance(params, wdl_parser.AstList):
+                assert len(params) == 3, 'sub() function requires exactly 3 arguments.'
+                es_params0 = self.parse_declaration_expressn((params[0]), es='')
+                es_params1 = self.parse_declaration_expressn((params[1]), es='')
+                es_params2 = self.parse_declaration_expressn((params[2]), es='')
+                return es_params1 + ', ' + es_params2 + ', ' + es_params0
+
+    def parse_workflow_declaration(self, wf_declaration_subAST):
+        """
+        Parses a WDL declaration AST subtree into a string and a python
+        dictionary containing its 'type' and 'value'.
+
+        For example:
+        var_name = refIndex
+        var_map = {'type': File,
+                   'value': bamIndex}
+
+        :param wf_declaration_subAST: An AST subtree of a workflow declaration.
+        :return: var_name, which is the name of the declared variable
+        :return: var_map, a dictionary with keys for type and value.
+                          e.g. {'type': File, 'value': bamIndex}
+        """
+        var_map = OrderedDict()
+        var_name = self.parse_declaration_name(wf_declaration_subAST.attr('name'))
+        var_type = self.parse_declaration_type(wf_declaration_subAST.attr('type'))
+        var_expressn = self.parse_declaration_expressn((wf_declaration_subAST.attr('expression')), es='')
+        var_map['name'] = var_name
+        var_map['type'] = var_type
+        var_map['value'] = var_expressn
+        return (
+         var_name, var_map)
+
+    def parse_workflow_call_taskname(self, i):
+        """
+        Required.
+
+        :param i:
+        :return:
+        """
+        if isinstance(i, wdl_parser.Terminal):
+            return i.source_string
+        if isinstance(i, wdl_parser.Ast):
+            raise NotImplementedError
+        elif isinstance(i, wdl_parser.AstList):
+            raise NotImplementedError
+
+    def parse_workflow_call_taskalias(self, i):
+        """
+        Required.
+
+        :param i:
+        :return:
+        """
+        if isinstance(i, wdl_parser.Terminal):
+            return i.source_string
+        if isinstance(i, wdl_parser.Ast):
+            raise NotImplementedError
+        elif isinstance(i, wdl_parser.AstList):
+            raise NotImplementedError
+
+    def parse_workflow_call_body_declarations(self, i):
+        """
+        Have not seen this used, so expects to return "[]".
+
+        :param i:
+        :return:
+        """
+        declaration_array = []
+        if isinstance(i, wdl_parser.Terminal):
+            declaration_array = [
+             i.source_string]
+        else:
+            if isinstance(i, wdl_parser.Ast):
+                raise NotImplementedError
+            else:
+                if isinstance(i, wdl_parser.AstList):
+                    for ast in i:
+                        declaration_array.append(self.parse_task_declaration(ast))
+
+        if declaration_array:
+            raise NotImplementedError
+        return declaration_array
+
+    def parse_workflow_call_body_io(self, i):
+        """
+        Required.
+
+        :param i:
+        :return:
+        """
+        if isinstance(i, wdl_parser.Terminal):
+            raise NotImplementedError
+        else:
+            if isinstance(i, wdl_parser.Ast):
+                raise NotImplementedError
+            elif isinstance(i, wdl_parser.AstList):
+                for ast in i:
+                    assert len(i) == 1
+                    if ast.name == 'Inputs':
+                        return self.parse_workflow_call_body_io_map(ast.attr('map'))
+                    raise NotImplementedError
+
+    def parse_workflow_call_body_io_map(self, i):
+        """
+        Required.
+
+        :param i:
+        :return:
+        """
+        io_map = OrderedDict()
+        if isinstance(i, wdl_parser.Terminal):
+            raise NotImplementedError
+        else:
+            if isinstance(i, wdl_parser.Ast):
+                raise NotImplementedError
+            else:
+                if isinstance(i, wdl_parser.AstList):
+                    for ast in i:
+                        if ast.name == 'IOMapping':
+                            key = self.parse_declaration_expressn((ast.attr('key')), es='')
+                            value = self.parse_declaration_expressn((ast.attr('value')), es='')
+                            io_map[key] = value
+                        else:
+                            raise NotImplementedError
+
+        return io_map
+
+    def parse_workflow_call_body(self, i):
+        """
+        Required.
+
+        :param i:
+        :return:
+        """
+        io_map = OrderedDict()
+        if isinstance(i, wdl_parser.Terminal):
+            return i.source_string
+        else:
+            if isinstance(i, wdl_parser.Ast):
+                if i.name == 'CallBody':
+                    declarations = self.parse_workflow_call_body_declarations(i.attr('declarations'))
+                    io_map = self.parse_workflow_call_body_io(i.attr('io'))
+                else:
+                    raise NotImplementedError
+            else:
+                if isinstance(i, wdl_parser.AstList):
+                    raise NotImplementedError
+            return io_map
+
+    def parse_workflow_call(self, i):
+        """
+        Parses a WDL workflow call AST subtree to give the variable mappings for
+        that particular job/task "call".
+
+        :param i: WDL workflow job object
+        :return: python dictionary of io mappings for that job call
+        """
+        task_being_called = self.parse_workflow_call_taskname(i.attr('task'))
+        task_alias = self.parse_workflow_call_taskalias(i.attr('alias'))
+        io_map = self.parse_workflow_call_body(i.attr('body'))
+        if not task_alias:
+            task_alias = task_being_called
+        return {'task':task_being_called,  'alias':task_alias,  'io':io_map}

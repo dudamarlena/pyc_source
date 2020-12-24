@@ -1,0 +1,151 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/ryan/DH/prosodic/lib/Phoneme.py
+# Compiled at: 2019-06-07 00:03:27
+from ipa import ipa, ipakey, ipa2cmu, formantd
+from entity import entity
+
+class Phoneme(entity):
+
+    def __init__(self, phons, ipalookup=True):
+        self.feats = {}
+        self.children = []
+        self.featpaths = {}
+        self.phon = None
+        if type(phons) == type([]):
+            for phon in phons:
+                if type(phon) == type(''):
+                    self.children.append(Phoneme(phon))
+                else:
+                    self.children.append(phon)
+
+            self.feat('dipthong', True)
+        else:
+            self.phon = phons.strip()
+        if ipalookup and self.phon:
+            if self.phon in ipa:
+                k = -1
+                for v in ipa[self.phon]:
+                    k += 1
+                    self.feat(ipakey[k], v)
+
+            self.finished = True
+            if self.isLong() or self.isDipthong():
+                self.len = 2
+            else:
+                self.len = 1
+        return
+
+    def str_cmu(self):
+        strself = str(self)
+        if strself in ipa2cmu:
+            return ipa2cmu[strself].lower()
+        else:
+            print '<error> no cmu transcription for phoneme: [' + strself + ']'
+            return strself
+
+    def __str__(self):
+        if self.children:
+            return self.u2s(('').join([ x.phon for x in self.children ]))
+        else:
+            return self.u2s(self.phon)
+
+    def __repr__(self):
+        return str(self)
+
+    def isConsonant(self):
+        return self.feature('cons')
+
+    def isVowel(self):
+        return self.isDipthong() or self.isPeak()
+
+    def isPeak(self):
+        return self.feature('syll')
+
+    def isDipthong(self):
+        return self.feature('dipthong')
+
+    def isLong(self):
+        return self.feature('long')
+
+    def isHigh(self):
+        return self.feature('high')
+
+    @property
+    def phon_str(self):
+        if self.phon:
+            return self.phon
+        return ('').join(phon.phon for phon in self.children)
+
+    @property
+    def featset(self):
+        if self.children:
+            featset = set()
+            for child in self.children:
+                featset |= child.featset
+
+            return featset
+        return {feat for feat in self.feats if self.feats[feat]}
+
+    @property
+    def featspace(self):
+        fs = {}
+        if self.children:
+            for child in self.children:
+                for f, v in list(child.feats.items()):
+                    fs[f] = int(v) if v != None else 0
+
+        else:
+            for f, v in list(self.feats.items()):
+                fs[f] = int(v) if v != None else 0
+
+        return fs
+
+    def CorV(self):
+        if self.isDipthong() or self.isLong():
+            return 'VV'
+        if self.isPeak():
+            return 'V'
+        else:
+            return 'C'
+
+    def distance(self, other):
+        lfs1 = [self.children or self.featspace] if 1 else [ c.featspace for c in self.children ]
+        lfs2 = [other.children or other.featspace] if 1 else [ c.featspace for c in other.children ]
+        dists = []
+        for fs1 in lfs1:
+            for fs2 in lfs2:
+                allkeys = set(list(fs1.keys()) + list(fs2.keys()))
+                f = sorted(list(allkeys))
+                v1 = [ float(fs1.get(fx, 0)) for fx in f ]
+                v2 = [ float(fs2.get(fx, 0)) for fx in f ]
+                from scipy.spatial import distance
+                dists += [distance.euclidean(v1, v2)]
+
+        return sum(dists) / float(len(dists))
+
+    def distance0(self, other):
+        import math
+        feats1 = self.featset
+        feats2 = other.featset
+        jc = len(feats1 & feats2) / float(len(feats1 | feats2))
+        vdists = []
+        if 'cons' not in feats1 and 'cons' not in feats2:
+            v1 = [ p for p in self.phon_str if p in formantd ]
+            v2 = [ p for p in other.phon_str if p in formantd ]
+            if not v1 or not v2:
+                vdists += [2]
+            for v1x in v1:
+                for v2x in v2:
+                    vdist = math.sqrt((formantd[v1x][0] - formantd[v2x][0]) ** 2 + (formantd[v1x][1] - formantd[v2x][1]) ** 2)
+                    vdists += [vdist]
+
+        return jc + sum(vdists)
+
+    def __eq__(self, other):
+        return self.feats == other.feats
+
+    def __hash__(self):
+        return hash(self.phon)

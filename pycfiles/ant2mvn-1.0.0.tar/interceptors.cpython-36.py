@@ -1,0 +1,8 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: ./interceptors.py
+# Compiled at: 2018-07-20 10:03:27
+# Size of source mod 2**32: 2486 bytes
+__doc__ = 'omniORB.interceptors\n\nInterceptor registration functions:\n\n  addClientSendRequest\n  addClientReceiveReply\n  addServerReceiveRequest\n  addServerSendReply\n  addServerSendException\n\nTo register an interceptor function, call the relevant registration\nfunction with a callable argument. The callable will be called with\ntwo or three arguments. The first argument is the name of the\noperation being invoked; the second is the set of service contexts to\nbe retrieved or filled in. ServerSendException has a third argument,\nthe repository id of the exception being thrown.\n\nWhen receiving service contexts (ClientReceiveReply,\nServerReceiveRequest), the second argument is a tuple of 2-tuples. In\neach 2-tuple, the first item is the service context id and the second\nitem is the CDR encapsulation of the service context. The\nencapsulation can be decoded with omniORB.cdrUnmarshal() (but only if\nyou know the type to decode it to).\n\nWhen sending service contexts (ClientSendRequest, ServerSendReply,\nServerSendException), the second argument is an empty list. The\ninterceptor function can choose to add one or more service context\ntuples, with the same form described above, by appending to the list.\nEncapsulations are created with omniORB.cdrMarshal().\n\nInterceptor registration functions may only be called before the ORB\nis initialised. Attempting to call them later results in a\nBAD_INV_ORDER exception.\n'
+from _omnipy.interceptor_func import *

@@ -1,0 +1,443 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/bacpypes/app.py
+# Compiled at: 2020-01-29 15:49:54
+"""
+Application Module
+"""
+import warnings
+from .debugging import bacpypes_debugging, DebugContents, ModuleLogger
+from .core import deferred
+from .comm import ApplicationServiceElement, bind
+from .iocb import IOController, SieveQueue
+from .pdu import Address
+from .primitivedata import ObjectIdentifier
+from .capability import Collector
+from .appservice import StateMachineAccessPoint, ApplicationServiceAccessPoint
+from .netservice import NetworkServiceAccessPoint, NetworkServiceElement
+from .bvllservice import BIPSimple, BIPForeign, AnnexJCodec, UDPMultiplexer
+from .apdu import UnconfirmedRequestPDU, ConfirmedRequestPDU, SimpleAckPDU, ComplexAckPDU, ErrorPDU, RejectPDU, AbortPDU, Error
+from .errors import ExecutionError, UnrecognizedService, AbortException, RejectException
+from .apdu import confirmed_request_types, unconfirmed_request_types, ConfirmedServiceChoice, UnconfirmedServiceChoice, IAmRequest
+from .basetypes import ServicesSupported
+from .service.device import WhoIsIAmServices
+from .service.object import ReadWritePropertyServices
+_debug = 0
+_log = ModuleLogger(globals())
+
+@bacpypes_debugging
+class DeviceInfo(DebugContents):
+    _debug_contents = ('deviceIdentifier', 'address', 'maxApduLengthAccepted', 'segmentationSupported',
+                       'vendorID', 'maxNpduLength', 'maxSegmentsAccepted')
+
+    def __init__(self, device_identifier, address):
+        self.deviceIdentifier = device_identifier
+        self.address = address
+        self.maxApduLengthAccepted = 1024
+        self.segmentationSupported = 'noSegmentation'
+        self.maxSegmentsAccepted = None
+        self.vendorID = None
+        self.maxNpduLength = None
+        return
+
+
+@bacpypes_debugging
+class DeviceInfoCache:
+
+    def __init__(self, device_info_class=DeviceInfo):
+        if _debug:
+            DeviceInfoCache._debug('__init__')
+        if not issubclass(device_info_class, DeviceInfo):
+            raise ValueError('not a DeviceInfo subclass: %r' % (device_info_class,))
+        self.cache = {}
+        self.device_info_class = device_info_class
+
+    def has_device_info(self, key):
+        """Return true iff cache has information about the device."""
+        if _debug:
+            DeviceInfoCache._debug('has_device_info %r', key)
+        return key in self.cache
+
+    def iam_device_info(self, apdu):
+        """Create a device information record based on the contents of an
+        IAmRequest and put it in the cache."""
+        if _debug:
+            DeviceInfoCache._debug('iam_device_info %r', apdu)
+        if not isinstance(apdu, IAmRequest):
+            raise ValueError('not an IAmRequest: %r' % (apdu,))
+        device_instance = apdu.iAmDeviceIdentifier[1]
+        device_info = self.cache.get(device_instance, None)
+        if not device_info:
+            device_info = self.cache.get(apdu.pduSource, None)
+        if not device_info:
+            device_info = self.device_info_class(device_instance, apdu.pduSource)
+        device_info.deviceIdentifier = device_instance
+        device_info.address = apdu.pduSource
+        device_info.maxApduLengthAccepted = apdu.maxAPDULengthAccepted
+        device_info.segmentationSupported = apdu.segmentationSupported
+        device_info.vendorID = apdu.vendorID
+        self.update_device_info(device_info)
+        return
+
+    def get_device_info(self, key):
+        if _debug:
+            DeviceInfoCache._debug('get_device_info %r', key)
+        device_info = self.cache.get(key, None)
+        if _debug:
+            DeviceInfoCache._debug('    - device_info: %r', device_info)
+        return device_info
+
+    def update_device_info(self, device_info):
+        """The application has updated one or more fields in the device
+        information record and the cache needs to be updated to reflect the
+        changes.  If this is a cached version of a persistent record then this
+        is the opportunity to update the database."""
+        if _debug:
+            DeviceInfoCache._debug('update_device_info %r', device_info)
+        if not hasattr(device_info, '_ref_count'):
+            device_info._ref_count = 0
+        cache_id, cache_address = getattr(device_info, '_cache_keys', (None, None))
+        if cache_id is not None and device_info.deviceIdentifier != cache_id:
+            if _debug:
+                DeviceInfoCache._debug('    - device identifier updated')
+            del self.cache[cache_id]
+            self.cache[device_info.deviceIdentifier] = device_info
+        if cache_address is not None and device_info.address != cache_address:
+            if _debug:
+                DeviceInfoCache._debug('    - device address updated')
+            del self.cache[cache_address]
+            self.cache[device_info.address] = device_info
+        device_info._cache_keys = (
+         device_info.deviceIdentifier, device_info.address)
+        return
+
+    def acquire(self, key):
+        """Return the known information about the device and mark the record
+        as being used by a segmenation state machine."""
+        if _debug:
+            DeviceInfoCache._debug('acquire %r', key)
+        if isinstance(key, int):
+            device_info = self.cache.get(key, None)
+        elif not isinstance(key, Address):
+            raise TypeError('key must be integer or an address')
+        elif key.addrType not in (Address.localStationAddr, Address.remoteStationAddr):
+            raise TypeError('address must be a local or remote station')
+        else:
+            device_info = self.cache.get(key, None)
+        if device_info:
+            if _debug:
+                DeviceInfoCache._debug('    - reference bump')
+            device_info._ref_count += 1
+        if _debug:
+            DeviceInfoCache._debug('    - device_info: %r', device_info)
+        return device_info
+
+    def release(self, device_info):
+        """This function is called by the segmentation state machine when it
+        has finished with the device information."""
+        if _debug:
+            DeviceInfoCache._debug('release %r', device_info)
+        if device_info._ref_count == 0:
+            raise RuntimeError('reference count')
+        device_info._ref_count -= 1
+
+
+@bacpypes_debugging
+class Application(ApplicationServiceElement, Collector):
+    _startup_disabled = False
+
+    def __init__(self, localDevice=None, localAddress=None, deviceInfoCache=None, aseID=None):
+        if _debug:
+            Application._debug('__init__ %r %r deviceInfoCache=%r aseID=%r', localDevice, localAddress, deviceInfoCache, aseID)
+        ApplicationServiceElement.__init__(self, aseID)
+        self.objectName = {}
+        self.objectIdentifier = {}
+        if localDevice:
+            self.localDevice = localDevice
+            localDevice._app = self
+            self.objectName[localDevice.objectName] = localDevice
+            self.objectIdentifier[localDevice.objectIdentifier] = localDevice
+        if localAddress is not None:
+            warnings.warn('local address at the application layer deprecated', DeprecationWarning)
+            if isinstance(localAddress, Address):
+                self.localAddress = localAddress
+            else:
+                self.localAddress = Address(localAddress)
+        self.deviceInfoCache = deviceInfoCache or DeviceInfoCache()
+        self.controllers = {}
+        Collector.__init__(self)
+        if not self._startup_disabled:
+            for fn in self.capability_functions('startup'):
+                if _debug:
+                    Application._debug('    - startup fn: %r', fn)
+                deferred(fn, self)
+
+        return
+
+    def add_object(self, obj):
+        """Add an object to the local collection."""
+        if _debug:
+            Application._debug('add_object %r', obj)
+        object_name = obj.objectName
+        if not object_name:
+            raise RuntimeError('object name required')
+        object_identifier = obj.objectIdentifier
+        if not object_identifier:
+            raise RuntimeError('object identifier required')
+        if object_identifier[1] >= ObjectIdentifier.maximum_instance_number:
+            raise RuntimeError('invalid object identifier')
+        if object_name in self.objectName:
+            raise RuntimeError('already an object with name %r' % (object_name,))
+        if object_identifier in self.objectIdentifier:
+            raise RuntimeError('already an object with identifier %r' % (object_identifier,))
+        self.objectName[object_name] = obj
+        self.objectIdentifier[object_identifier] = obj
+        if self.localDevice and self.localDevice.objectList:
+            self.localDevice.objectList.append(object_identifier)
+        obj._app = self
+
+    def delete_object(self, obj):
+        """Add an object to the local collection."""
+        if _debug:
+            Application._debug('delete_object %r', obj)
+        object_name = obj.objectName
+        object_identifier = obj.objectIdentifier
+        del self.objectName[object_name]
+        del self.objectIdentifier[object_identifier]
+        if self.localDevice and self.localDevice.objectList:
+            indx = self.localDevice.objectList.index(object_identifier)
+            del self.localDevice.objectList[indx]
+        obj._app = None
+        return
+
+    def get_object_id(self, objid):
+        """Return a local object or None."""
+        return self.objectIdentifier.get(objid, None)
+
+    def get_object_name(self, objname):
+        """Return a local object or None."""
+        return self.objectName.get(objname, None)
+
+    def iter_objects(self):
+        """Iterate over the objects."""
+        return iter(self.objectIdentifier.values())
+
+    def get_services_supported(self):
+        """Return a ServicesSupported bit string based in introspection, look
+        for helper methods that match confirmed and unconfirmed services."""
+        if _debug:
+            Application._debug('get_services_supported')
+        services_supported = ServicesSupported()
+        for service_choice, service_request_class in confirmed_request_types.items():
+            service_helper = 'do_' + service_request_class.__name__
+            if hasattr(self, service_helper):
+                service_supported = ConfirmedServiceChoice._xlate_table[service_choice]
+                services_supported[service_supported] = 1
+
+        for service_choice, service_request_class in unconfirmed_request_types.items():
+            service_helper = 'do_' + service_request_class.__name__
+            if hasattr(self, service_helper):
+                service_supported = UnconfirmedServiceChoice._xlate_table[service_choice]
+                services_supported[service_supported] = 1
+
+        return services_supported
+
+    def request(self, apdu):
+        if _debug:
+            Application._debug('request %r', apdu)
+        if not isinstance(apdu, (UnconfirmedRequestPDU, ConfirmedRequestPDU)):
+            raise TypeError('APDU expected')
+        super(Application, self).request(apdu)
+
+    def indication(self, apdu):
+        if _debug:
+            Application._debug('indication %r', apdu)
+        helperName = 'do_' + apdu.__class__.__name__
+        helperFn = getattr(self, helperName, None)
+        if _debug:
+            Application._debug('    - helperFn: %r', helperFn)
+        if not helperFn:
+            if isinstance(apdu, ConfirmedRequestPDU):
+                raise UnrecognizedService('no function %s' % (helperName,))
+            return
+        try:
+            helperFn(apdu)
+        except RejectException as err:
+            if _debug:
+                Application._debug('    - reject exception: %r', err)
+            raise
+        except AbortException as err:
+            if _debug:
+                Application._debug('    - abort exception: %r', err)
+            raise
+        except ExecutionError as err:
+            if _debug:
+                Application._debug('    - execution error: %r', err)
+            if isinstance(apdu, ConfirmedRequestPDU):
+                resp = Error(errorClass=err.errorClass, errorCode=err.errorCode, context=apdu)
+                self.response(resp)
+        except Exception as err:
+            Application._exception('exception: %r', err)
+            if isinstance(apdu, ConfirmedRequestPDU):
+                resp = Error(errorClass='device', errorCode='operationalProblem', context=apdu)
+                self.response(resp)
+
+        return
+
+
+@bacpypes_debugging
+class ApplicationIOController(IOController, Application):
+
+    def __init__(self, *args, **kwargs):
+        if _debug:
+            ApplicationIOController._debug('__init__')
+        IOController.__init__(self)
+        Application.__init__(self, *args, **kwargs)
+        self.queue_by_address = {}
+
+    def process_io(self, iocb):
+        if _debug:
+            ApplicationIOController._debug('process_io %r', iocb)
+        destination_address = iocb.args[0].pduDestination
+        if _debug:
+            ApplicationIOController._debug('    - destination_address: %r', destination_address)
+        queue = self.queue_by_address.get(destination_address, None)
+        if not queue:
+            queue = SieveQueue(self._app_request, destination_address)
+            self.queue_by_address[destination_address] = queue
+        if _debug:
+            ApplicationIOController._debug('    - queue: %r', queue)
+        queue.request_io(iocb)
+        return
+
+    def _app_complete(self, address, apdu):
+        if _debug:
+            ApplicationIOController._debug('_app_complete %r %r', address, apdu)
+        queue = self.queue_by_address.get(address, None)
+        if not queue:
+            ApplicationIOController._debug('no queue for %r' % (address,))
+            return
+        else:
+            if _debug:
+                ApplicationIOController._debug('    - queue: %r', queue)
+            if not queue.active_iocb:
+                ApplicationIOController._debug('no active request for %r' % (address,))
+                return
+            if isinstance(apdu, ((None).__class__, SimpleAckPDU, ComplexAckPDU)):
+                queue.complete_io(queue.active_iocb, apdu)
+            elif isinstance(apdu, (ErrorPDU, RejectPDU, AbortPDU)):
+                queue.abort_io(queue.active_iocb, apdu)
+            else:
+                raise RuntimeError('unrecognized APDU type')
+            if _debug:
+                Application._debug('    - controller finished')
+            if not queue.ioQueue.queue and not queue.active_iocb:
+                if _debug:
+                    ApplicationIOController._debug('    - queue is empty')
+                del self.queue_by_address[address]
+            return
+
+    def _app_request(self, apdu):
+        if _debug:
+            ApplicationIOController._debug('_app_request %r', apdu)
+        super(ApplicationIOController, self).request(apdu)
+        if isinstance(apdu, UnconfirmedRequestPDU):
+            self._app_complete(apdu.pduDestination, None)
+        return
+
+    def request(self, apdu):
+        if _debug:
+            ApplicationIOController._debug('request %r', apdu)
+        if not isinstance(apdu, UnconfirmedRequestPDU):
+            raise RuntimeError('use IOCB for confirmed requests')
+        super(ApplicationIOController, self).request(apdu)
+
+    def confirmation(self, apdu):
+        if _debug:
+            ApplicationIOController._debug('confirmation %r', apdu)
+        self._app_complete(apdu.pduSource, apdu)
+
+
+@bacpypes_debugging
+class BIPSimpleApplication(ApplicationIOController, WhoIsIAmServices, ReadWritePropertyServices):
+
+    def __init__(self, localDevice, localAddress, deviceInfoCache=None, aseID=None):
+        if _debug:
+            BIPSimpleApplication._debug('__init__ %r %r deviceInfoCache=%r aseID=%r', localDevice, localAddress, deviceInfoCache, aseID)
+        ApplicationIOController.__init__(self, localDevice, localAddress, deviceInfoCache, aseID=aseID)
+        if isinstance(localAddress, Address):
+            self.localAddress = localAddress
+        else:
+            self.localAddress = Address(localAddress)
+        self.asap = ApplicationServiceAccessPoint()
+        self.smap = StateMachineAccessPoint(localDevice)
+        self.smap.deviceInfoCache = self.deviceInfoCache
+        self.nsap = NetworkServiceAccessPoint()
+        self.nse = NetworkServiceElement()
+        bind(self.nse, self.nsap)
+        bind(self, self.asap, self.smap, self.nsap)
+        self.bip = BIPSimple()
+        self.annexj = AnnexJCodec()
+        self.mux = UDPMultiplexer(self.localAddress)
+        bind(self.bip, self.annexj, self.mux.annexJ)
+        self.nsap.bind(self.bip, address=self.localAddress)
+
+    def close_socket(self):
+        if _debug:
+            BIPSimpleApplication._debug('close_socket')
+        self.mux.close_socket()
+
+
+@bacpypes_debugging
+class BIPForeignApplication(ApplicationIOController, WhoIsIAmServices, ReadWritePropertyServices):
+
+    def __init__(self, localDevice, localAddress, bbmdAddress, bbmdTTL, deviceInfoCache=None, aseID=None):
+        if _debug:
+            BIPForeignApplication._debug('__init__ %r %r %r %r deviceInfoCache=%r aseID=%r', localDevice, localAddress, bbmdAddress, bbmdTTL, deviceInfoCache, aseID)
+        ApplicationIOController.__init__(self, localDevice, localAddress, deviceInfoCache, aseID=aseID)
+        if isinstance(localAddress, Address):
+            self.localAddress = localAddress
+        else:
+            self.localAddress = Address(localAddress)
+        self.asap = ApplicationServiceAccessPoint()
+        self.smap = StateMachineAccessPoint(localDevice)
+        self.smap.deviceInfoCache = self.deviceInfoCache
+        self.nsap = NetworkServiceAccessPoint()
+        self.nse = NetworkServiceElement()
+        bind(self.nse, self.nsap)
+        bind(self, self.asap, self.smap, self.nsap)
+        self.bip = BIPForeign(bbmdAddress, bbmdTTL)
+        self.annexj = AnnexJCodec()
+        self.mux = UDPMultiplexer(self.localAddress, noBroadcast=True)
+        bind(self.bip, self.annexj, self.mux.annexJ)
+        self.nsap.bind(self.bip, address=self.localAddress)
+
+    def close_socket(self):
+        if _debug:
+            BIPForeignApplication._debug('close_socket')
+        self.mux.close_socket()
+
+
+@bacpypes_debugging
+class BIPNetworkApplication(NetworkServiceElement):
+
+    def __init__(self, localAddress, bbmdAddress=None, bbmdTTL=None, eID=None):
+        if _debug:
+            BIPNetworkApplication._debug('__init__ %r eID=%r', localAddress, eID)
+        NetworkServiceElement.__init__(self, eID)
+        if isinstance(localAddress, Address):
+            self.localAddress = localAddress
+        else:
+            self.localAddress = Address(localAddress)
+        self.nsap = NetworkServiceAccessPoint()
+        bind(self, self.nsap)
+        if not bbmdAddress and not bbmdTTL:
+            self.bip = BIPSimple()
+        else:
+            self.bip = BIPForeign(bbmdAddress, bbmdTTL)
+        self.annexj = AnnexJCodec()
+        self.mux = UDPMultiplexer(self.localAddress, noBroadcast=False)
+        bind(self.bip, self.annexj, self.mux.annexJ)
+        self.nsap.bind(self.bip, address=self.localAddress)

@@ -1,0 +1,295 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.2 (3180)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/ally/support/sqlalchemy/session.py
+# Compiled at: 2013-10-02 09:54:40
+"""
+Created on Jan 5, 2012
+
+@package: ally core sql alchemy
+@copyright: 2012 Sourcefabric o.p.s.
+@license: http://www.gnu.org/licenses/gpl-3.0.txt
+@author: Gabriel Nistor
+
+Provides support for SQL alchemy automatic session handling.
+"""
+from ally.container.impl.proxy import IProxyHandler, Execution, registerProxyHandler
+from ally.exception import DevelError
+from collections import deque
+from inspect import isgenerator
+from sqlalchemy.exc import InvalidRequestError
+from sqlalchemy.orm.session import Session
+from threading import current_thread
+import logging
+log = logging.getLogger(__name__)
+
+class SessionSupport:
+    """
+    Class that provides for the services that use SQLAlchemy the session support.
+    All services that use SQLAlchemy have to extend this class in order to provide the sql alchemy session
+    of the request, the session will be automatically handled by the session processor.
+    """
+
+    def session(self):
+        """
+        Provide or construct a session.
+        """
+        return openSession()
+
+
+def setKeepAlive(keep):
+    """
+    Set the flag that indicates if a session should be closed or kept alive after a call has finalized.
+    If the session is left opened then other processes need to close it.
+
+    @param keep: boolean
+        Flag indicating that the session should be left open (True) or not (False).
+    """
+    assert isinstance(keep, bool), 'Invalid keep flag %s' % keep
+    current_thread()._ally_db_session_alive = keep
+
+
+def beginWith(sessionCreator):
+    """
+    Begins a session (on demand) based on the provided session creator for this thread.
+
+    @param sessionCreator: class
+        The session creator class.
+    """
+    try:
+        creators = current_thread()._ally_db_session_create
+    except AttributeError:
+        creators = current_thread()._ally_db_session_create = deque()
+
+    assert isinstance(creators, deque)
+    creators.append(sessionCreator)
+    if not log.debug('Begin session creator %s', sessionCreator):
+        assert True
+
+
+def openSession():
+    """
+    Function to provide the session on the current thread, this will automatically create a session based on the current
+    thread session creator if one is not already created.
+    """
+    thread = current_thread()
+    try:
+        creators = thread._ally_db_session_create
+    except AttributeError:
+        raise DevelError('Invalid call, it seems that the thread is not tagged with an SQL session')
+
+    creator = creators[(-1)]
+    creatorId = id(creator)
+    try:
+        sessions = thread._ally_db_session
+    except AttributeError:
+        session = creator()
+        thread._ally_db_session = {creatorId: session}
+        if not log.debug('Created SQL Alchemy session %s', session):
+            assert True
+    else:
+        session = sessions.get(creatorId)
+        if session is None:
+            session = sessions[creatorId] = creator()
+            if not log.debug('Created SQL Alchemy session %s', session):
+                assert True
+            return session
+
+
+def hasSession():
+    """
+    Function to check if there is a session on the current thread.
+    """
+    thread = current_thread()
+    try:
+        creators = thread._ally_db_session_create
+    except AttributeError:
+        raise DevelError('Invalid call, it seems that the thread is not tagged with an SQL session')
+
+    creatorId = id(creators[(-1)])
+    try:
+        sessions = thread._ally_db_session
+    except AttributeError:
+        return False
+
+    return creatorId in sessions
+
+
+def endCurrent(sessionCloser=None):
+    """
+    Ends the transaction for the current thread session creator.
+
+    @param sessionCloser: Callable|None
+        A Callable that will be invoked for the ended transaction. It will take as a parameter the session to be closed.
+    """
+    if not not sessionCloser:
+        assert callable(sessionCloser), 'Invalid session closer %s' % sessionCloser
+        thread = current_thread()
+        try:
+            creators = thread._ally_db_session_create
+        except AttributeError:
+            raise DevelError('Illegal end transaction call, there is no transaction begun')
+
+        assert isinstance(creators, deque)
+        creator = creators.pop()
+        if not log.debug('End session creator %s', creator):
+            assert True
+        if not creators:
+            if not getattr(current_thread(), '_ally_db_session_alive', False):
+                endSessions(sessionCloser)
+            del thread._ally_db_session_create
+
+
+def endSessions(sessionCloser=None):
+    """
+    Ends all the transaction for the current thread session.
+
+    @param sessionCloser: Callable|None
+        A Callable that will be invoked for the ended transactions. It will take as a parameter the session to be closed.
+    """
+    if not not sessionCloser:
+        assert callable(sessionCloser), 'Invalid session closer %s' % sessionCloser
+        thread = current_thread()
+        try:
+            sessions = thread._ally_db_session
+        except AttributeError:
+            return
+
+        while sessions:
+            _creatorId, session = sessions.popitem()
+            if sessionCloser:
+                sessionCloser(session)
+                continue
+
+        del thread._ally_db_session
+        if not log.debug('Ended all sessions'):
+            assert True
+
+
+def commit(session):
+    """
+    Commit the session.
+
+    @param session: Session
+        The session to be committed.
+    """
+    assert isinstance(session, Session), 'Invalid session %s' % session
+    try:
+        session.commit()
+        if not log.debug('Committed SQL Alchemy session transactions'):
+            assert True
+    except InvalidRequestError:
+        if not log.debug('Nothing to commit on SQL Alchemy session'):
+            assert True
+
+    if not log.debug('Properly closed SQL Alchemy session'):
+        assert True
+
+
+def rollback(session):
+    """
+    Roll back the session.
+
+    @param session: Session
+        The session to be rolled back.
+    """
+    assert isinstance(session, Session), 'Invalid session %s' % session
+    session.rollback()
+    if not log.debug('Improper SQL Alchemy session, rolled back transactions'):
+        assert True
+
+
+def commitNow():
+    """
+    Commits the current session right now.
+
+    @return: boolean
+        True if a session was commited, False otherwise.
+    """
+    thread = current_thread()
+    try:
+        creators = thread._ally_db_session_create
+    except AttributeError:
+        return False
+
+    creator = creators[(-1)]
+    creatorId = id(creator)
+    try:
+        sessions = thread._ally_db_session
+    except AttributeError:
+        return False
+
+    session = sessions.get(creatorId)
+    if session is not None:
+        commit(session)
+        return True
+    else:
+        return
+
+
+def bindSession(proxy, sessionCreator):
+    """
+    Binds a session creator wrapping for the provided proxy.
+
+    @param proxy: Proxy
+        The proxy to wrap with session creator.
+    @param sessionCreator: class
+        The session creator class that will create the session.
+    """
+    registerProxyHandler(SessionBinder(sessionCreator), proxy)
+
+
+class SessionBinder(IProxyHandler):
+    """
+    Implementation for @see: IProxyHandler for binding sql alchemy session.
+    """
+    __slots__ = ('sessionCreator', )
+
+    def __init__(self, sessionCreator):
+        """
+        Binds a session creator wrapping for the provided proxy.
+
+        @param sessionCreator: class
+            The session creator class that will create the session.
+        """
+        self.sessionCreator = sessionCreator
+
+    def handle(self, execution):
+        """
+        @see: IProxyHandler.handle
+        """
+        assert isinstance(execution, Execution), 'Invalid execution %s' % execution
+        beginWith(self.sessionCreator)
+        try:
+            returned = execution.invoke()
+        except:
+            endCurrent(rollback)
+            raise
+        else:
+            if hasSession():
+                session = openSession()
+                session.flush()
+                session.expunge_all()
+                endCurrent(commit)
+            else:
+                if isgenerator(returned):
+                    return self.wrapGenerator(returned)
+                else:
+                    return returned
+
+    def wrapGenerator(self, generator):
+        """
+        Wraps the generator with the session creator.
+        """
+        assert isgenerator(generator), 'Invalid generator %s' % generator
+        beginWith(self.sessionCreator)
+        try:
+            for item in generator:
+                yield item
+
+        except:
+            endCurrent(rollback)
+            raise
+        else:
+            endCurrent(commit)

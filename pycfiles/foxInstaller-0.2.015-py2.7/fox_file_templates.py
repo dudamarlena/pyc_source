@@ -1,0 +1,12 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\foxInstaller\fox_file_templates.py
+# Compiled at: 2013-10-15 10:14:37
+windows_templates = {'start': 'REM %(PROJECT_NAME)s Start script\ncmd.exe /K "cd %(INSTALL_DIR)s\\%(VENV_DIR)s\\Scripts & call activate.bat & cd ..\\..\\%(INNER_PROJECT_NAME)s & python manage.py runserver 0.0.0.0:%(PORT)s\n', 
+   'update': 'REM %(PROJECT_NAME)s Update script\ngit pull\ncd %(VENV_DIR)s/Scripts\ncall activate.bat\ncd ../../%(INNER_PROJECT_NAME)s\npython manage.py migrate\npython manage.py compilemessages\n'}
+unix_templates = {'start': '#!/bin/bash\n# %(PROJECT_NAME)s Start script\ncd %(INSTALL_DIR)s\n. ./%(VENV_DIR)s/bin/activate\ncd %(INNER_PROJECT_NAME)s\nexec gunicorn --workers=3 -t 30 --log-level debug --log-file %(INSTALL_DIR)s/log/server.log -b 0.0.0.0:%(PORT)s --user=%(USERNAME)s --group=%(USERGROUP)s %(INNER_PROJECT_NAME)s.wsgi:application >> %(INSTALL_DIR)s/log/gunicorn.log\n', 
+   'update': '# %(PROJECT_NAME)s Update script\ngit pull\nservice gunicorn-%(PROJECT_NAME)s stop\n. ./%(VENV_DIR)s/bin/activate\ncd %(INNER_PROJECT_NAME)s\npython manage.py migrate\npython manage.py compilemessages\nservice gunicorn-%(PROJECT_NAME)s start\n', 
+   'nginx_conf': "server {\n    listen         80;\n    server_name    %(DOMAIN)s;\n    root %(INSTALL_DIR)s/%(INNER_PROJECT_NAME)s;\n    location /media/ {\n    }\n    location /static/ {\n    }\n    location /robots.txt {\n        alias %(INSTALL_DIR)s/%(INNER_PROJECT_NAME)s/static/robots.txt;\n    }\n    ## Deny illegal Host headers\n    if ($host !~* ^(%(DOMAIN)s)$ ) {\n        return 444;\n    }\n    location / {\n        proxy_read_timeout      30s;\n        proxy_pass              http://127.0.0.1:%(PORT)s;\n        proxy_set_header        Host                 $host;\n        proxy_set_header        User-Agent           $http_user_agent;\n        proxy_set_header        X-Real-IP            $remote_addr;\n        #auth_basic 'Restricted';\n        #auth_basic_user_file %(INSTALL_DIR)s/%(INNER_PROJECT_NAME)s/.htpasswd;\n    }\n    error_page 500 502 503 504 /media/50x.html;\n}\n", 
+   'upstart_job': "description 'start and stop the %(PROJECT_NAME)s server'\nstart on runlevel [2345]\nstop on runlevel [!2345]\nrespawn\nrespawn limit 10 5\nexec %(INSTALL_DIR)s/start.sh\n"}

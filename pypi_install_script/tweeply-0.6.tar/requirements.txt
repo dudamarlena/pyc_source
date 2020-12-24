@@ -1,0 +1,9 @@
+Flask==0.10.1
+Flask-OAuth==0.12
+click==3.3
+pyzmq==14.3.0
+twitter==1.14.3
+SQLAlchemy==0.9.9
+psycopg2==2.6
+pysqlite==2.6.3
+six

@@ -1,0 +1,12 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: D:\FilePkl\hasil_development\Deploymentnew\Deployment\Deployment\urls.py
+# Compiled at: 2014-11-10 04:48:14
+from django.conf.urls import patterns, include, url
+from django.conf import settings
+from django.contrib import admin
+admin.autodiscover()
+urlpatterns = patterns('', url('^admin/', include(admin.site.urls)), url('^$', 'Deploymentapp.views.home', name='home'), url('^login', 'Deploymentapp.views.signin', name='signin'), url('^tasklist/$', 'Deploymentapp.views.tasklist', name='task'), url('^projectload/(?P<idtask>[-\\w]+)$', 'Deploymentapp.views.loadtask', name='tasklist'), url('^deletetask/(?P<idtask>[-\\w]+)$', 'Deploymentapp.views.deletetask', name='delete'), url('^addnewtask/$', 'Deploymentapp.views.addnewtask', name='addnew'), url('^projecttask/$', 'Deploymentapp.views.addproject', name='projecttask'), url('^authentication/$', 'Deploymentapp.views.authentication', name='authentic'), url('^search/$', 'Deploymentapp.views.searchtask', name='search'), url('^changehostuser/$', 'Deploymentapp.views.changehostuser', name='chnghostusr'), url('^changehosttask/$', 'Deploymentapp.views.changehosttask', name='chnghosttask'), url('^loggedout/$', 'Deploymentapp.views.loggedout', name='loggedout'), url('^deletecommand/(?P<idcommand>[-\\w]+)$', 'Deploymentapp.views.deletecommand', name='deletecommand'), url('^editcommand/(?P<idcommand>[-\\w]+)$', 'Deploymentapp.views.runedit', name='editcommand'), url('^successedit/$', 'Deploymentapp.views.editcommand', name='edited'), url('^dorevert/(?P<idtask>[-\\w]+)$', 'Deploymentapp.views.reverttask', name='reverttask'), url('^copy/', 'Deploymentapp.views.copy', name='copy'), url('^newfile/', 'Deploymentapp.views.createfile', name='newfile'), url('^deletedirectory/', 'Deploymentapp.views.deletedir', name='deletedirectory'), url('^deletefile/', 'Deploymentapp.views.deletefile', name='deletefile'), url('^createdirectory/', 'Deploymentapp.views.makedir', name='createdirectory'), url('^uploadfile/', 'Deploymentapp.views.uploadfile', name='uploadfile'), url('^executetask/', 'Deploymentapp.views.executetask', name='executetask'), url('^deleteallcommand/', 'Deploymentapp.views.deleteallcommand', name='deleteallcommand'))
+handler404 = 'Deploymentapp.views.error404'

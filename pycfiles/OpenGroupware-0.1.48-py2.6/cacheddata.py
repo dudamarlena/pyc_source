@@ -1,0 +1,108 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/coils/net/foundation/cacheddata.py
+# Compiled at: 2012-10-12 07:02:39
+import base64, shutil, os
+from coils.core import *
+FS = chr(28)
+GS = chr(29)
+RS = chr(30)
+
+class CachedData(object):
+
+    def __init__(self, sid, path, ctag):
+        self._sid = str(sid)
+        self._path = str(path)
+        self._ctag = str(ctag)
+        self.open_cache()
+
+    @property
+    def sid(self):
+        return self._sid
+
+    @property
+    def path(self):
+        return self._path
+
+    @property
+    def ctag(self):
+        return self._ctag
+
+    def _get_path(self):
+        filename = FS.join([self.sid, self.path])
+        filename = base64.encodestring(filename).strip()
+        filename = ('{0}/{1}/{2}').format(filename[0:3], filename[3:6], filename)
+        filename = ('cache/dav/{0}').format(filename)
+        return filename
+
+    def _write_header(self, handle):
+        handle.seek(0)
+        record = (
+         '01', self.sid, self.path, self.ctag)
+        header = (FS.join(record) + RS).ljust(511, '~') + RS
+        handle.write(header)
+
+    def _read_header(self, handle):
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        if size > 512:
+            handle.seek(0)
+            header = handle.read(512)
+            if header[511] == RS:
+                (record, rs, fill) = header.partition(RS)
+                record = record.split(FS)
+                if record[0] == '01':
+                    return (
+                     record[1], record[2], record[3])
+                raise CoilsException(('Unrecognized cache header version for {0}:{1}').format(self.sid, self.path))
+            else:
+                raise CoilsException(('Mangled header in cached data object for {0}:{1}').format(self.sid, self.path))
+        else:
+            return (None, None, None)
+        return
+
+    def open_cache(self):
+        self._handle = BLOBManager.Open(self._get_path(), 'r+', encoding='binary', create=True)
+
+    def close_cache(self):
+        self._handle.close()
+
+    @property
+    def is_current(self):
+        (sid, path, ctag) = self._read_header(self._handle)
+        if sid is None:
+            return False
+        else:
+            if sid == self.sid and path == self.path and ctag == self.ctag:
+                return True
+            else:
+                return False
+            return
+
+    @property
+    def not_current(self):
+        return not self.is_current
+
+    @property
+    def size(self):
+        self._handle.seek(0, os.SEEK_END)
+        size = self._handle.tell()
+        return size - 512
+
+    def prepare(self):
+        self._write_header(self._handle)
+
+    def write_from_stream(self, rfile):
+        self._write_header(self._handle)
+        data = rfile.read(4096)
+        while data != '':
+            self._handle.write(data)
+            data = rfile.read(4096)
+
+        self._handle.flush()
+
+    def get_stream(self):
+        self._handle.seek(512)
+        return self._handle

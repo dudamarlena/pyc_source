@@ -1,0 +1,171 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/ryanh/src/pynsot/tests/app/test_circuits.py
+# Compiled at: 2019-10-16 17:52:59
+# Size of source mod 2**32: 7889 bytes
+__doc__ = '\nTest Circuits in the CLI app.\n'
+from __future__ import absolute_import, unicode_literals
+import logging, pytest
+from tests.fixtures import attribute, attributes, client, config, device, interface, network, runner, site, site_client
+from tests.fixtures.circuits import circuit, circuit_attributes, attributeless_circuit, device_a, device_z, interface_a, interface_z
+from tests.util import assert_output, assert_outputs
+log = logging.getLogger(__name__)
+
+def test_circuits_add(runner, interface_a, interface_z):
+    """ Test adding a normal circuit """
+    with runner.isolated_filesystem():
+        result = runner.run('circuits add -A {0} -Z {1} -n add_test1'.format(interface_a['id'], interface_z['id']))
+        assert_output(result, ['Added circuit!'])
+        result = runner.run('circuits list')
+        assert_output(result, ['add_test1'])
+
+
+def test_circuits_add_single_sided(runner, interface_a):
+    """ Add a circuit with no remote end """
+    with runner.isolated_filesystem():
+        result = runner.run('circuits add -A {0} -n add_test2'.format(interface_a['id']))
+        assert_output(result, ['Added circuit!'])
+        result = runner.run('circuits list')
+        assert_output(result, ['add_test2'])
+
+
+def test_circuits_add_intf_reuse(runner, interface_a):
+    """
+    Try creating two circuits with the same interface, which should fail
+    """
+    with runner.isolated_filesystem():
+        cmd = 'circuits add -A {0} -n {1}'
+        result = runner.run(cmd.format(interface_a['id'], 'circuit1'))
+        assert result.exit_code == 0
+        result = runner.run(cmd.format(interface_a['id'], 'bad_circuit'))
+        assert result.exit_code != 0
+        assert 'A-side endpoint Interface already exists' in result.output
+
+
+def test_circuits_add_dupe_name(runner, interface_a, interface_z):
+    """
+    Try creating two circuits with the same name, which should fail
+    """
+    with runner.isolated_filesystem():
+        cmd = 'circuits add -A {0} -n foo'
+        result = runner.run(cmd.format(interface_a['id']))
+        assert result.exit_code == 0
+        result = runner.run(cmd.format(interface_z['id']))
+        assert result.exit_code != 0
+        assert 'circuit with this name already exists' in result.output
+
+
+def test_circuits_list(runner, circuit):
+    """ Make sure we can list out a circuit """
+    circuit_name = 'test_circuit'
+    with runner.isolated_filesystem():
+        result = runner.run('circuits list')
+        assert_output(result, [circuit_name])
+        result = runner.run('circuits list -i {}'.format(circuit_name))
+        assert_output(result, [circuit_name])
+
+
+def test_circuits_list_query(runner, circuit, attributeless_circuit):
+    with runner.isolated_filesystem():
+        result = runner.run('circuits list -q "doesnt=exist"')
+        assert result.exit_code != 0
+        assert 'Attribute matching query does not exist' in result.output
+        result = runner.run('circuits list -q "owner=alice"')
+        assert result.output == 'test_circuit\n'
+        result = runner.run('circuits list -q "-owner=alice"')
+        assert result.output == 'attributeless_circuit\n'
+
+
+def test_circuits_list_nonexistant(runner):
+    """ Listing a non-existant circuit should fail """
+    with runner.isolated_filesystem():
+        result = runner.run('circuits list -i nopenopenope')
+        assert result.exit_code != 0
+        assert 'No such Circuit found' in result.output
+
+
+def test_circuits_list_natural_key_output(runner, circuit):
+    """ Natural key output should just list the circuit names """
+    with runner.isolated_filesystem():
+        result = runner.run('circuits list -N')
+        assert result.exit_code == 0
+        assert result.output == 'test_circuit\n'
+
+
+def test_circuits_list_grep_output(runner, circuit):
+    """ grep output should list circuit names with all the attributes """
+    expected_output = 'test_circuit owner=alice\ntest_circuit vendor=lasers go pew pew\ntest_circuit endpoint_a=foo-bar01:eth0\ntest_circuit endpoint_z=foo-bar02:eth0\ntest_circuit id=9\ntest_circuit name=test_circuit\ntest_circuit name_slug=test_circuit\n'
+    with runner.isolated_filesystem():
+        result = runner.run('circuits list -g')
+        assert result.exit_code == 0
+        assert result.output == expected_output
+
+
+def test_circuits_list_addresses(runner, circuit, interface_a, interface_z):
+    """ Test listing out a circuit's interface addresses """
+    with runner.isolated_filesystem():
+        result = runner.run('circuits list -i {} addresses'.format(circuit['id']))
+        assert_outputs(result, [
+         [
+          interface_a['addresses'][0].split('/')[0]],
+         [
+          interface_z['addresses'][0].split('/')[0]]])
+
+
+def test_circuits_list_devices(runner, circuit, device_a, device_z):
+    """ Test listing out a circuit's devices """
+    with runner.isolated_filesystem():
+        result = runner.run('circuits list -i {} devices'.format(circuit['id']))
+        assert_outputs(result, [
+         [
+          device_a['hostname']],
+         [
+          device_z['hostname']]])
+
+
+def test_circuits_list_interfaces(runner, circuit, interface_a, interface_z):
+    """ Test listing out a circuit's interfaces """
+    with runner.isolated_filesystem():
+        result = runner.run('circuits list -i {} interfaces'.format(circuit['id']))
+        assert_outputs(result, [
+         [
+          interface_a['device_hostname'], interface_a['name']],
+         [
+          interface_z['device_hostname'], interface_z['name']]])
+
+
+def test_circuits_subcommand_query(runner, circuit):
+    """ Make sure we can run a subcommand given a unique set query """
+    with runner.isolated_filesystem():
+        result = runner.run('circuits list -q owner=alice interfaces')
+        assert result.exit_code == 0
+
+
+def test_circuits_remove(runner, circuit):
+    """ Make sure we can remove an existing circuit """
+    circuit_name = 'test_circuit'
+    with runner.isolated_filesystem():
+        result = runner.run('circuits remove -i {}'.format(circuit_name))
+        assert result.exit_code == 0
+
+
+def test_circuits_update_name(runner, circuit):
+    """ Test update by changing the circuit name """
+    old_name = 'test_circuit'
+    new_name = 'awesome_circuit'
+    with runner.isolated_filesystem():
+        result = runner.run('circuits update -i {} -n {}'.format(old_name, new_name))
+        assert result.exit_code == 0
+        result = runner.run('circuits list -i {}'.format(new_name))
+        assert_output(result, [new_name])
+        result = runner.run('circuits list -i {}'.format(old_name))
+        assert result.exit_code != 0
+        assert 'No such Circuit found' in result.output
+
+
+def test_circuits_update_interface(runner, circuit, interface):
+    """ Test updating a circuit's Z side interface """
+    with runner.isolated_filesystem():
+        result = runner.run('circuits update -i {0} -Z {1}'.format(circuit['name'], interface['id']))
+        assert_output(result, ['Updated circuit!'])

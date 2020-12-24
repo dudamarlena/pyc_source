@@ -1,0 +1,359 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /usr/local/lib/python2.7/dist-packages/Ctrax/params.py
+# Compiled at: 2016-08-26 22:09:35
+import copy, sys, numpy as num
+from wx import AboutDialogInfo
+from version import DEBUG, __version__
+
+class ShapeParams():
+
+    def __init__(self, major=0, minor=0, area=0, ecc=0):
+        self.major = major
+        self.minor = minor
+        self.area = area
+        self.ecc = ecc
+
+    def copy(self):
+        return ShapeParams(self.major, self.minor, self.area, self.ecc)
+
+    def __print__(self):
+        return 'major = %.2f, minor = %.2f, area = %.2f, ecc = %.2f' % (self.major, self.minor, self.area, self.ecc)
+
+    def __repr__(self):
+        return self.__print__()
+
+    def __str__(self):
+        return self.__print__()
+
+    def __eq__(self, other):
+        for i, j in self.__dict__.iteritems():
+            if not hasattr(other, i):
+                return False
+            if not j == other.__dict__[i]:
+                return False
+
+        for i, j in other.__dict__.iteritems():
+            if not hasattr(self, i):
+                return False
+            if not j == self.__dict__[i]:
+                return False
+
+        return True
+
+
+def averageshape(shape1, shape2):
+    shape3 = ShapeParams()
+    shape3.major = (shape1.major + shape2.major) / 2.0
+    shape3.minor = (shape1.minor + shape2.minor) / 2.0
+    shape3.area = (shape1.area + shape2.area) / 2.0
+    shape3.ecc = (shape1.ecc + shape2.ecc) / 2.0
+    return shape3
+
+
+class Grid():
+
+    def __init__(self):
+        self.X = None
+        self.Y = None
+        self.X2 = None
+        self.Y2 = None
+        self.XY = None
+        return
+
+    def setsize(self, sz):
+        self.Y, self.X = num.mgrid[0:sz[0], 0:sz[1]]
+        self.X = self.X.astype(num.int64)
+        self.Y = self.Y.astype(num.int64)
+        self.Y2 = self.Y ** 2
+        self.X2 = self.X ** 2
+        self.XY = self.X * self.Y
+
+    def __eq__(self, other):
+        return True
+
+
+class Parameters():
+
+    def __init__(self):
+        self.DOBREAK = False
+        self.last_time = 0
+        self.DEFAULT_FRAME_RATE = 25.0
+        self.GRID = Grid()
+        self.max_n_points_ratio = 1.0 / 250.0
+        self.id_spinner_width = 50
+        self.normal_palette = [
+         [
+          255, 0, 0],
+         [
+          0, 255, 0],
+         [
+          0, 0, 255],
+         [
+          255, 0, 255],
+         [
+          255, 255, 0],
+         [
+          0, 255, 255],
+         [
+          255, 127, 127],
+         [
+          127, 255, 127],
+         [
+          127, 127, 255],
+         [
+          255, 127, 255],
+         [
+          255, 255, 127],
+         [
+          127, 255, 255]]
+        self.colorblind_palette = [
+         [
+          230, 159, 0],
+         [
+          86, 180, 233],
+         [
+          0, 158, 115],
+         [
+          240, 228, 66],
+         [
+          0, 114, 178],
+         [
+          213, 94, 0],
+         [
+          204, 121, 167]]
+        self.zoom_drag_rectangle_color = (1, 0.6, 0, 1)
+        self.SHOW_RAW_FRAME = -1
+        self.SHOW_BACKGROUND = 0
+        self.SHOW_DISTANCE = 1
+        self.SHOW_THRESH = 2
+        self.SHOW_NONFORE = 3
+        self.SHOW_DEV = 4
+        self.SHOW_CC = 5
+        self.SHOW_ELLIPSES = 6
+        self.SHOW_EXPBGFGMODEL_LLR = 7
+        self.SHOW_EXPBGFGMODEL_ISBACK = 8
+        self.SHOW_EXPBGFGMODEL_BGMU = 9
+        self.SHOW_EXPBGFGMODEL_FGMU = 10
+        self.SHOW_EXPBGFGMODEL_BGSIGMA = 11
+        self.SHOW_EXPBGFGMODEL_FGSIGMA = 12
+        self.SHOW_EXPBGFGMODEL_FRACFRAMESISBACK = 13
+        self.SHOW_EXPBGFGMODEL_MISSINGDATA = 14
+        self.BG_SHOW_STRINGS = [
+         'Background Image',
+         'Distance from Background',
+         'Foreground/Background Classification',
+         'Background-Only Areas',
+         'Normalization Image',
+         'Connected Components',
+         'Ellipse Fits']
+        self.EXPBGFGMODEL_SHOW_STRINGS = ['Prior Log-Likelihood Ratio',
+         'Use in Background Model',
+         'Prior Background Mean Px Intensity',
+         'Prior Foreground Mean Px Intensity',
+         'Prior Background Std Px Intensity',
+         'Prior Foreground Std Px Intensity',
+         'Frac Frames in Bg Model',
+         'Bg Missing Data']
+        self.SHOW_EXPBGFGMODEL = [self.SHOW_EXPBGFGMODEL_LLR, self.SHOW_EXPBGFGMODEL_ISBACK,
+         self.SHOW_EXPBGFGMODEL_BGMU, self.SHOW_EXPBGFGMODEL_FGMU,
+         self.SHOW_EXPBGFGMODEL_BGSIGMA, self.SHOW_EXPBGFGMODEL_FGSIGMA,
+         self.SHOW_EXPBGFGMODEL_FRACFRAMESISBACK, self.SHOW_EXPBGFGMODEL_MISSINGDATA]
+        self.ALGORITHM_MEDIAN = 0
+        self.ALGORITHM_MEAN = 1
+        self.status_green = '#66FF66'
+        self.status_blue = '#AAAAFF'
+        self.status_red = '#FF6666'
+        self.status_yellow = '#FFFF66'
+        self.wxvt_bg = '#DDFFDD'
+        self.MAXDSHOWINFO = 10
+        self.DRAW_MOTION_SCALE = 10.0
+        self.interactive = True
+        self.noninteractive_resume_tracking = False
+        self.feedback_enabled = True
+        self.app_instance = None
+        self.start_frame = 0
+        self.nids = long(0)
+        self.version = 0
+        self.n_frames = 0
+        self.movie_size = (0, 0)
+        self.npixels = 0
+        self.movie = None
+        self.movie_name = ''
+        self.annotation_movie_name = ''
+        self.movie_flipud = False
+        self.movie_index_transpose = True
+        self.bg_median_maxbytesallocate = 30720000
+        self.hm_cutoff = 0.35
+        self.hm_boost = 2
+        self.hm_order = 2
+        self.n_bg_std_thresh = 20.0
+        self.n_bg_std_thresh_low = 10.0
+        self.bg_std_min = 1.0
+        self.bg_std_max = 10.0
+        self.min_nonarena = 256.0
+        self.max_nonarena = 0.0
+        self.roipolygons = []
+        self.arena_center_x = None
+        self.arena_center_y = None
+        self.arena_radius = None
+        self.arena_edgethresh = None
+        self.do_set_circular_arena = True
+        self.min_arena_center_x = 0.4
+        self.max_arena_center_x = 0.6
+        self.min_arena_center_y = 0.4
+        self.max_arena_center_y = 0.6
+        self.min_arena_radius = 0.25
+        self.max_arena_radius = 0.5
+        self.batch_autodetect_arena = True
+        self.batch_autodetect_shape = True
+        self.batch_autodetect_bg_model = True
+        self.do_use_morphology = False
+        self.opening_radius = 0
+        self.closing_radius = 0
+        self.enforce_minmax_shape = False
+        self.maxshape = ShapeParams(9999.0, 9999.0, 9999.0, 1.0)
+        self.minshape = ShapeParams(1.0, 1.0, 1.0, 0.0)
+        self.meanshape = ShapeParams(2.64, 3.56, 40.25, 0.98)
+        self.minbackthresh = 1.0
+        self.maxclustersperblob = 5
+        self.maxpenaltymerge = 40
+        self.maxareadelete = 5
+        self.minareaignore = 2500
+        self.max_n_clusters = 100
+        self.n_frames_size = 50
+        self.n_std_thresh = 4.0
+        self.ang_dist_wt = 100.0
+        self.max_jump = 100.0
+        self.max_jump_split = -1.0
+        self.min_jump = 50.0
+        self.dampen = 0.0
+        self.angle_dampen = 0.5
+        self.velocity_angle_weight = 0.05
+        self.max_velocity_angle_weight = 0.25
+        self.do_fix_split = True
+        self.do_fix_merged = True
+        self.do_fix_spurious = True
+        self.do_fix_lost = True
+        self.lostdetection_length = 50
+        self.lostdetection_distance = 100.0
+        self.spuriousdetection_length = 50
+        self.mergeddetection_distance = 20.0
+        self.mergeddetection_length = 50
+        self.splitdetection_cost = 40.0
+        self.splitdetection_length = 50
+        self.maxdcentersextra = 3.0
+        self.bigboundingboxextra = 2.0
+        self.maxnframesbuffer = 100
+        if 'darwin' in sys.platform:
+            self.ellipse_thickness = 1
+        else:
+            self.ellipse_thickness = 2
+        self.use_colorblind_palette = False
+        self.colors = self.normal_palette
+        self.tail_length = 10
+        self.status_box = 0
+        self.file_box = 1
+        self.file_box_max_width = 40
+        self.prior_nframessample = 100
+        self.expbgfgmodel_filename = None
+        self.use_expbgfgmodel = False
+        self.expbgfgmodel_llr_thresh = 0
+        self.expbgfgmodel_llr_thresh_low = 0
+        self.min_frac_frames_isback = 0.1
+        self.expbgfgmodel_fill = 'Interpolation'
+        self.EXPBGFGMODEL_FILL_STRINGS = ['Prior BG Model', 'Interpolation']
+        self.prior_fg_nsamples_pool = 25
+        self.prior_bg_nsamples_pool = 25
+        self.prior_fg_pool_radius_factor = 1.25
+        self.prior_bg_pool_radius_factor = 1.25
+        self.use_uncompressed_avi = True
+        return
+
+    def enable_feedback(self, now_enabled):
+        """Change enablement of GUI/user feedback, dependent on interactivity mode."""
+        self.feedback_enabled = now_enabled and self.interactive
+
+    def __print__(self):
+        s = ''
+        for i, j in self.__dict__.iteritems():
+            if j is None:
+                s += i + ': None\n'
+            else:
+                s += i + ': ' + str(j) + '\n'
+
+        return s
+
+    def __repr__(self):
+        return self.__print__()
+
+    def __str__(self):
+        return self.__print__()
+
+    def copy(self):
+        v = Parameters()
+        for i, j in self.__dict__.iteritems():
+            if i == 'movie':
+                continue
+            try:
+                v.__dict__[i] = copy.deepcopy(j)
+            except:
+                v.__dict__[i] = j
+
+        return v
+
+    def __eq__(self, other):
+        for i, j in self.__dict__.iteritems():
+            if not hasattr(other, i):
+                return False
+            if not j == other.__dict__[i]:
+                return False
+
+        for i, j in other.__dict__.iteritems():
+            if not hasattr(self, i):
+                return False
+            if not j == self.__dict__[i]:
+                return False
+
+        return True
+
+
+params = Parameters()
+diagnostics = dict()
+diagnostics['nbirths_nohindsight'] = 0
+diagnostics['ndeaths_nohindsight'] = 0
+diagnostics['ndeaths_notfixed'] = 0
+diagnostics['nbirths_notfixed'] = 0
+diagnostics['nsplits_fixed'] = 0
+diagnostics['nspurious_fixed'] = 0
+diagnostics['nmerged_fixed'] = 0
+diagnostics['nlost_fixed'] = 0
+diagnostics['nhindsight_fixed'] = 0
+diagnostics['nlarge_notfixed'] = 0
+diagnostics['nsmall_notfixed'] = 0
+diagnostics['nlarge_split'] = 0
+diagnostics['nsmall_merged'] = 0
+diagnostics['nsmall_lowerthresh'] = 0
+diagnostics['nsmall_deleted'] = 0
+diagnostics['max_nsplit'] = 0
+diagnostics['sum_nsplit'] = 0
+diagnostics['nlarge_ignored'] = 0
+diagnostics['nframes_analyzed'] = 0
+
+class GUIConstants():
+
+    def __init__(self):
+        self.info = AboutDialogInfo()
+        self.info.SetName('Ctrax')
+        self.info.SetVersion(__version__)
+        self.info.SetCopyright('2007-2016, Caltech ethomics project')
+        self.info.SetDescription('The Caltech Multiple Fly Tracker\nKristin Branson et al.\n\nhttp://ctrax.sourceforge.net/\nhttp://dx.doi.org/10.1038/nmeth.1328\n\nDistributed under the GNU General Public License\n(http://www.gnu.org/licenses/gpl.html) with\nABSOLUTELY NO WARRANTY.\n\nThis project has been supported by the NIH and\nthe HHMI.')
+        self.TRACK_START = 'Start Tracking'
+        self.TRACK_STOP = 'Stop Tracking'
+        self.TRACK_PLAY = 'Start Playback'
+        self.TRACK_PAUSE = 'Stop Playback'
+        params.version = __version__
+
+
+const = GUIConstants()

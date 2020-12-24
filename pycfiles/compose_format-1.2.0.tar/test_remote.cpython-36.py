@@ -1,0 +1,45 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/tests/test_remote.py
+# Compiled at: 2020-05-06 10:05:57
+# Size of source mod 2**32: 1455 bytes
+from functools import lru_cache
+from unittest import TestCase, mock
+from compose_flow.commands.subcommands.remote import Remote
+TEST_USERNAME = 'testuser'
+
+@mock.patch('compose_flow.settings.DEFAULT_CF_REMOTE_USER', new=TEST_USERNAME)
+class RemoteTestCase(TestCase):
+
+    @property
+    @lru_cache()
+    def workflow(self):
+        return mock.Mock()
+
+    def test_default_username(self):
+        """
+        Ensure when no app config is found, the username from settings module is used
+        """
+        self.workflow.app_config = {}
+        remote = Remote(self.workflow)
+        self.assertEqual(remote.username, TEST_USERNAME)
+
+    def test_appconfig_remote_without_username(self):
+        """
+        Ensure username falls back to the settings user when there is no '@' in the remote hostname
+        """
+        self.workflow.args.environment = 'dev'
+        self.workflow.app_config = {'remotes': {'dev': {'ssh': 'testremotehost'}}}
+        remote = Remote(self.workflow)
+        self.assertEqual(remote.username, TEST_USERNAME)
+
+    def test_username_from_appconfig(self):
+        """
+        Ensure username is extracted from remote host
+        """
+        username = 'testuser'
+        self.workflow.args.environment = 'dev'
+        self.workflow.app_config = {'remotes': {'dev': {'ssh': f"{username}@testremotehost"}}}
+        remote = Remote(self.workflow)
+        self.assertEqual(remote.username, username)

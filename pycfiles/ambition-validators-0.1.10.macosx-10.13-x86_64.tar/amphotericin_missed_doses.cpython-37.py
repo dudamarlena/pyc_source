@@ -1,0 +1,14 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/erikvw/.venvs/ambition/lib/python3.7/site-packages/ambition_validators/form_validators/amphotericin_missed_doses.py
+# Compiled at: 2018-01-29 14:27:09
+# Size of source mod 2**32: 272 bytes
+from .missed_doses import MissedDosesFormValidator
+
+class AmphotericinMissedDosesFormValidator(MissedDosesFormValidator):
+    field = 'ampho_day_missed'
+    reason_field = 'ampho_missed_reason'
+    reason_other_field = 'missed_reason_other'
+    day_range = range(1, 15)

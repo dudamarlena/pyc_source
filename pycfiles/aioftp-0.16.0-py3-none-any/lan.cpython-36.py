@@ -1,0 +1,48 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /mnt/c/Users/luc_t_000/projects/freepybox/aiofreepybox/api/lan.py
+# Compiled at: 2018-12-03 18:01:41
+# Size of source mod 2**32: 1236 bytes
+
+
+class Lan:
+
+    def __init__(self, access):
+        self._access = access
+
+    async def get_config(self):
+        """
+        Get Lan configuration
+        """
+        return await self._access.get('lan/config/')
+
+    async def set_config(self, conf):
+        """
+        Update Lan config with conf dictionary
+        """
+        await self._access.put('lan/config/', conf)
+
+    async def get_interfaces(self):
+        """
+        Get browsable Lan interfaces
+        """
+        return await self._access.get('lan/browser/interfaces')
+
+    async def get_hosts_list(self, interface='pub'):
+        """
+        Get the list of hosts on a given interface
+        """
+        return await self._access.get('lan/browser/{0}'.format(interface))
+
+    async def get_host_information(self, host_id, interface='pub'):
+        """
+        Get specific host informations on a given interface¶
+        """
+        return await self._access.get('lan/browser/{0}/{1}'.format(interface, host_id))
+
+    async def set_host_information(self, host_id, conf, interface='pub'):
+        """
+        Update specific host informations on a given interface¶
+        """
+        await self._access.put('lan/browser/{0}/{1}'.format(interface, host_id), conf)

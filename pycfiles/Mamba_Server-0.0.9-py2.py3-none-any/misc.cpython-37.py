@@ -1,0 +1,121 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/argos/Workspace/mamba-framework/mamba-server/mamba_server/utils/misc.py
+# Compiled at: 2020-05-12 13:23:53
+# Size of source mod 2**32: 4196 bytes
+""" Mamba generic utility functions for commands and components """
+import os, re, inspect
+from importlib import import_module
+from pkgutil import iter_modules
+from mamba_server.exceptions import LaunchFileException
+
+def path_from_string(path_str):
+    """Return a valid path from a given path string, formatted with windows
+       or linux slashes.
+
+    Args:
+        path_str (str): The path string formatted in windows or linux style.
+
+    Returns:
+        The valid path string.
+    """
+    path = (os.path.join)(*re.split(' |/|\\\\', path_str))
+    if path_str[0] == '/':
+        path = '/' + path
+    return path
+
+
+def get_classes_from_module(module, search_class):
+    """Return a dictionary with all classes 'search_class' defined in the
+    given module that can be instantiated.
+    """
+    classes_dict = {}
+    for cls in _iter_classes(module, search_class):
+        cls_name = cls.__module__.split('.')[(-1)]
+        classes_dict[cls_name] = cls
+
+    return classes_dict
+
+
+def get_component(used_component, module, component_type, context):
+    """Returns an instantiated component with context.
+
+    Args:
+        used_component (str): The identifier of the component.
+        module (str): The folder where to look for the component.
+        component_type (class): The class type of the component.
+        context (Context): The application context to instantiate
+                           the component with.
+
+    Returns:
+        The instantiated component.
+
+    Raises:
+        LaunchFileException: If no component with the given id is found.
+
+    """
+    all_components_by_type = get_classes_from_module(module, component_type)
+    if used_component in all_components_by_type:
+        return all_components_by_type[used_component](context)
+    raise LaunchFileException("'{}' is not a valid component identifier".format(used_component))
+
+
+def get_components(used_components, module, component_type, context):
+    """Returns a dictionary of instantiated components with context.
+
+    Args:
+        used_components (list<str>): The identifiers of the components.
+        module (str): The folder where to look for the components.
+        component_type (class): The class type of the components.
+        context (Context): The application context to instantiate
+                           the components with.
+
+    Returns:
+        The instantiated dictionary of components.
+
+    Raises:
+        LaunchFileException: If a given component id is not found.
+
+    """
+    all_components_by_type = get_classes_from_module(module, component_type)
+    dict_used_components = {}
+    for used_component in used_components:
+        if used_component in all_components_by_type:
+            dict_used_components[used_component] = all_components_by_type[used_component](context)
+        else:
+            raise LaunchFileException("'{}' is not a valid component identifier".format(used_component))
+
+    return dict_used_components
+
+
+def _walk_modules(path):
+    """Loads a module and all its submodules from the given module path and
+    returns them. If *any* module throws an exception while importing, that
+    exception is thrown back.
+    For example: walk_modules('mamba_server.utils')
+    """
+    mods = []
+    mod = import_module(path)
+    mods.append(mod)
+    if hasattr(mod, '__path__'):
+        for _, subpath, ispkg in iter_modules(mod.__path__):
+            fullpath = path + '.' + subpath
+            if ispkg:
+                mods += _walk_modules(fullpath)
+            else:
+                submod = import_module(fullpath)
+                mods.append(submod)
+
+    return mods
+
+
+def _iter_classes(module_name, search_class):
+    """Return an iterator over all classes 'search_class' defined in the given
+    module that can be instantiated.
+    """
+    for module in _walk_modules(module_name):
+        for obj in vars(module).values():
+            if inspect.isclass(obj) and issubclass(obj, search_class) and obj.__module__ == module.__name__:
+                obj == search_class or (yield obj)

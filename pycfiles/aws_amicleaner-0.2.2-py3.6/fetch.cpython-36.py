@@ -1,0 +1,66 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/amicleaner/fetch.py
+# Compiled at: 2018-05-21 06:07:00
+# Size of source mod 2**32: 2922 bytes
+from __future__ import absolute_import
+from builtins import object
+import boto3
+from .resources.models import AMI
+
+class Fetcher(object):
+    __doc__ = ' Fetches function for AMI candidates to deletion '
+
+    def __init__(self, ec2=None, autoscaling=None):
+        """ Initializes aws sdk clients """
+        self.ec2 = ec2 or boto3.client('ec2')
+        self.asg = autoscaling or boto3.client('autoscaling')
+
+    def fetch_available_amis(self):
+        """ Retrieve from your aws account your custom AMIs"""
+        available_amis = dict()
+        my_custom_images = self.ec2.describe_images(Owners=['self'])
+        for image_json in my_custom_images.get('Images'):
+            ami = AMI.object_with_json(image_json)
+            available_amis[ami.id] = ami
+
+        return available_amis
+
+    def fetch_unattached_lc(self):
+        """
+        Find AMIs for launch configurations unattached
+        to autoscaling groups
+        """
+        resp = self.asg.describe_auto_scaling_groups()
+        used_lc = (asg.get('LaunchConfigurationName', '') for asg in resp.get('AutoScalingGroups', []))
+        resp = self.asg.describe_launch_configurations()
+        all_lcs = (lc.get('LaunchConfigurationName', '') for lc in resp.get('LaunchConfigurations', []))
+        unused_lcs = list(set(all_lcs) - set(used_lc))
+        resp = self.asg.describe_launch_configurations(LaunchConfigurationNames=unused_lcs)
+        amis = [lc.get('ImageId') for lc in resp.get('LaunchConfigurations', [])]
+        return amis
+
+    def fetch_zeroed_asg(self):
+        """
+        Find AMIs for autoscaling groups who's desired capacity is set to 0
+        """
+        resp = self.asg.describe_auto_scaling_groups()
+        zeroed_lcs = [asg.get('LaunchConfigurationName', '') for asg in resp.get('AutoScalingGroups', []) if asg.get('DesiredCapacity', 0) == 0]
+        resp = self.asg.describe_launch_configurations(LaunchConfigurationNames=zeroed_lcs)
+        amis = [lc.get('ImageId', '') for lc in resp.get('LaunchConfigurations', [])]
+        return amis
+
+    def fetch_instances(self):
+        """ Find AMIs for not terminated EC2 instances """
+        resp = self.ec2.describe_instances(Filters=[
+         {'Name':'instance-state-name', 
+          'Values':[
+           'pending',
+           'running',
+           'shutting-down',
+           'stopping',
+           'stopped']}])
+        amis = [i.get('ImageId', None) for r in resp.get('Reservations', []) for i in r.get('Instances', [])]
+        return amis

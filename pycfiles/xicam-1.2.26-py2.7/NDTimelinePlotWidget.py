@@ -1,0 +1,242 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win-amd64\egg\xicam\widgets\NDTimelinePlotWidget.py
+# Compiled at: 2019-03-07 15:21:12
+import numpy as np
+from PySide import QtGui, QtCore
+import pyqtgraph as pg
+from modpkgs import nonesigmod
+from collections import OrderedDict
+
+class timelineLinePlot(pg.PlotWidget):
+
+    def __init__(self, frameaxes, xaxes):
+        super(timelineLinePlot, self).__init__()
+        self.variationcurve = OrderedDict()
+
+    def setData(self, t, **kwargs):
+        for key in kwargs.keys():
+            if key != 'y' and not self.plotItem.legend:
+                self.addLegend()
+            if key not in self.variationcurve:
+                self.variationcurve[key] = self.plot(name=key, pen=pg.mkPen(color=pg.intColor(kwargs.keys().index(key), len(kwargs.keys()))))
+            y = kwargs[key]
+            l = min(len(t), len(y))
+            self.variationcurve[key].setData(x=t[:l], y=y[:l])
+
+    def clear_hack(self):
+        self.variationcurve = OrderedDict()
+        if self.plotItem.legend:
+            self.plotItem.legend.scene().removeItem(self.plotItem.legend)
+            self.plotItem.legend = None
+        super(timelineLinePlot, self).clear()
+        return
+
+
+class timelineStackPlot(QtGui.QWidget):
+
+    def __init__(self, frameaxes, xaxes):
+        super(timelineStackPlot, self).__init__()
+        self.slider = QtGui.QSlider(QtCore.Qt.Vertical, self)
+        self.slider.setGeometry(500, 500, 30, 10)
+        self.plotWidget = pg.PlotWidget(labels={'bottom': xaxes['label']})
+        layout = QtGui.QHBoxLayout()
+        self.setLayout(layout)
+        layout.addWidget(self.plotWidget)
+        layout.addWidget(self.slider)
+        self.slider.valueChanged.connect(self.setOffset)
+        self.curves = {}
+        self._curvesdata = {}
+
+    def mapSlider(self):
+        return (np.exp(self.slider.value() / 100.0) - 1) / 10
+
+    def setOffset(self, _):
+        for i, curve in enumerate(self.curves.values()):
+            x, y = self._curvesdata['x'], self._curvesdata['y']
+            curve.setData(x[i], y[i] + i * self.mapSlider())
+
+    def setData(self, t, x, y):
+        self._curvesdata = {'t': t, 'x': x, 'y': y}
+        for i, t0 in enumerate(t):
+            if t0 not in self.curves:
+                self.curves[t0] = self.plotWidget.plot(x[i], y[i] + len(self.curves) * self.mapSlider())
+
+        self.setColors()
+        self.setOffset(0)
+
+    def setColors(self):
+        for i, curve in enumerate(self.curves.values()):
+            curve.setPen(pg.mkPen(color=[(1 - float(i) / len(self.curves)) * 255, float(i) / len(self.curves) * 255, 255]))
+
+    def clear(self):
+        self.curves = {}
+        self._curvesdata = {}
+        self.plotWidget.clear()
+
+
+class timelineWaterfallPlot(pg.ImageView):
+
+    def __init__(self, frameaxes, xaxes):
+        self.axesItem = pg.PlotItem()
+        self.axesItem.setLabel('top', frameaxes['label'], units=frameaxes['units'] if 'units' in frameaxes else None)
+        self.axesItem.setLabel('left', xaxes['label'], units=xaxes['units'] if 'units' in xaxes else None)
+        self.axesItem.axes['left']['item'].setZValue(10)
+        self.axesItem.axes['top']['item'].setZValue(10)
+        self.axesItem.showAxis('bottom', False)
+        kwargs = {'view': self.axesItem}
+        super(timelineWaterfallPlot, self).__init__(**kwargs)
+        self.view.setAspectLocked(False)
+        return
+
+    def setData(self, t, x, y):
+        self.setImage(np.array(y))
+
+    def setImage(self, *args, **kwargs):
+        kwargs['pos'] = [
+         0, 0]
+        super(timelineWaterfallPlot, self).setImage(*args, **kwargs)
+
+
+class TimelinePlot(QtGui.QTabWidget):
+
+    def __init__(self, frameaxes={'label': 'Time', 'units': 's'}, xaxes={'label': 'q (Å⁻¹)'}):
+        super(TimelinePlot, self).__init__()
+        self.waterfall = timelineWaterfallPlot(frameaxes, xaxes)
+        self.lineplot = timelineLinePlot(frameaxes, xaxes)
+        self.stackplot = timelineStackPlot(frameaxes, xaxes)
+        self.addTab(self.lineplot, 'Line plot')
+        self.addTab(self.waterfall, 'Waterfall')
+        self.addTab(self.stackplot, 'Stack plot')
+        self._data = {'t': []}
+        self.setTabPosition(self.West)
+        self.currentChanged.connect(self.widgetChanged)
+
+    @QtCore.Slot(object, list, OrderedDict)
+    @nonesigmod.pyside_none_deco
+    def addData(self, t, *args, **kwargs):
+        if len(args) == 1:
+            kwargs['y'] = args[0]
+        elif len(args) == 2:
+            kwargs['x'] = args[0]
+            kwargs['y'] = args[1]
+        if t is None:
+            return
+        else:
+            is1D = True
+            if len(kwargs) == 2 and 'x' in kwargs and 'y' in kwargs:
+                x = kwargs['x']
+                y = kwargs['y']
+                is1D = False
+            if len(self._data['t']) == 0:
+                self.setDMode(is1D)
+            self._data['t'].append(t)
+            for key, value in kwargs.items():
+                if key not in self._data:
+                    self._data[key] = []
+                self._data[key].append(value)
+
+            self.setData()
+            return
+
+    plot = addData
+
+    def setData(self):
+        self.currentPlot().setData(**self._data)
+
+    def setDMode(self, is1D):
+        index = None
+        if is1D:
+            self.setCurrentIndex(0)
+            self.setTabEnabled(0, True)
+            self.setTabEnabled(1, False)
+            self.setTabEnabled(2, False)
+            index = 0
+        else:
+            self.setTabEnabled(0, False)
+            self.setTabEnabled(1, True)
+            self.setTabEnabled(2, True)
+            if self.currentIndex() == 0:
+                self.setCurrentIndex(1)
+            index = 1
+        if index is None:
+            index = self.currentIndex()
+        return index
+
+    def guessPlot(self, data):
+        index = None
+        if type(data[1]) is tuple:
+            self.setTabEnabled(0, False)
+            self.setTabEnabled(1, True)
+            self.setTabEnabled(2, True)
+            if self.currentIndex() == 0:
+                self.setCurrentIndex(1)
+            index = 1
+        else:
+            self.setCurrentIndex(0)
+            self.setTabEnabled(0, True)
+            self.setTabEnabled(1, False)
+            self.setTabEnabled(2, False)
+            index = 0
+        if index is None:
+            index = self.currentIndex()
+        return index
+
+    def currentPlot(self):
+        return self.widget(self.currentIndex())
+
+    def clearData(self):
+        self._data = {'t': []}
+
+    def clear(self):
+        self.clearData()
+        self.currentPlot().clear()
+        if hasattr(self.currentPlot(), 'clear_hack'):
+            self.currentPlot().clear_hack()
+
+    def widgetChanged(self, *args, **kwargs):
+        self.currentPlot().clear()
+        if len(self._data) > 1:
+            self.setData()
+
+
+if __name__ == '__main__':
+    import sys
+    app = QtGui.QApplication([])
+    win = QtGui.QMainWindow()
+    win.resize(800, 800)
+    timelineplot = TimelinePlot()
+    win.setCentralWidget(timelineplot)
+    win.show()
+    win.setWindowTitle('TimelinePlot')
+    t = 0
+
+    def update():
+        global t
+        global timer
+        if False:
+            data = OrderedDict([('t', t), ('FWHM', np.random.rand()), ('center', t)])
+            t += 1
+        elif True:
+            data = {'t': t, 'x': np.arange(0, 1, 0.01), 'y': np.sin(np.arange(0, 1, 0.01) * t)}
+            t += 1
+        else:
+            data = {'t': t, 'y': np.sin(0.01 * t)}
+            t += 1
+        timelineplot.addData(**data)
+        if t == 255:
+            timer.stop()
+
+
+    timer = pg.QtCore.QTimer()
+    timer.timeout.connect(update)
+    timer.start(50)
+    if sys.flags.interactive != 1 or not hasattr(QtCore, 'PYQT_VERSION'):
+        QtGui.QApplication.instance().exec_()
+
+class XASTimelineWidget(TimelinePlot):
+
+    def __init__(self):
+        super(XASTimelineWidget, self).__init__(frameaxes={'label': 'Scan'}, xaxes={'label': 'Energy', 'units': 'eV'})

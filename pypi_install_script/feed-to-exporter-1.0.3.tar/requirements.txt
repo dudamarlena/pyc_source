@@ -1,0 +1,6 @@
+lxml
+requests
+feedparser
+pluginbase
+python-slugify
+pymongo

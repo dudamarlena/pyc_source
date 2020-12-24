@@ -1,0 +1,185 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\bzETL\util\multiset.py
+# Compiled at: 2013-11-22 17:13:19
+
+
+def Multiset(list=None, key_field=None, count_field=None, allow_negative=False):
+    if allow_negative:
+        return _NegMultiset(list, key_field, count_field)
+    else:
+        return _Multiset(list, key_field, count_field)
+
+
+class _Multiset(object):
+
+    def __init__(self, list=None, key_field=None, count_field=None):
+        if not key_field and not count_field:
+            self.dic = dict()
+            if list:
+                for i in list:
+                    self.add(i)
+
+            return
+        self.dic = {i[key_field]:i[count_field] for i in list}
+
+    def __iter__(self):
+        for k, m in self.dic.items():
+            for i in range(m):
+                yield k
+
+    def items(self):
+        return self.dic.items()
+
+    def keys(self):
+        return self.dic.keys()
+
+    def add(self, value):
+        if value in self.dic:
+            self.dic[value] += 1
+        else:
+            self.dic[value] = 1
+        return self
+
+    def extend(self, values):
+        for v in values:
+            self.add(v)
+
+    def remove(self, value):
+        if value not in self.dic:
+            from .logs import Log
+            Log.error('{{value}} is not in multiset', {'value': value})
+        self._remove(value)
+
+    def copy(self):
+        output = _Multiset()
+        output.dic = self.dic.copy()
+        return output
+
+    def _remove(self, value):
+        count = self.dic.get(value, None)
+        if count == None:
+            return
+        else:
+            count -= 1
+            if count == 0:
+                del self.dic[value]
+            else:
+                self.dic[value] = count
+            return
+
+    def __sub__(self, other):
+        output = self.copy()
+        for o in other:
+            output._remove(o)
+
+        return output
+
+    def __add__(self, other):
+        output = self.copy()
+        for o in other:
+            output.add(o)
+
+        return output
+
+    def __set__(self, other):
+        return set(self.dic.keys())
+
+    def __len__(self):
+        return sum(self.dic.values())
+
+    def __nonzero__(self):
+        if self.dic:
+            return True
+        return False
+
+    def count(self, value):
+        if value in self.dic:
+            return self.dic[value]
+        else:
+            return 0
+
+
+class _NegMultiset(object):
+
+    def __init__(self, list=None, key_field=None, count_field=None):
+        if not key_field and not count_field:
+            self.dic = dict()
+            if list:
+                for i in list:
+                    self.add(i)
+
+            return
+        self.dic = {i[key_field]:i[count_field] for i in list}
+
+    def items(self):
+        return self.dic.items()
+
+    def keys(self):
+        return self.dic.keys()
+
+    def add(self, value, amount=None):
+        count = self.dic.get(value, None)
+        if amount == None:
+            amount = 1
+        elif amount == 0:
+            return self
+        if not count:
+            self.dic[value] = amount
+        elif count == -amount:
+            del self.dic[value]
+        else:
+            self.dic[value] = count + amount
+        return self
+
+    def extend(self, values):
+        for v in values:
+            self.add(v)
+
+    def remove(self, value):
+        return self.add(value, -1)
+
+    def copy(self):
+        output = _NegMultiset()
+        output.dic = self.dic.copy()
+        return output
+
+    def __add__(self, other):
+        output = self.copy()
+        if isinstance(other, _NegMultiset):
+            for k, c in other.dic.items():
+                output.add(k, c)
+
+        else:
+            for o in other:
+                output.add(o)
+
+        return output
+
+    def __sub__(self, other):
+        if not other:
+            return self
+        output = self.copy()
+        for o in other:
+            output.remove(o)
+
+        return output
+
+    def __set__(self, other):
+        return set(self.dic.keys())
+
+    def __len__(self):
+        return sum(self.dic.values())
+
+    def __nonzero__(self):
+        if self.dic:
+            return True
+        return False
+
+    def count(self, value):
+        if value in self.dic:
+            return self.dic[value]
+        else:
+            return 0

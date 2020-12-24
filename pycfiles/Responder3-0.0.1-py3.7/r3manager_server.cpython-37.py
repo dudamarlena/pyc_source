@@ -1,0 +1,169 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win-amd64\egg\responder3\core\manager\r3manager_server.py
+# Compiled at: 2019-06-20 05:39:07
+# Size of source mod 2**32: 6178 bytes
+"""
+TODO: this would need to be re-ported to use the generic websocket server to have a unified interface
+"""
+import asyncio, websockets, traceback, uuid, itertools
+from responder3.core.manager.comms import *
+from responder3.core.logging.logger import *
+from responder3.core.gwss import *
+from responder3.core.ssl import SSLContextBuilder
+
+class Responder3ClientSession:
+
+    def __init__(self, client_id, ws, log_queue, manager_log_queue, cmd_queue_in, cmd_queue_out, is_NATed=False):
+        self.client_id = client_id
+        self.ws = ws
+        self.logger = Logger('Responder3ClientSession', logQ=log_queue)
+        self.shutdown_evt = asyncio.Event()
+        self.manager_log_queue = manager_log_queue
+        self.cmd_queue_in = cmd_queue_in
+        self.cmd_queue_out = cmd_queue_out
+        self.is_NATed = False
+        self.remote_ip, self.remote_port = self.ws.remote_address
+        self.remote_addr_s = '%s:%d' % (self.remote_ip, self.remote_port)
+        self.classloader = R3ClientCommsClassLoader()
+
+    @r3exception
+    async def handle_commands_in(self):
+        while True:
+            cmd = await self.cmd_queue_in.get()
+            try:
+                await self.ws.send(cmd.to_json())
+            except Exception as e:
+                try:
+                    await self.logger.exception()
+                    self.shutdown_evt.set()
+                    return
+                finally:
+                    e = None
+                    del e
+
+    @r3exception
+    async def handle_commands_out(self):
+        while True:
+            try:
+                rply_data = await self.ws.recv()
+            except Exception as e:
+                try:
+                    await self.logger.exception()
+                    self.shutdown_evt.set()
+                    return
+                finally:
+                    e = None
+                    del e
+
+            try:
+                msg = self.classloader.from_json(rply_data)
+            except Exception as e:
+                try:
+                    await self.logger.exception('Failed to parse incoming data!')
+                    continue
+                finally:
+                    e = None
+                    del e
+
+            if isinstance(msg, R3CliLog):
+                if self.is_NATed == False:
+                    msg.remote_ip = self.remote_ip
+                    msg.remote_port = self.remote_port
+                msg.client_id = self.client_id
+                await self.manager_log_queue.put(msg)
+            elif isinstance(msg, (R3CliServerStopRply, R3CliListServersRply, R3CliCreateServerRply, R3CliListInterfacesRply)):
+                msg.client_id = self.client_id
+                await self.cmd_queue_out.put(msg)
+            else:
+                await self.logger.info('Client sent unknown message! %s' % type(msg))
+
+    @r3exception
+    async def run(self):
+        asyncio.ensure_future(self.handle_commands_in())
+        asyncio.ensure_future(self.handle_commands_out())
+        await self.shutdown_evt.wait()
+
+
+class Responder3ManagerServer:
+
+    def __init__(self, listen_ip, listen_port, config, log_queue, manager_log_queue, cmd_q_in, cmd_q_out, shutdown_evt, ssl_ctx=None):
+        self.config = config
+        self.logger = Logger('Responder3ManagerServer', logQ=log_queue)
+        self.manager_log_queue = manager_log_queue
+        self.cmd_q_in = cmd_q_in
+        self.cmd_q_out = cmd_q_out
+        self.shutdown_evt = shutdown_evt
+        self.listen_ip = listen_ip
+        self.listen_port = listen_port
+        self.ssl_ctx = ssl_ctx
+        if self.ssl_ctx:
+            self.ssl_ctx = SSLContextBuilder.from_dict(ssl_ctx)
+        self.clients = {}
+
+    @r3exception
+    async def client_cmd_dispatcher(self):
+        while not self.shutdown_evt.is_set():
+            client_id, cmd = await self.cmd_q_in.get()
+            if client_id == 'ALL':
+                for client_id in self.clients:
+                    try:
+                        await self.clients[client_id].cmd_queue_in.put(cmd)
+                    except Exception as e:
+                        try:
+                            traceback.print_exc()
+                        finally:
+                            e = None
+                            del e
+
+                continue
+            if client_id not in self.clients:
+                print('Client ID doesnt exist! %s' % client_id)
+                continue
+            await self.clients[client_id].cmd_queue_in.put(cmd)
+
+    @r3exception
+    async def client_handler(self, ws, path):
+        await self.logger.debug('Manager Client connected from %s' % ('%s:%d' % ws.remote_address,))
+        client_cert = ws.writer.get_extra_info('peercert')
+        if not client_cert:
+            client_id = str(uuid.uuid4())
+        else:
+            client_id = dict((itertools.chain)(*client_cert['subject']))['commonName']
+        await self.logger.info('[%s] connected from %s' % (client_id, '%s:%d' % ws.remote_address))
+        client_cmd_queue = asyncio.Queue()
+        cs = Responder3ClientSession(client_id, ws, self.logger.logQ, self.manager_log_queue, client_cmd_queue, self.cmd_q_out)
+        self.clients[client_id] = cs
+        await cs.run()
+        del self.clients[client_id]
+        await self.logger.info('[%s] disconnected' % client_id)
+
+    @r3exception
+    async def run(self):
+        asyncio.ensure_future(self.client_cmd_dispatcher())
+        server = await websockets.serve((self.client_handler), (self.listen_ip), (self.listen_port), ssl=(self.ssl_ctx))
+        await server.wait_closed()
+
+
+if __name__ == '__main__':
+
+    async def print_cmd_queue(cmd_q_out):
+        while True:
+            cmd = await cmd_q_out.get()
+            print('print_cmd_queue')
+            print(cmd)
+
+
+    config = {}
+    logger = Logger('Responder3ManagerServer')
+    manager_log_queue = asyncio.Queue()
+    cmd_q_in = asyncio.Queue()
+    cmd_q_out = asyncio.Queue()
+    shutdown_evt = asyncio.Queue()
+    r3m = Responder3ManagerServer(config, logger, manager_log_queue, cmd_q_in, cmd_q_out, shutdown_evt)
+    asyncio.ensure_future(logger.run())
+    asyncio.ensure_future(print_cmd_queue(cmd_q_out))
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(r3m.run())

@@ -1,0 +1,5 @@
+nameko
+git+https://github.com/litnimax/nameko-ami.git
+git+https://github.com/litnimax/nameko-odoo.git
+git+https://github.com/litnimax/swagger-py.git
+

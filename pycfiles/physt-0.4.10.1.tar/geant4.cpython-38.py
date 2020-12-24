@@ -1,0 +1,87 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/honza/code/my/physt/tests/../physt/compat/geant4.py
+# Compiled at: 2019-08-28 04:52:53
+# Size of source mod 2**32: 2658 bytes
+"""Support for Geant4 histograms saved in CSV format."""
+import codecs, numpy as np
+from ..histogram1d import Histogram1D
+from ..histogram_nd import Histogram2D
+from ..binnings import fixed_width_binning
+
+def load_csv(path):
+    """Loads a histogram as output from Geant4 analysis tools in CSV format.
+
+    Parameters
+    ----------
+    path: str
+        Path to the CSV file
+
+    Returns
+    -------
+    physt.histogram1d.Histogram1D or physt.histogram_nd.Histogram2D
+    """
+    meta = []
+    data = []
+    with codecs.open(path, encoding='ASCII') as (in_file):
+        for line in in_file:
+            if line.startswith('#'):
+                key, value = line[1:].strip().split(' ', 1)
+                meta.append((key, value))
+            else:
+                try:
+                    data.append([float(frag) for frag in line.split(',')])
+                except:
+                    pass
+
+    data = np.asarray(data)
+    ndim = int(_get(meta, 'dimension'))
+    if ndim == 1:
+        return _create_h1(data, meta)
+    if ndim == 2:
+        return _create_h2(data, meta)
+
+
+def _get(pseudodict, key, single=True):
+    """Helper method for getting values from "multi-dict"s"""
+    matches = [item[1] for item in pseudodict if item[0] == key]
+    if single:
+        return matches[0]
+    return matches
+
+
+def _create_h1(data, meta):
+    _, bin_count, min_, max_ = _get(meta, 'axis').split()
+    bin_count = int(bin_count)
+    min_ = float(min_)
+    max_ = float(max_)
+    binning = fixed_width_binning(None, bin_width=((max_ - min_) / bin_count), range=(min_, max_))
+    hist = Histogram1D(binning, name=(_get(meta, 'title')))
+    hist._frequencies = data[1:-1, 1]
+    hist._errors2 = data[1:-1, 2]
+    hist.underflow = data[(0, 1)]
+    hist.overflow = data[(-1, 1)]
+    hist._stats = {'sum':data[1:-1, 3].sum(), 
+     'sum2':data[1:-1, 4].sum()}
+    return hist
+
+
+def _create_h2(data, meta):
+    binnings = []
+    axes = _get(meta, 'axis', False)
+    for axis in axes:
+        _, bin_count, min_, max_ = axis.split()
+        bin_count = int(bin_count)
+        min_ = float(min_)
+        max_ = float(max_)
+        binning = fixed_width_binning(None, bin_width=((max_ - min_) / bin_count), range=(min_, max_))
+        binnings.append(binning)
+    else:
+        hist = Histogram2D(binnings, name=(_get(meta, 'title')))
+        frequencies = data[:, 1].reshape([b + 2 for b in hist.shape])
+        hist._frequencies = frequencies[1:-1, 1:-1]
+        errors2 = data[:, 2].reshape([b + 2 for b in hist.shape])
+        hist._errors = errors2[1:-1, 1:-1]
+        return hist

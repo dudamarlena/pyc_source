@@ -1,0 +1,77 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/tkomiya/work/sphinx/.tox/py37/lib/python3.7/site-packages/docutils/parsers/rst/languages/ru.py
+# Compiled at: 2018-11-25 06:19:18
+# Size of source mod 2**32: 3209 bytes
+"""
+Russian-language mappings for language-dependent features of
+reStructuredText.
+"""
+__docformat__ = 'reStructuredText'
+directives = {'блок-строк':'line-block', 
+ 'meta':'meta', 
+ 'математика':'math', 
+ 'обработанный-литерал':'parsed-literal', 
+ 'выделенная-цитата':'pull-quote', 
+ 'код':'code', 
+ 'compound (translation required)':'compound', 
+ 'контейнер':'container', 
+ 'таблица':'table', 
+ 'csv-table (translation required)':'csv-table', 
+ 'list-table (translation required)':'list-table', 
+ 'сырой':'raw', 
+ 'замена':'replace', 
+ 'тестовая-директива-restructuredtext':'restructuredtext-test-directive', 
+ 'целевые-сноски':'target-notes', 
+ 'unicode':'unicode', 
+ 'дата':'date', 
+ 'боковая-полоса':'sidebar', 
+ 'важно':'important', 
+ 'включать':'include', 
+ 'внимание':'attention', 
+ 'выделение':'highlights', 
+ 'замечание':'admonition', 
+ 'изображение':'image', 
+ 'класс':'class', 
+ 'роль':'role', 
+ 'default-role (translation required)':'default-role', 
+ 'титул':'title', 
+ 'номер-раздела':'sectnum', 
+ 'нумерация-разделов':'sectnum', 
+ 'опасно':'danger', 
+ 'осторожно':'caution', 
+ 'ошибка':'error', 
+ 'подсказка':'tip', 
+ 'предупреждение':'warning', 
+ 'примечание':'note', 
+ 'рисунок':'figure', 
+ 'рубрика':'rubric', 
+ 'совет':'hint', 
+ 'содержание':'contents', 
+ 'тема':'topic', 
+ 'эпиграф':'epigraph', 
+ 'header (translation required)':'header', 
+ 'footer (translation required)':'footer'}
+roles = {'акроним':'acronym', 
+ 'код':'code', 
+ 'анонимная-ссылка':'anonymous-reference', 
+ 'буквально':'literal', 
+ 'математика':'math', 
+ 'верхний-индекс':'superscript', 
+ 'выделение':'emphasis', 
+ 'именованная-ссылка':'named-reference', 
+ 'индекс':'index', 
+ 'нижний-индекс':'subscript', 
+ 'сильное-выделение':'strong', 
+ 'сокращение':'abbreviation', 
+ 'ссылка-замена':'substitution-reference', 
+ 'ссылка-на-pep':'pep-reference', 
+ 'ссылка-на-rfc':'rfc-reference', 
+ 'ссылка-на-uri':'uri-reference', 
+ 'ссылка-на-заглавие':'title-reference', 
+ 'ссылка-на-сноску':'footnote-reference', 
+ 'цитатная-ссылка':'citation-reference', 
+ 'цель':'target', 
+ 'сырой':'raw'}

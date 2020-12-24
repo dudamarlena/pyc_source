@@ -1,0 +1,16 @@
+setuptools
+awesome-slugify
+matplotlib
+scipy
+numpy
+cython>=0.24.1
+cyvcf2>=0.6.5
+docopt
+biopython
+yahmm==1.1.2
+clint
+requests
+networkx==1.11
+intervaltree==2.1.0
+tabulate
+jinja2

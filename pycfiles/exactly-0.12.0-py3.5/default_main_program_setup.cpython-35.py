@@ -1,0 +1,30 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3351)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.6-intel/egg/exactly_lib/default/default_main_program_setup.py
+# Compiled at: 2019-09-20 02:11:23
+# Size of source mod 2**32: 1804 bytes
+import sys
+from exactly_lib import program_info
+from exactly_lib.cli import main_program
+from exactly_lib.cli.main_program import TestCaseDefinitionForMainProgram
+from exactly_lib.common import instruction_name_and_argument_splitter
+from exactly_lib.default.program_modes import test_suite
+from exactly_lib.default.program_modes.test_case import builtin_symbols, default_instructions_setup, test_case_handling_setup
+from exactly_lib.execution import sandbox_dir_resolving
+from exactly_lib.processing.instruction_setup import TestCaseParsingSetup
+from exactly_lib.processing.parse.act_phase_source_parser import ActPhaseParser
+from exactly_lib.test_case import os_services
+from exactly_lib.util.std import StdOutputFiles
+
+def default_main_program() -> main_program.MainProgram:
+    return main_program.MainProgram(test_case_handling_setup.setup(), sandbox_dir_resolving.mk_tmp_dir_with_prefix(program_info.PROGRAM_NAME + '-'), os_services.DEFAULT_ATC_OS_PROCESS_EXECUTOR, TestCaseDefinitionForMainProgram(TestCaseParsingSetup(instruction_name_and_argument_splitter.splitter, default_instructions_setup.INSTRUCTIONS_SETUP, ActPhaseParser()), builtin_symbols.ALL), test_suite.test_suite_definition())
+
+
+def default_output() -> StdOutputFiles:
+    return StdOutputFiles(sys.stdout, sys.stderr)
+
+
+def main() -> int:
+    return default_main_program().execute(sys.argv[1:], default_output())

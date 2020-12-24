@@ -1,0 +1,3 @@
+# Minimum requirements
+#
+rnbgrader>=0.1.1

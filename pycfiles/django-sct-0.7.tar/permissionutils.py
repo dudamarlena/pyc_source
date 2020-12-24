@@ -1,0 +1,49 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/herbert/dev/python/sctdev/simpleproject/simpleproject/../../communitytools/sphenecoll/sphene/community/permissionutils.py
+# Compiled at: 2012-03-17 12:42:14
+from django.conf import settings
+from django.core.cache import cache
+from django.db.models import Q
+from django.contrib.contenttypes.models import ContentType
+from sphene.community.middleware import get_current_group
+from sphene.community.models import Role, RoleMember, PermissionFlag, RoleGroupMember
+from sphene.community.sph_cacheutils import get_cache_group_id
+
+def has_permission_flag(user, flag, contentobject=None, group=None):
+    """
+    Checks if the given user has the given flag for the given model instance
+    (object).
+    If object is not given, it checks if the user has the flag globally
+    assigned.
+    """
+    if user is None or not user.is_authenticated():
+        return False
+    else:
+        if user.is_superuser:
+            return True
+        if group is None:
+            group = get_current_group()
+        cache_group_id = get_cache_group_id('has_permission_flag_%s' % user.pk)
+        key = '%s_%s_has_perm_flag_%s_%s_%s_%s' % (settings.CACHE_MIDDLEWARE_KEY_PREFIX, cache_group_id, user.pk, flag,
+         contentobject and contentobject.pk or '0', group.pk)
+        res = cache.get(key, False)
+        if res:
+            return res
+        rolegroup_ids = RoleGroupMember.objects.filter(rolegroup__group=group, user=user).values_list('id', flat=True)
+        userselect = Q(user=user) & Q(rolegroup__isnull=True) | Q(rolegroup__in=rolegroup_ids) & Q(user__isnull=True)
+        matches = RoleMember.objects.filter(userselect, role__permission_flags__name__exact=flag, has_limitations=False).count()
+        if matches > 0:
+            res = True
+        else:
+            if contentobject is not None:
+                content_type = ContentType.objects.get_for_model(contentobject)
+                rolemembers = RoleMember.objects.filter(userselect, role__permission_flags__name__exact=flag, has_limitations=True, rolememberlimitation__object_type=content_type, rolememberlimitation__object_id=contentobject.id).count()
+                if rolemembers > 0:
+                    res = True
+            if not res and flag != 'group_administrator':
+                res = has_permission_flag(user, 'group_administrator')
+        cache.set(key, res, 86400)
+        return res

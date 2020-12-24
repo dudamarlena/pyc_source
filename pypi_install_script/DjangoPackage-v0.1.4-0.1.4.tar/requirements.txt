@@ -1,0 +1,13 @@
+model_mommy
+ansible
+coverage
+sentry-sdk==0.10.1
+certifi==2019.6.16
+django-prometheus==1.0.15
+gunicorn==19.9.0
+prometheus-client==0.7.1
+pytz==2019.1
+sqlparse==0.3.0
+urllib3==1.25.3
+Django==2.2.2
+twine

@@ -1,0 +1,4 @@
+sanic==18.12
+jinja2
+click
+pydantic

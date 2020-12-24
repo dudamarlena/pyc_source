@@ -1,0 +1,17 @@
+requests==2.19.1
+redis==2.10.6
+dogpile.cache==0.6.7
+pytz==2018.5
+
+feedparser==5.2.1
+
+# sqlalchemy
+sqlalchemy==1.2.12
+zope.sqlalchemy==1.0
+transaction==2.2.1
+
+python-dateutil==2.7.3
+
+oe_geoutils==1.1.1
+oe_utils==0.26.1
+repoze.lru<0.7,>=0.6

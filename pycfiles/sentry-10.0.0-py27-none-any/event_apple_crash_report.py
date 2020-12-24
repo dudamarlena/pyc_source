@@ -1,0 +1,46 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/src/sentry/src/sentry/api/endpoints/event_apple_crash_report.py
+# Compiled at: 2019-08-16 17:27:45
+from __future__ import absolute_import
+import six
+try:
+    from django.http import HttpResponse, CompatibleStreamingHttpResponse as StreamingHttpResponse
+except ImportError:
+    from django.http import HttpResponse, StreamingHttpResponse
+
+from sentry import eventstore
+from sentry.api.bases.project import ProjectEndpoint
+from sentry.api.exceptions import ResourceDoesNotExist
+from sentry.models import Event
+from sentry.lang.native.applecrashreport import AppleCrashReport
+from sentry.utils.safe import get_path
+
+class EventAppleCrashReportEndpoint(ProjectEndpoint):
+
+    def get(self, request, project, event_id):
+        """
+        Retrieve an Apple Crash Report from an event
+        `````````````````````````````````````````````
+
+        This endpoint returns the an apple crash report for a specific event.
+        This works only if the event.platform == cocoa
+        """
+        event = eventstore.get_event_by_id(project.id, event_id)
+        if event is None:
+            raise ResourceDoesNotExist
+        Event.objects.bind_nodes([event], 'data')
+        if event.platform not in ('cocoa', 'native'):
+            return HttpResponse({'message': 'Only cocoa events can return an apple crash report'}, status=403)
+        else:
+            symbolicated = request.GET.get('minified') not in ('1', 'true')
+            apple_crash_report_string = six.text_type(AppleCrashReport(threads=get_path(event.data, 'threads', 'values', filter=True), context=event.data.get('contexts'), debug_images=get_path(event.data, 'debug_meta', 'images', filter=True), exceptions=get_path(event.data, 'exception', 'values', filter=True), symbolicated=symbolicated))
+            response = HttpResponse(apple_crash_report_string, content_type='text/plain')
+            if request.GET.get('download') is not None:
+                filename = ('{}{}.crash').format(event.event_id, symbolicated and '-symbolicated' or '')
+                response = StreamingHttpResponse(apple_crash_report_string, content_type='text/plain')
+                response['Content-Length'] = len(apple_crash_report_string)
+                response['Content-Disposition'] = 'attachment; filename="%s"' % filename
+            return response

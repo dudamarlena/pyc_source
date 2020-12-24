@@ -1,0 +1,67 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/tpDcc/libs/qt/widgets/listdelegates.py
+# Compiled at: 2020-04-24 23:12:07
+# Size of source mod 2**32: 2953 bytes
+"""
+Module that contains delegates that can be used to customize how data is renderer in list views
+"""
+from __future__ import print_function, division, absolute_import
+import os
+from Qt.QtCore import *
+from Qt.QtWidgets import *
+from Qt.QtGui import *
+
+class BaseListViewDelegate(QStyledItemDelegate, object):
+    __doc__ = '\n    Base delegate for list view widgets\n    '
+    _ICON_MARGIN = 4
+
+    def paint(self, painter, option, index):
+        painter.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
+        model = index.model()
+        view = self.parent()
+        if view.hasFocus():
+            if option.state & QStyle.State_MouseOver:
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(Qt.gray)
+                painter.drawRoundedRect(option.rect.adjusted(1, 1, -1, -1), self._ICON_MARGIN, self._ICON_MARGIN)
+        pixmap = model.data(index, Qt.DecorationRole).pixmap(view.iconSize())
+        pm_rect = QRect(option.rect.topLeft() + QPoint(self._ICON_MARGIN + 1, self._ICON_MARGIN + 1), view.iconSize() - QSize(self._ICON_MARGIN * 2, self._ICON_MARGIN * 2))
+        painter.drawPixmap(pm_rect, pixmap)
+        if option.state & QStyle.State_Selected:
+            painter.setPen(QPen(Qt.red, 1.0, Qt.SolidLine, Qt.SquareCap, Qt.RoundJoin))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(option.rect.adjusted(2, 2, -2, -2))
+        font = view.font()
+        fm = QFontMetrics(font)
+        text = os.path.splitext(os.path.basename(model.data(index, Qt.DisplayRole)))[0]
+        text = fm.elidedText(text, Qt.ElideRight, view.iconSize().width() - 4)
+        text_opt = QTextOption()
+        text_opt.setAlignment(Qt.AlignHCenter)
+        txt_rect = QRectF(QPointF(pm_rect.bottomLeft() + QPoint(0, 1)), QPointF(option.rect.bottomRight() - QPoint(4, 3)))
+        painter.save()
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(22, 22, 22, 220))
+        painter.drawRoundedRect(txt_rect.adjusted(-2, -2, 2, 2), 2, 2)
+        painter.restore()
+        painter.setPen(self.parent().palette().color(QPalette.WindowText))
+        painter.drawText(txt_rect, text, text_opt)
+        font.setPointSize(8)
+        fm = QFontMetrics(font)
+        item = model.itemFromIndex(index)
+        size_text = '%d x %d' % (item.size.width(), item.size.height())
+        size_rect = fm.boundingRect(option.rect, Qt.AlignLeft | Qt.AlignTop, size_text)
+        size_rect.translate(4, 4)
+        painter.save()
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(22, 22, 22, 220))
+        painter.drawRoundedRect(size_rect.adjusted(-2, -2, 2, 2), 2, 2)
+        painter.restore()
+        painter.setFont(font)
+        painter.drawText(size_rect, size_text)
+
+    def sizeHint(self, option, index):
+        view = self.parent()
+        return view.iconSize() + QSize(2, 14)

@@ -1,0 +1,6 @@
+click
+cligj
+Fiona
+numpy
+pyproj
+Shapely

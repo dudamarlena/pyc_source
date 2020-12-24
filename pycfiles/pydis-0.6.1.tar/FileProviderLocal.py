@@ -1,0 +1,89 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.3 (62011)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build\bdist.win32\egg\dirstat\FileProviderLocal.py
+# Compiled at: 2006-10-06 11:17:02
+import os, walker
+from FileProviderBase import StatInfoBase
+from FileProviderBase import FileProviderBase
+
+class FileProviderLocal(FileProviderBase):
+    """The local FileProvider.
+
+    It use the os package to do its dirty job, so
+    it may be quite portable."""
+    __module__ = __name__
+    supports_unicode_filenames = os.path.supports_unicode_filenames
+
+    def __init__(self, url):
+        self._url = url
+        self._walker = None
+        if hasattr(os, 'walk'):
+            self._walker = os.walk
+        else:
+            self._walker = walker.walker
+        return
+
+    def walk(self):
+        return self._walker(self._url, False)
+
+    def split(self, path):
+        return os.path.split(path)
+
+    def join(self, *args):
+        return os.path.join(*args)
+
+    def abspath(self, path):
+        return os.path.abspath(path)
+
+    def stat(self, file):
+
+        class StatInfo(StatInfoBase):
+            __module__ = __name__
+
+            def __init__(self, file):
+                self._lstat = os.lstat(file)
+
+            def st_dev(self):
+                return self._lstat.st_dev
+
+            def st_mode(self):
+                return self._lstat.st_mode
+
+            def st_nlink(self):
+                return self._lstat.st_nlink
+
+            def st_mtime(self):
+                return self._lstat.st_mtime
+
+            def st_size(self):
+                return self._lstat.st_size
+
+            def st_blocks(self):
+                return getattr(self._lstat, 'st_blocks', int(self._lstat.st_size / 512))
+
+            def st_dev(self):
+                return self._lstat.st_dev
+
+            def is_dir(self):
+                return os.path.stat.S_ISDIR(self._lstat.st_mode)
+
+            def is_reg(self):
+                return os.path.stat.S_ISREG(self._lstat.st_mode)
+
+            def is_lnk(self):
+                return os.path.stat.S_ISLNK(self._lstat.st_mode)
+
+            def is_blk(self):
+                return os.path.stat.S_ISBLK(self._lstat.st_mode)
+
+            def is_chr(self):
+                return os.path.stat.S_ISCHR(self._lstat.st_mode)
+
+            def is_fifo(self):
+                return os.path.stat.S_ISFIFO(self._lstat.st_mode)
+
+            def is_sock(self):
+                return os.path.stat.S_ISSOCK(self._lstat.st_mode)
+
+        return StatInfo(file)

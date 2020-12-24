@@ -1,0 +1,100 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/extensions/middle/quantize_fuses.py
+# Compiled at: 2020-05-01 08:37:21
+# Size of source mod 2**32: 5442 bytes
+"""
+ Copyright (C) 2018-2020 Intel Corporation
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+"""
+import extensions.middle.BinarizeWeightsM1P1 as BinarizeWeightsM1P1
+import extensions.middle.DeleteControlFlowEdges as DeleteControlFlowEdges
+import extensions.middle.EltwiseChecker as EltwiseChecker
+from mo.graph.graph import Graph
+from mo.middle.replacement import MiddleReplacementPattern
+
+class MarkNodesToFuseUpToFakeQuantize(MiddleReplacementPattern):
+    __doc__ = '\n        Marks special nodes that could be pulled through Quantize operation.\n        Sets `fuse_up_to_quantize_ports` parameter to list of indexes of input ports of Quantize operation\n        where specified node should appear.\n\n    '
+    enabled = True
+
+    def run_after(self):
+        return [
+         DeleteControlFlowEdges]
+
+    def run_before(self):
+        return []
+
+    def find_and_replace_pattern(self, graph: Graph):
+        EltwiseChecker().find_and_replace_pattern(graph)
+        eltwise_nodes = graph.get_op_nodes(op='Mul', can_be_fused=True) + graph.get_op_nodes(op='Sub', can_be_fused=True) + graph.get_op_nodes(op='Add', can_be_fused=True)
+        for elt in eltwise_nodes:
+            if elt.in_port(0).data.get_value() is not None or elt.in_port(1).data.get_value() is not None:
+                elt['fuse_up_to_quantize_ports'] = [
+                 3, 4]
+
+        slice = graph.get_op_nodes(op='Slice')
+        for sl in slice:
+            sl['fuse_up_to_quantize_ports'] = [
+             0]
+
+
+class FakeQuantizeFuse(MiddleReplacementPattern):
+    __doc__ = '\n        Pulls nodes containing `fuse_up_to_quantize_ports` parameter (node to fuse) through Quantize operation\n\n        If `fuse_up_to_quantize_ports` list contains one input port to which node to fuse should be delivered,\n            replacer reconnects edges.\n\n        If `fuse_up_to_quantize_ports` list contains more than one input port to which node to fuse should be delivered,\n            replacer reconnects edges of first port from `fuse_up_to_quantize_ports` list, for other ports\n            replacer duplicates node to fuse (duplicate connections of inputs of node to fuse to duplicates of it)\n    '
+    enabled = True
+
+    def run_after(self):
+        return [
+         MarkNodesToFuseUpToFakeQuantize]
+
+    def run_before(self):
+        return [
+         BinarizeWeightsM1P1]
+
+    def find_and_replace_pattern(self, graph: Graph):
+        for quantize_node in graph.get_op_nodes(op='FakeQuantize', keep_in_IR=True):
+            while len(quantize_node.out_port(0).get_destinations()) == 1:
+                if not quantize_node.out_port(0).get_destination().node.has_valid('fuse_up_to_quantize_ports'):
+                    break
+                fuse_node = quantize_node.out_port(0).get_destination().node
+                quantize_to_mul_in_port_index = quantize_node.out_port(0).get_destination().idx
+                fuse_node.out_port(0).get_connection().set_source(quantize_node.out_port(0))
+                fuse_node.in_port(quantize_to_mul_in_port_index).disconnect()
+                first_port_fusion = True
+                for in_quantize_port in fuse_node['fuse_up_to_quantize_ports']:
+                    fuse_node_duplicate = fuse_node
+                    if not first_port_fusion:
+                        fuse_node_duplicate = fuse_node.copy_node({'in_ports_count':len(fuse_node.in_ports()), 
+                         'out_ports_count':len(fuse_node.out_ports())})
+                    quantize_node.in_port(in_quantize_port).get_connection().set_destination(fuse_node_duplicate.in_port(quantize_to_mul_in_port_index))
+                    fuse_node_duplicate.out_port(0).connect(quantize_node.in_port(in_quantize_port))
+                    if not first_port_fusion:
+                        for idx, port in fuse_node.in_ports().items():
+                            if idx == quantize_to_mul_in_port_index:
+                                continue
+                            port.get_source().connect(fuse_node_duplicate.in_port(idx))
+
+                    fuse_node_duplicate.infer(fuse_node_duplicate)
+                    first_port_fusion = False
+
+            if 'permutation' in quantize_node.in_edge(0):
+                permutation = quantize_node.in_edge(0)['permutation']
+                if permutation is None:
+                    continue
+                perm_rank = permutation.perm.size
+                if not all([quantize_node.in_port(i).data.get_shape().size == perm_rank for i in range(1, 5)]):
+                    continue
+                for i in range(1, 5):
+                    quantize_node.in_edge(i)['permutation'] = permutation

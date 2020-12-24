@@ -1,0 +1,50 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python3.7/dist-packages/tox_DEBIAN/install.py
+# Compiled at: 2019-04-02 04:10:57
+# Size of source mod 2**32: 1572 bytes
+import fnmatch, py
+from tempfile import mkdtemp
+from shutil import rmtree
+from os import listdir, walk
+from os.path import curdir, isdir, join as path_join
+
+def install_debian_deps(path, deps, opts, action):
+    if not deps:
+        return
+    __ensure_commands(['apt-get', 'dpkg', 'cp'])
+    tmp_dir = mkdtemp(prefix='dpkg-')
+    try:
+        action.setactivity('apt-get download', ', '.join(deps))
+        action.popen((['apt-get', 'download'] + opts + deps), cwd=(py.path.local(tmp_dir)))
+        packages = fnmatch.filter(listdir(tmp_dir), '*.deb')
+        for package in packages:
+            action.setactivity('dpkg extract', package)
+            action.popen(['dpkg', '--vextract', package, curdir], cwd=(py.path.local(tmp_dir)))
+
+        tmp_usr = path_join(tmp_dir, 'usr')
+        if isdir(tmp_usr):
+            action.setactivity('copy', ', '.join(__iter_files(tmp_usr)))
+            action.popen((['cp', '-r'] + listdir(tmp_usr) + [path]), cwd=(py.path.local(tmp_usr)))
+    finally:
+        rmtree(tmp_dir)
+
+
+def __iter_files(root):
+    root_str_idx = len(root) + 1
+    for root, dirs, files in walk(root):
+        relative_root = root[root_str_idx:]
+        for name in files:
+            yield path_join(relative_root, name)
+
+
+def __ensure_commands(commands):
+    missing = [command for command in commands if py.path.local.sysfind(command) is None]
+    if missing:
+        raise InvocationError('Could not find executables: {}'.format(', '.join(missing)))
+
+
+class InvocationError(Exception):
+    pass

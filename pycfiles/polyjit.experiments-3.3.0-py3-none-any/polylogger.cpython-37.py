@@ -1,0 +1,49 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/polyinterface/polylogger.py
+# Compiled at: 2020-04-13 17:37:50
+# Size of source mod 2**32: 1880 bytes
+import os, logging
+from logging import handlers as log_handlers
+import warnings
+
+class PolyLogger:
+    NAME = __name__.split('.')[0]
+    LOGS_DIR = './logs'
+    LOG_FILE = 'debug.log'
+    LEVEL = logging.DEBUG
+    ROTATION = 'midnight'
+    WARN_LOGGER_NAME = 'py.warnings'
+    BACKUP_COUNT = 30
+    FMT_STRING = '%(asctime)s %(threadName)-10s %(name)-18s %(levelname)-8s %(module)s:%(funcName)s: %(message)s'
+
+    def __init__(self):
+        if not os.path.exists(PolyLogger.LOGS_DIR):
+            os.makedirs(PolyLogger.LOGS_DIR)
+        self.handler = log_handlers.TimedRotatingFileHandler((os.path.join(PolyLogger.LOGS_DIR, PolyLogger.LOG_FILE)),
+          when=(PolyLogger.ROTATION),
+          backupCount=(PolyLogger.BACKUP_COUNT))
+        logging.captureWarnings(True)
+        self.set_log_format(PolyLogger.FMT_STRING)
+        logging.basicConfig(handlers=[
+         self.handler],
+          level=(PolyLogger.LEVEL))
+        self.logger = logging.getLogger(PolyLogger.NAME)
+        self.logger.propagate = False
+        self.logger.addHandler(self.handler)
+        self.warnlog = logging.getLogger(PolyLogger.WARN_LOGGER_NAME)
+        warnings.formatwarning = self.warning_on_one_line
+        self.warnlog.addHandler(self.handler)
+
+    def set_log_format(self, fmt_string):
+        formatter = logging.Formatter(fmt_string)
+        self.handler.setFormatter(formatter)
+
+    @staticmethod
+    def warning_on_one_line(message, category, filename, lineno, file=None, line=None):
+        return '{}:{}: {}: {}'.format(filename, lineno, category.__name__, message)
+
+
+LOG_HANDLER = PolyLogger()
+LOGGER = LOG_HANDLER.logger

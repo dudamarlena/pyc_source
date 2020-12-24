@@ -1,0 +1,380 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.13-x86_64/egg/rbtools/api/cache.py
+# Compiled at: 2020-04-14 20:27:46
+from __future__ import print_function, unicode_literals
+import contextlib, datetime, json, locale, logging, os, sqlite3, threading, six
+from six.moves.urllib.request import urlopen
+from rbtools.api.errors import CacheError
+from rbtools.utils.appdirs import user_cache_dir
+MINIMUM_VERSION = b'2.0.14'
+_locale_lock = threading.Lock()
+
+class CacheEntry(object):
+    """An entry in the API Cache."""
+    DATE_FORMAT = b'%Y-%m-%dT%H:%M:%S'
+
+    def __init__(self, url, vary_headers, max_age, etag, local_date, last_modified, mime_type, item_mime_type, response_body):
+        """Create a new cache entry."""
+        self.url = url
+        self.vary_headers = vary_headers
+        self.max_age = max_age
+        self.etag = etag
+        self.local_date = local_date
+        self.last_modified = last_modified
+        self.mime_type = mime_type
+        self.item_mime_type = item_mime_type
+        self.response_body = response_body
+
+    def matches_request(self, request):
+        """Determine if the cache entry matches the given request.
+
+        This is done by comparing the value of the headers field to the
+        headers in the request
+        """
+        if self.vary_headers:
+            for header, value in six.iteritems(self.vary_headers):
+                if request.headers.get(header) != value:
+                    return False
+
+        return True
+
+    def up_to_date(self):
+        """Determine if the cache entry is up to date."""
+        if self.max_age is not None:
+            max_age = datetime.timedelta(seconds=self.max_age)
+            return self.local_date + max_age > datetime.datetime.now()
+        else:
+            return True
+
+
+class HTTPResponse(object):
+    """An uncached HTTP response that can be read() more than once.
+
+    This is intended to be API-compatible with a urllib2 response object. This
+    allows a response to be read more than once.
+    """
+
+    def __init__(self, response):
+        """Extract the data from a urllib2 HTTP response."""
+        self.headers = response.info()
+        self.content = response.read()
+        self.code = response.getcode()
+
+    def info(self):
+        """Get the headers associated with the response."""
+        return self.headers
+
+    def read(self):
+        """Get the content associated with the response."""
+        return self.content
+
+    def getcode(self):
+        """Get the associated HTTP response code."""
+        return self.code
+
+
+class CachedHTTPResponse(object):
+    """A response returned from the APICache.
+
+    This is intended to be API-compatible with a urllib2 response object.
+    """
+
+    def __init__(self, cache_entry):
+        """Create a new CachedResponse from the given CacheEntry."""
+        self.headers = {b'Content-Type': cache_entry.mime_type, 
+           b'Item-Content-Type': cache_entry.item_mime_type}
+        self.content = cache_entry.response_body
+
+    def info(self):
+        """Get the headers associated with the response."""
+        return self.headers
+
+    def read(self):
+        """Get the content associated with the response."""
+        return self.content
+
+    def getcode(self):
+        """Get the associated HTTP response code, which is always 200.
+
+        This method returns 200 because it is pretending that it made a
+        successful HTTP request.
+        """
+        return 200
+
+
+class APICache(object):
+    """An API cache backed by a SQLite database."""
+    EXPIRES_FORMAT = b'%a, %d %b %Y %H:%M:%S %Z'
+    DEFAULT_CACHE_DIR = user_cache_dir(b'rbtools')
+    DEFAULT_CACHE_PATH = os.path.join(DEFAULT_CACHE_DIR, b'apicache.db')
+    SCHEMA_VERSION = 2
+
+    def __init__(self, create_db_in_memory=False, db_location=None, urlopen=urlopen):
+        """Create a new instance of the APICache
+
+        If the db_path is provided, it will be used as the path to the SQLite
+        database; otherwise, the default cache (in the CACHE_DIR) will be used.
+        The urlopen parameter determines the method that is used to open URLs.
+        """
+        self.urlopen = urlopen
+        if create_db_in_memory:
+            logging.debug(b'Creating API cache in memory.')
+            self.db = sqlite3.connect(b':memory:')
+            self.cache_path = None
+            self._create_schema()
+        else:
+            self.cache_path = db_location or self.DEFAULT_CACHE_PATH
+            try:
+                cache_exists = os.path.exists(self.cache_path)
+                create_schema = True
+                if not cache_exists:
+                    cache_dir = os.path.dirname(self.cache_path)
+                    if not os.path.exists(cache_dir):
+                        logging.debug(b'Cache directory "%s" does not exist; creating.', cache_dir)
+                        os.makedirs(cache_dir)
+                    logging.debug(b'API cache "%s" does not exist; creating.', self.cache_path)
+                self.db = sqlite3.connect(self.cache_path)
+                if cache_exists:
+                    try:
+                        with contextlib.closing(self.db.cursor()) as (c):
+                            c.execute(b'SELECT version FROM cache_info')
+                            row = c.fetchone()
+                            if row and row[0] == self.SCHEMA_VERSION:
+                                create_schema = False
+                    except sqlite3.Error as e:
+                        self._die(b'Could not get the HTTP cache schema version', e)
+
+                if create_schema:
+                    self._create_schema()
+            except (OSError, sqlite3.Error):
+                logging.warn(b'Could not create or access API cache "%s". Try running "rbt clear-cache" to clear the HTTP cache for the API.', self.cache_path)
+
+        if self.db is not None:
+            self.db.row_factory = APICache._row_factory
+        return
+
+    def make_request(self, request):
+        """Perform the specified request.
+
+        If there is an up-to-date cached entry in our store, a CachedResponse
+        will be returned. Otherwise, The urlopen method will be used to
+        execute the request and a CachedResponse (if our entry is still up to
+        date) or a Response (if it is not) will be returned.
+        """
+        if self.db is None or request.method != b'GET':
+            return self.urlopen(request)
+        else:
+            entry = self._get_entry(request)
+            if entry:
+                if entry.up_to_date():
+                    logging.debug(b'Cached response for HTTP GET %s up to date', request.get_full_url())
+                    response = CachedHTTPResponse(entry)
+                else:
+                    if entry.etag:
+                        request.add_header(b'If-none-match', entry.etag)
+                    if entry.last_modified:
+                        request.add_header(b'If-modified-since', entry.last_modified)
+                    response = HTTPResponse(self.urlopen(request))
+                    if response.getcode() == 304:
+                        logging.debug(b'Cached response for HTTP GET %s expired and was not modified', request.get_full_url())
+                        entry.local_date = datetime.datetime.now()
+                        self._save_entry(entry)
+                        response = CachedHTTPResponse(entry)
+                    elif 200 <= response.getcode() < 300:
+                        logging.debug(b'Cached response for HTTP GET %s expired and was modified', request.get_full_url())
+                        response_headers = response.info()
+                        cache_info = self._get_caching_info(request.headers, response_headers)
+                        if cache_info:
+                            entry.max_age = cache_info[b'max_age']
+                            entry.etag = cache_info[b'etag']
+                            entry.local_date = datetime.datetime.now()
+                            entry.last_modified = cache_info[b'last_modified']
+                            entry.mime_type = response_headers[b'Content-Type']
+                            entry.item_mime_type = response_headers.get(b'Item-Content-Type')
+                            entry.response_body = response.read()
+                            if entry.vary_headers != cache_info[b'vary_headers']:
+                                self._delete_entry(entry)
+                                entry.vary_headers = cache_info[b'vary_headers']
+                            self._save_entry(entry)
+                        else:
+                            logging.debug(b'Cached response for HTTP GET request to %s is no longer cacheable', request.get_full_url())
+                            self._delete_entry(entry)
+            else:
+                response = HTTPResponse(self.urlopen(request))
+                response_headers = response.info()
+                cache_info = self._get_caching_info(request.headers, response_headers)
+                if cache_info:
+                    self._save_entry(CacheEntry(request.get_full_url(), cache_info[b'vary_headers'], cache_info[b'max_age'], cache_info[b'etag'], datetime.datetime.now(), cache_info[b'last_modified'], response_headers.get(b'Content-Type'), response_headers.get(b'Item-Content-Type'), response.read()))
+                    logging.debug(b'Added cache entry for HTTP GET request to %s', request.get_full_url())
+                else:
+                    logging.debug(b'HTTP GET request to %s cannot be cached', request.get_full_url())
+            return response
+
+    def _get_caching_info(self, request_headers, response_headers):
+        """Get the caching info for the response to the given request.
+
+        A dictionary with caching information is returned, or None if the
+        response cannot be cached.
+        """
+        max_age = None
+        no_cache = False
+        expires = response_headers.get(b'Expires')
+        if expires:
+            with _locale_lock:
+                old_locale = locale.setlocale(locale.LC_TIME)
+                try:
+                    try:
+                        locale.setlocale(locale.LC_TIME, str(b'C'))
+                        expires = datetime.datetime.strptime(expires, self.EXPIRES_FORMAT)
+                        now = datetime.datetime.now()
+                        if expires < now:
+                            max_age = 0
+                        else:
+                            max_age = (expires - now).seconds
+                    except ValueError:
+                        logging.error(b'The format of the "Expires" header (value %s) does not match the expected format.', expires)
+                    except locale.Error:
+                        logging.error(b'The C locale is unavailable on this system. The "Expires" header cannot be parsed.')
+
+                finally:
+                    locale.setlocale(locale.LC_TIME, old_locale)
+
+        for kvp in self._split_csv(response_headers.get(b'Cache-Control', b'')):
+            if kvp.startswith(b'max-age'):
+                max_age = int(kvp.split(b'=')[1].strip())
+            elif kvp.startswith(b'no-cache'):
+                no_cache = True
+            else:
+                if kvp == b'no-store':
+                    return
+                if kvp == b'must-revalidate':
+                    no_cache = True
+
+        if b'no-cache' in response_headers.get(b'Pragma', b''):
+            no_cache = True
+        etag = response_headers.get(b'ETag')
+        last_modified = response_headers.get(b'Last-Modified')
+        vary_headers = response_headers.get(b'Vary')
+        if vary_headers:
+            vary_headers = dict((header, request_headers.get(header)) for header in self._split_csv(vary_headers))
+        else:
+            vary_headers = {}
+        if no_cache:
+            max_age = 0
+        if no_cache and not etag and not last_modified:
+            return
+        else:
+            return {b'max_age': max_age, 
+               b'etag': etag, 
+               b'last_modified': last_modified, 
+               b'vary_headers': vary_headers}
+
+    def _create_schema(self):
+        """Create the schema for the API cache database."""
+        try:
+            with contextlib.closing(self.db.cursor()) as (c):
+                c.execute(b'DROP TABLE IF EXISTS api_cache')
+                c.execute(b'DROP TABLE IF EXISTS cache_info')
+                c.execute(b'CREATE TABLE api_cache(\n                                 url            TEXT,\n                                 vary_headers   TEXT,\n                                 max_age        INTEGER,\n                                 etag           TEXT,\n                                 local_date     TEXT,\n                                 last_modified  TEXT,\n                                 mime_type      TEXT,\n                                 item_mime_type TEXT,\n                                 response_body  BLOB,\n                                 PRIMARY KEY(url, vary_headers)\n                             )')
+                c.execute(b'CREATE TABLE cache_info(version INTEGER)')
+                c.execute(b'INSERT INTO cache_info(version) VALUES(?)', (
+                 self.SCHEMA_VERSION,))
+            self._write_db()
+        except sqlite3.Error as e:
+            self._die(b'Could not create database schema for the HTTP cache', e)
+
+    def _get_entry(self, request):
+        """Find an entry in the API cache store that matches the request.
+
+        If no such cache entry exists, this returns None.
+        """
+        url = request.get_full_url()
+        try:
+            with contextlib.closing(self.db.cursor()) as (c):
+                for row in c.execute(b'SELECT * FROM api_cache WHERE url=?', (url,)):
+                    if row.matches_request(request):
+                        return row
+
+        except sqlite3.Error as e:
+            self._die(b'Could not retrieve an entry from the HTTP cache', e)
+
+        return
+
+    def _save_entry(self, entry):
+        """Save the entry into the store.
+
+        If the entry already exists in the store, do an UPDATE; otherwise do an
+        INSERT. This does not commit to the database.
+        """
+        vary_headers = json.dumps(entry.vary_headers)
+        local_date = entry.local_date.strftime(entry.DATE_FORMAT)
+        try:
+            with contextlib.closing(self.db.cursor()) as (c):
+                try:
+                    c.execute(b'INSERT INTO api_cache (url,\n                                                        vary_headers,\n                                                        max_age,\n                                                        etag,\n                                                        local_date,\n                                                        last_modified,\n                                                        mime_type,\n                                                        item_mime_type,\n                                                        response_body)\n                                 VALUES(?,?,?,?,?,?,?,?,?)', (
+                     entry.url, vary_headers, entry.max_age,
+                     entry.etag, local_date, entry.last_modified,
+                     entry.mime_type, entry.item_mime_type,
+                     sqlite3.Binary(entry.response_body)))
+                except sqlite3.IntegrityError:
+                    c.execute(b'UPDATE api_cache\n                                 SET max_age=?,\n                                     etag=?,\n                                     local_date=?,\n                                     last_modified=?,\n                                     mime_type=?,\n                                     item_mime_type=?,\n                                     response_body=?\n                                 WHERE url=? AND vary_headers=?', (
+                     entry.max_age, entry.etag, local_date,
+                     entry.last_modified, entry.mime_type,
+                     entry.item_mime_type,
+                     sqlite3.Binary(entry.response_body), entry.url,
+                     vary_headers))
+
+            self._write_db()
+        except sqlite3.Error as e:
+            self._die(b'Could not write entry to the HTTP cache for the API', e)
+
+    def _delete_entry(self, entry):
+        """Remove the entry from the store."""
+        try:
+            with contextlib.closing(self.db.cursor()) as (c):
+                c.execute(b'DELETE FROM api_cache WHERE URL=? AND vary_headers=?', (
+                 entry.url, json.dumps(entry.vary_headers)))
+            self._write_db()
+        except sqlite3.Error as e:
+            self._die(b'Could not delete entry from the HTTP cache for the API', e)
+
+    @staticmethod
+    def _row_factory(cursor, row):
+        """A factory for creating individual Cache Entries from db rows."""
+        return CacheEntry(url=row[0], vary_headers=json.loads(row[1]), max_age=row[2], etag=row[3], local_date=datetime.datetime.strptime(row[4], CacheEntry.DATE_FORMAT), last_modified=row[5], mime_type=row[6], item_mime_type=row[7], response_body=six.binary_type(row[8]))
+
+    def _write_db(self):
+        """Flush the contents of the DB to the disk."""
+        if self.db:
+            try:
+                self.db.commit()
+            except sqlite3.Error as e:
+                self._die(b'Could not write database to disk', e)
+
+    def _die(self, message, inner_exception):
+        """Build an appropriate CacheError and raise it."""
+        message = b'%s: %s.' % (message, inner_exception)
+        if self.cache_path:
+            if self.cache_path == APICache.DEFAULT_CACHE_PATH:
+                cache_args = b''
+            else:
+                cache_args = b' --cache-location %s' % self.cache_path
+            message += b' Try running "rbt clear-cache%s" to manually clear the HTTP Cache for the API.' % cache_args
+        raise CacheError(message)
+
+    def _split_csv(self, csvline):
+        """Split a line of comma-separated values into a list."""
+        return [ s.strip() for s in csvline.split(b',')
+               ]
+
+
+def clear_cache(cache_path=APICache.DEFAULT_CACHE_PATH):
+    """Delete the HTTP cache used for the API."""
+    try:
+        os.unlink(cache_path)
+        print(b'Cleared cache in "%s"' % cache_path)
+    except Exception as e:
+        logging.error(b'Could not clear cache in "%s": %s. Try manually removing it if it exists.', cache_path, e)

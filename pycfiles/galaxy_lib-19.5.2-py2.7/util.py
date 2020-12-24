@@ -1,0 +1,73 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/galaxy/tools/parser/util.py
+# Compiled at: 2019-04-28 04:54:30
+from galaxy.util.odict import odict
+from .error_level import StdioErrorLevel
+from .interface import ToolStdioExitCode
+from .interface import ToolStdioRegex
+
+def is_dict(item):
+    return isinstance(item, dict) or isinstance(item, odict)
+
+
+def error_on_exit_code(out_of_memory_exit_code=None):
+    exit_codes = []
+    if out_of_memory_exit_code:
+        exit_code_oom = ToolStdioExitCode()
+        exit_code_oom.range_start = int(out_of_memory_exit_code)
+        exit_code_oom.range_end = int(out_of_memory_exit_code)
+        _set_oom(exit_code_oom)
+        exit_codes.append(exit_code_oom)
+    exit_code_lower = ToolStdioExitCode()
+    exit_code_lower.range_start = float('-inf')
+    exit_code_lower.range_end = -1
+    _set_fatal(exit_code_lower)
+    exit_codes.append(exit_code_lower)
+    exit_code_high = ToolStdioExitCode()
+    exit_code_high.range_start = 1
+    exit_code_high.range_end = float('inf')
+    _set_fatal(exit_code_high)
+    exit_codes.append(exit_code_high)
+    return (exit_codes, [])
+
+
+def aggressive_error_checks():
+    exit_codes, _ = error_on_exit_code()
+    regexes = [
+     _oom_regex('MemoryError'),
+     _oom_regex('std::bad_alloc'),
+     _oom_regex('java.lang.OutOfMemoryError'),
+     _oom_regex('Out of memory'),
+     _error_regex('exception:'),
+     _error_regex('error:')]
+    return (
+     exit_codes, regexes)
+
+
+def _oom_regex(match):
+    regex = ToolStdioRegex()
+    _set_oom(regex)
+    regex.match = match
+    regex.stdout_match = True
+    regex.stderr_match = True
+    return regex
+
+
+def _error_regex(match):
+    regex = ToolStdioRegex()
+    _set_fatal(regex)
+    regex.match = match
+    regex.stdout_match = True
+    regex.stderr_match = True
+    return regex
+
+
+def _set_oom(obj):
+    obj.error_level = StdioErrorLevel.FATAL_OOM
+
+
+def _set_fatal(obj):
+    obj.error_level = StdioErrorLevel.FATAL

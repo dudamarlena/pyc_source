@@ -1,0 +1,359 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.macosx-10.9-intel/egg/cpip/plot/PlotNode.py
+# Compiled at: 2017-10-03 13:07:16
+__doc__ = 'Bounding Boxes\n=========================\n\nLegend for the drawing below: ::\n\n    **** - Self sigma BB.\n    ~~~~ - Self pad box\n    #### - Self width and depth.\n    .... - All children\n    ++++ - Child[n] sigma BB.\n\ni.e. For a child its ``++++`` is equivalent to my ``****``.\n\nPoints in the drawing below:\n\n* ``D``      - Self datum point.\n* ``S``      - Self plot datum point.\n* ``x[n]``   - Child datum point.\n* ``Pl``     - Parent landing point to self.\n* ``Pt``     - Parent take-off point from self.\n* ``P[n]``   - Self take off point and landing point to child n.\n* ``pl[n]``  - Child n landing point from self.\n* ``pt[n]``  - Child n take-off point to self.\n* ``tdc``    - Top dead centre.\n\n\nBox ``....`` has depth of ``max(Boxes(++++).width)`` and\nwidth ``max(Box(~~~~)``, ``sum(Boxes(++++).depth))``. \n\nEach instance of class knows about the following:\n\nBoxes:\n\n* ``****`` - Self sigma BB as computed ``Dim()`` objects: ``self.bbSigmaDepth``\n    and ``self.bbSigmaWidth``. Or as computed ``Box()`` object ``self.bbSigma``\n* ``~~~~`` - As computed Dim() objects: self.bbSelfWidth, self.bbSelfDepth\n* ``####`` - Self width and depth as Dim() objects: self.width and self.depth\n* ``....`` - All children as a Box() object: self.bbChildren\n\nAnd padding between ``~~~~`` and ``....`` as ``Dim()`` object\n``self.bbSpaceChildren``\n\ni.e. not ``++++ - Child[n] sigma BB``. That the caller knows about its children.\n\nPoints: given D each instance of this class knows: ::\n\n    S, Pl, Pt, P[0] to P[N-1], x[0], tdc (only).\n\nIn the following diagram where lines are adjacent that means that there is no\nspacing between them. This diagram shows the root at top left and the children\nfrom left to right. The default plot of the include graph is to have the root\nat top left with the processed file centre left with the children running from\ntop to bottom. It is felt that this is more intuitive for source code. ::\n\n    -|-----> x increases\n     |\n     |\n    \\/\n    y increases\n    \n    D ***************************************************************************\n    *                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                     *\n    *                ~                                    ~                     *\n    *                ~    S ### Pl ###tdc### Pt ######    ~                     *\n    *                ~    #                          #    ~                     *\n    *                ~    #                          #    ~                     *\n    *                ~    #         Parent           #    ~                     *\n    *                ~    #                          #    ~                     *\n    *                ~    ## P[0] ## P[c] ## P[C-1] ##    ~                     *\n    *                ~                                    ~                     *\n    *                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                     *\n    *                                 ^                                         *\n    *                                 | == self._bbSpaceChildren                *\n    *                                 |                                         *\n    *...........................................................................*\n    *.x[0] + pl[0] + pt[0] +x[c] + pl[c] + pt[c] ++++++++++++x[C-1]+pl/pt[C-1]+.*\n    *.+                    ++                               ++                +.*\n    *.+     Child[0]       ++                               ++                +.*\n    *.+                    ++                               ++   Child[C-1]   +.*\n    *.+++++++++++++++++++++++           Child[c]            ++                +.*\n    *.                      +                               +++++++++++++++++++.*\n    *.                      +                               +                  .*\n    *.                      +++++++++++++++++++++++++++++++++                  .*\n    *...........................................................................*\n    *****************************************************************************\n\nNote: ``....`` can be narrower than ``~~~~``\n\nVertices\n========\n\nThe following show root at the left. Linking parent to child: ::\n\n                        PC_land    PC_stop\n                         |            |\n                         x>>>>>>>>>>>>x\n                        /\n                       /\n        x>>>>>>>>>>>>x/\n        |            |\n    PC_roll        PC_to\n\nPC_roll and PC_to are determined by the parent.\nPC_land and PC_stop are determined by the child.\n\nAnd child to parent: ::\n\n    CP_stop     CP_land\n        |          |\n        x<<<<<<<<<<x\\\n                     \\\n                      \\\n                       x<<<<<<<<<<<<x\n                       |            |\n                    CP_to        CP_roll\n\nCP_roll and CP_to are determined by the child.\nCP_land and CP_stop are determined by the parent.\n'
+__author__ = 'Paul Ross'
+__date__ = '2011-07-10'
+__rights__ = 'Copyright (c) 2008-2017 Paul Ross'
+from . import Coord
+from cpip import ExceptionCpip
+
+class ExceptionPlotNode(ExceptionCpip):
+    """Exception when handling PlotNodeBbox object."""
+
+
+class PlotNodeBbox(object):
+    """This is a class that can hold the width and depth of an object and
+    the bounding box of self and the children.
+    This can then compute various dimensions of self and children."""
+
+    def __init__(self):
+        """Constructor."""
+        self._width = None
+        self._depth = None
+        self._bbSpaceChildren = None
+        self._bbSelfPadding = None
+        self._bbChildren = None
+        self._numChildren = 0
+        return
+
+    def __str__(self):
+        retList = [
+         '|.......PlotNode: w=%s, d=%s' % (self._width, self._depth)]
+        retList.append('|bbSpaceChildren: %s' % str(self._bbSpaceChildren))
+        retList.append('|..bbSelfPadding: %s' % str(self._bbSelfPadding))
+        retList.append('|.....bbChildren: %s' % str(self._bbChildren))
+        retList.append('|........bbSigma: %s' % str(self.bbSigma))
+        return ('\n').join(retList)
+
+    def _raiseOnChildIndexOutOfRange(self, childIndex):
+        """Will raise a ExceptionPlotNode is the childIndex is out of range or
+        I have no children."""
+        if self._numChildren <= 0:
+            raise ExceptionPlotNode('PlotNodeBboxBoxy.pcRoll() when no children %d' % self._numChildren)
+        if childIndex < 0:
+            raise ExceptionPlotNode('PlotNodeBboxBoxy.pcRoll() index %d < 0' % childIndex)
+        if childIndex >= self._numChildren:
+            raise ExceptionPlotNode('PlotNodeBboxBoxy.pcRoll() index %d out of range [0...%d]' % (
+             childIndex, self._numChildren - 1))
+
+    def extendChildBbox(self, theChildBbox):
+        """Extends the child bounding box by the amount theChildBbox which
+        should be a Coord.Box(). This extends the .... line."""
+        if self._bbChildren is None:
+            newWidth = theChildBbox.width
+            newDepth = theChildBbox.depth
+        else:
+            newWidth = self._bbChildren.width + theChildBbox.width
+            newDepth = max(self._bbChildren.depth, theChildBbox.depth)
+        self._bbChildren = Coord.Box(width=newWidth, depth=newDepth)
+        self._numChildren += 1
+        return
+
+    @property
+    def numChildren(self):
+        return self._numChildren
+
+    @property
+    def width(self):
+        """The immediate width of the node, if None then no BB width is
+        allocated. i.e. the width of box ####"""
+        return self._width
+
+    @width.setter
+    def width(self, value):
+        self._width = value
+
+    @property
+    def depth(self):
+        """The immediate depth of the node, if None then no BB depth or
+        bbSpaceChildrend is allocated. i.e. the depth of box ####"""
+        return self._depth
+
+    @depth.setter
+    def depth(self, value):
+        self._depth = value
+
+    @property
+    def box(self):
+        """The Coord.Box() of ####."""
+        return Coord.Box(self._width, self._depth)
+
+    @property
+    def hasSetArea(self):
+        """Returns True if width and depth are set, False otherwise."""
+        return self.width is not None and self.depth is not None
+
+    @property
+    def bbSpaceChildren(self):
+        """The additional distance to give to the children as a
+        Coord.Dim()."""
+        if self._bbSpaceChildren is None:
+            return Coord.zeroBaseUnitsDim()
+        else:
+            return self._bbSpaceChildren
+
+    @bbSpaceChildren.setter
+    def bbSpaceChildren(self, value):
+        self._bbSpaceChildren = value
+
+    @property
+    def bbSelfPadding(self):
+        """The immediate padding around self as a Coord.Pad()."""
+        if self._bbSelfPadding is None:
+            return Coord.zeroBaseUnitsPad()
+        else:
+            return self._bbSelfPadding
+
+    @bbSelfPadding.setter
+    def bbSelfPadding(self, value):
+        self._bbSelfPadding = value
+
+    @property
+    def bbChildren(self):
+        """The bounding box of children as a Coord.Box() or None.
+        i.e. the box ...."""
+        return self._bbChildren
+
+    @bbChildren.setter
+    def bbChildren(self, value):
+        self._bbChildren = value
+
+    @property
+    def bbChildrenWidth(self):
+        """The bounding box width of children as a Coord.Dim() or None.
+        i.e. the width of box ...."""
+        if self._bbChildren is not None:
+            return self._bbChildren.width
+        else:
+            return
+
+    @property
+    def bbChildrenDepth(self):
+        """The bounding box depth of children as a Coord.Dim() or None.
+        i.e. the depth of box ...."""
+        if self._bbChildren is not None:
+            return self._bbChildren.depth
+        else:
+            return
+
+    @property
+    def bbSelfWidth(self):
+        """The width of self plus padding as a Coord.Dim() or None.
+        i.e. the width of box ~~~~"""
+        if self.width is None:
+            return Coord.Dim(0, None)
+        else:
+            myPad = self.bbSelfPadding
+            return myPad.prev + self.width + myPad.next
+
+    @property
+    def bbSelfDepth(self):
+        """The depth of self plus padding as a Coord.Dim().
+        i.e. the depth of box ~~~~"""
+        if self.depth is None:
+            return Coord.Dim(0, None)
+        else:
+            myPad = self.bbSelfPadding
+            return myPad.parent + self.depth + myPad.child
+
+    @property
+    def bbSigmaWidth(self):
+        """The depth of self+children as a Coord.Dim() or None in the case that
+        I don't exist and I have no children.
+        i.e. the width of box ``****``"""
+        if self.width is None:
+            return self.bbChildrenWidth
+        else:
+            if self.bbChildrenWidth is not None:
+                return max(self.bbSelfWidth, self.bbChildrenWidth)
+            return self.bbSelfWidth
+
+    @property
+    def bbSigmaDepth(self):
+        """The depth of self+children as a Coord.Dim() or None in the case that
+        I don't exist and I have no children.
+        i.e. the depth of box ``****``"""
+        if self.depth is None:
+            return self.bbChildrenDepth
+        else:
+            if self.bbChildrenDepth is not None:
+                retVal = self.bbSelfDepth + self.bbChildrenDepth
+                retVal += self.bbSpaceChildren
+                return retVal
+            return self.bbSelfDepth
+
+    @property
+    def bbSigma(self):
+        """Bounding box of self and my children as a Coord.Box()."""
+        return Coord.Box(width=self.bbSigmaWidth, depth=self.bbSigmaDepth)
+
+    def _incXToSelfDatum(self):
+        """The amount to increment X to get from the logical datum point, D, to
+        the logical point S."""
+        assert self.numChildren == 0 and self.bbChildrenWidth is None or self.numChildren >= 0 and self.bbChildrenWidth is not None
+        if self.bbChildrenWidth is not None and self.bbChildrenWidth > self.bbSelfWidth:
+            incX = (self.bbChildrenWidth - self.bbSelfWidth).scale(0.5)
+        else:
+            incX = Coord.zeroBaseUnitsDim()
+        if self.width is not None:
+            incX += self.bbSelfPadding.prev
+        return incX
+
+    def _incYToSelfDatum(self):
+        """The amount to increment Y to get from the logical datum point, D, to
+        the logical point S."""
+        assert self.numChildren == 0 and self.bbChildrenWidth is None or self.numChildren >= 0 and self.bbChildrenWidth is not None
+        if self.depth is None:
+            incY = Coord.zeroBaseUnitsDim()
+        else:
+            incY = self.bbSelfPadding.parent
+        return incY
+
+    def plotPointSelf(self, theDatum):
+        """The point S as a Coord.Pt() given theDatum as Coord.Pt()."""
+        return Coord.newPt(theDatum, self._incXToSelfDatum(), self._incYToSelfDatum())
+
+    def plotPointCentre(self, theLd):
+        """Returns the logical point at the centre of the box shown as #### above."""
+        incX = self._incXToSelfDatum()
+        if self.width is not None:
+            incX += self.width.scale(0.5)
+        incY = self._incYToSelfDatum()
+        if self.depth is not None:
+            incY += self.depth.scale(0.5)
+        return Coord.newPt(theLd, incX, incY)
+
+    def childBboxDatum(self, theDatum):
+        """The point x[0] as a Coord.Pt() given theDatum as Coord.Pt() or None
+        if no children."""
+        assert self.numChildren == 0 and self.bbChildrenWidth is None or self.numChildren >= 0 and self.bbChildrenWidth is not None
+        if self._numChildren > 0:
+            if self.bbChildrenWidth > self.bbSelfWidth:
+                incX = Coord.zeroBaseUnitsDim()
+            else:
+                incX = (self.bbSelfWidth - self.bbChildrenWidth).scale(0.5)
+            if self.depth is None:
+                incY = Coord.zeroBaseUnitsDim()
+            else:
+                incY = self.bbSelfDepth + self.bbSpaceChildren
+            return Coord.newPt(theDatum, incX, incY)
+        else:
+            return
+
+
+class PlotNodeBboxBoxy(PlotNodeBbox):
+    """Sub-class parent child edges that contact the corners of the
+    box shown as #### above."""
+
+    def _pcXForChild(self, childIndex):
+        self._raiseOnChildIndexOutOfRange(childIndex)
+        incX = Coord.zeroBaseUnitsDim()
+        if self.width is not None:
+            myInterval = self.width.scale(1.0 / self._numChildren)
+            incX += myInterval.scale(childIndex + 0.5)
+        return incX
+
+    def pcRoll(self, theDatum, childIndex):
+        """The me-as-parent-to-child logical start point given the logical datum
+        as a Coord.Pt and the child ordinal. This gives equispaced points along
+        the lower edge."""
+        incX = self._pcXForChild(childIndex)
+        if self.depth is None:
+            incY = Coord.zeroBaseUnitsDim()
+        else:
+            incY = self.depth
+        return Coord.newPt(theDatum, incX, incY)
+
+    def pcTo(self, theDatum, childIndex):
+        """The me-as-parent-to-child logical take off point given the logical
+        datum as a Coord.Pt ind the child ordinal. This gives equispaced points
+        along the lower edge."""
+        incX = self._pcXForChild(childIndex)
+        if self.depth is None:
+            incY = Coord.zeroBaseUnitsDim()
+        else:
+            incY = self.depth + self.bbSelfPadding.child
+        return Coord.newPt(theDatum, incX, incY)
+
+    def pcLand(self, theLd):
+        """The parent-to-me-as-child landing point given the logical datum as a Coord.Pt."""
+        return Coord.newPt(theLd, self._incXToSelfDatum(), Coord.zeroBaseUnitsDim())
+
+    def pcStop(self, theLd):
+        """The parent-to-me-as-child stop point given the logical datum as a Coord.Pt."""
+        return Coord.newPt(theLd, self._incXToSelfDatum(), self._incYToSelfDatum())
+
+    def cpRoll(self, theLd):
+        """The me-as-child-to-parent start point given the logical datum as a Coord.Pt."""
+        if self.width is not None:
+            return Coord.newPt(theLd, self._incXToSelfDatum() + self.width, self._incYToSelfDatum())
+        else:
+            return
+
+    def cpTo(self, theLd):
+        """The me-as-child-to-parent take off point given the logical datum as a Coord.Pt."""
+        return Coord.newPt(theLd, self._incXToSelfDatum() + self.width, Coord.zeroBaseUnitsDim())
+
+    def cpLand(self, theLd, childIndex):
+        """The me-as-parent-from-child landing point given the logical datum as a Coord.Pt."""
+        return self.pcTo(theLd, childIndex)
+
+    def cpStop(self, theLd, childIndex):
+        """The me-as-parent-from-child stop point given the logical datum as a Coord.Pt."""
+        return self.pcRoll(theLd, childIndex)
+
+
+class PlotNodeBboxRoundy(PlotNodeBbox):
+    """Sub-class for parent child edges that contact the centre of the
+    box shown as #### above."""
+
+    def pcRoll(self, theDatumL, childIndex):
+        """The me-as-parent-to-child logical start point given the logical datum
+        as a Coord.Pt ind the child ordinal. This gives equispaced points along
+        the lower edge."""
+        self._raiseOnChildIndexOutOfRange(childIndex)
+        return self.plotPointCentre(theDatumL)
+
+    def pcTo(self, theDatumL, childIndex):
+        """The me-as-parent-to-child logical take off point given the logical
+        datum as a Coord.Pt ind the child ordinal. This gives equispaced points
+        along the lower edge."""
+        self._raiseOnChildIndexOutOfRange(childIndex)
+        return Coord.newPt(self.plotPointCentre(theDatumL), incX=None, incY=self.depth.scale(0.5))
+
+    def pcLand(self, theDatumL):
+        """The parent-to-me-as-child landing point given the logical datum as a Coord.Pt."""
+        return Coord.newPt(self.plotPointCentre(theDatumL), incX=None, incY=self.depth.scale(-0.5))
+
+    def pcStop(self, theDatumL):
+        """The parent-to-me-as-child stop point given the logical datum as a Coord.Pt."""
+        return self.plotPointCentre(theDatumL)
+
+    def cpRoll(self, theDatumL):
+        """The me-as-child-to-parent start point given the logical datum as a Coord.Pt."""
+        return self.pcStop(theDatumL)
+
+    def cpTo(self, theDatumL):
+        """The me-as-child-to-parent take off point given the logical datum as a Coord.Pt."""
+        return self.pcLand(theDatumL)
+
+    def cpLand(self, theDatumL, childIndex):
+        """The me-as-parent-from-child landing point given the logical datum as a Coord.Pt."""
+        return self.pcTo(theDatumL, childIndex)
+
+    def cpStop(self, theDatumL, childIndex):
+        """The me-as-parent-from-child stop point given the logical datum as a Coord.Pt."""
+        return self.pcRoll(theDatumL, childIndex)

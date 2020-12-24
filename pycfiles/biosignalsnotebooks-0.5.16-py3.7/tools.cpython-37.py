@@ -1,0 +1,91 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\biosignalsnotebooks\external_packages\novainstrumentation\tools.py
+# Compiled at: 2020-03-23 15:40:39
+# Size of source mod 2**32: 4335 bytes
+import numpy as np
+from os import path
+from numpy import abs, linspace, sin, pi, int16
+import pandas
+
+def plotfft(s, fmax, doplot=False):
+    """ This functions computes the fft of a signal, returning the frequency
+    and their magnitude values.
+
+    Parameters
+    ----------
+    s: array-like
+      the input signal.
+    fmax: int
+      the sampling frequency.
+    doplot: boolean
+      a variable to indicate whether the plot is done or not.
+
+    Returns
+    -------
+    f: array-like
+      the frequency values (xx axis)
+    fs: array-like
+      the amplitude of the frequency values (yy axis)
+    """
+    fs = abs(np.fft.fft(s))
+    f = linspace(0, fmax / 2, len(s) / 2)
+    if doplot:
+        pass
+    return (
+     f[1:int(len(s) / 2)].copy(), fs[1:int(len(s) / 2)].copy())
+
+
+def synthbeats2(duration, meanhr=60, stdhr=1, samplingfreq=250):
+    ibi = 60 / float(meanhr) * samplingfreq
+    sibi = ibi - 60 / (float(meanhr) - stdhr) * samplingfreq
+    peaks = np.arange(0, duration * samplingfreq, ibi)
+    peaks[1:] = peaks[1:] + np.random.randn(len(peaks) - 1) * sibi
+    if peaks[(-1)] >= duration * samplingfreq:
+        peaks = peaks[:-1]
+    peaks = peaks.astype('int')
+    signal = np.zeros(duration * samplingfreq)
+    signal[peaks] = 1.0
+    return (
+     signal, peaks)
+
+
+def load_with_cache(file_, recache=False, sampling=1, columns=None, temp_dir='.', data_type='int16'):
+    """@brief This function loads a file from the current directory and saves
+    the cached file to later executions. It's also possible to make a recache
+    or a subsampling of the signal and choose only a few columns of the signal,
+    to accelerate the opening process.
+
+    @param file String: the name of the file to open.
+    @param recache Boolean: indication whether it's done recache or not
+    (default = false).
+    @param sampling Integer: the sampling step. if 1, the signal isn't
+    sampled (default = 1).
+    @param columns Array-Like: the columns to read from the file. if None,
+    all columns are considered (default = None).
+
+    @return data Array-Like: the data from the file.
+    TODO: Should save cache in a different directory
+    TODO: Create test function and check size of generated files
+    TODO: receive a file handle
+    """
+    cfile = '%s.npy' % file_
+    if not path.exists(cfile) or recache:
+        if columns == None:
+            data = np.loadtxt(file_)[::sampling, :]
+        else:
+            data = np.loadtxt(file_)[::sampling, columns]
+        np.save(cfile, data.astype(data_type))
+    else:
+        data = np.load(cfile)
+    return data
+
+
+def load_data(filename):
+    """
+    :rtype : numpy matrix
+    """
+    data = pandas.read_csv(filename, header=None, delimiter='\t', skiprows=9)
+    return data.as_matrix()

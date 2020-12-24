@@ -1,0 +1,352 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/Products/ZScheduler/ZScheduleEvent.py
+# Compiled at: 2015-10-26 07:42:29
+import AccessControl, re, string
+from OFS.SimpleItem import SimpleItem
+from Products.PageTemplates.PageTemplateFile import PageTemplateFile
+from DateTime import DateTime, Timezones
+from DateTime.DateTime import _MONTH_LEN
+from Acquisition import aq_base
+from Log import Logger, LogSupport
+from AccessControl import ClassSecurityInfo
+from AccessControl.Permissions import view_management_screens, change_configuration, view
+from Permissions import execute_scheduler_events
+from interfaces import IScheduleEvent
+from zope.interface import implements
+from browser.zscheduleevent import IPropertySchema
+from utils import *
+
+class ZScheduleEvent(LogSupport):
+    """
+    A schedule event, this wraps a callable with scheduling information
+
+    Note that an event IS NOT scheduled on construction - it must be
+    explicitly activated via editing it's status or calling manage_schedule
+    """
+    meta_type = portal_type = 'ZScheduleEvent'
+    implements(IScheduleEvent, IPropertySchema)
+    __ac_permissions__ = (
+     (
+      view, ('cronTab', 'expandedCronTab', 'active')),
+     (
+      view_management_screens,
+      ('manage_scheduleForm', 'nextEventTime', 'event', 'test_schedule')),
+     (
+      change_configuration,
+      ('manage_editSchedule', 'manage_schedule', 'manage_unschedule')),
+     (
+      execute_scheduler_events, ('manage_invokeEvent', ))) + LogSupport.__ac_permissions__
+    manage_options = ({'label': 'Schedule', 'action': 'manage_main', 'help': ('ZScheduler', 'event.stx')}, {'label': 'Trigger', 'action': 'manage_invokeEvent'}) + LogSupport.manage_options
+    last_executed = None
+    _active = False
+    manage_main = manage_scheduleForm = PageTemplateFile('zpt/event', globals())
+
+    def __init__(self, id, title, callable, minute='*', hour='*', month='*', day_of_month='*', day_of_week='*', tz='UTC'):
+        self.id = id
+        self.title = title
+        self.callable_id = callable
+        self.minute = minute
+        self.hour = hour
+        self.month = month
+        self.day_of_month = day_of_month
+        self.day_of_week = day_of_week
+        self.tz = tz
+        self.time = DateTime(0).toZone(self.tz)
+        LogSupport.__init__(self)
+
+    def nextEventTime(self, time=None):
+        """
+        return next executable time after given time
+        """
+        if not getattr(self, 'tz', None):
+            self.tz = 'UTC'
+        if time is None:
+            time = DateTime(self.tz)
+        new_minute, increment_hr = get_time_for_spec('0-59', time.minute() + 1, 0, 59)
+        hour = int(time.hour())
+        if increment_hr:
+            hour += 1
+        if hour == 24:
+            my_time = DateTime('%s/%s/%s 00:%0.2i %s' % (
+             time.year(), time.mm(), time.dd(), new_minute, time.timezone())) + 1
+        else:
+            my_time = DateTime('%s/%s/%s %0.2i:%0.2i %s' % (
+             time.year(), time.mm(), time.dd(), hour, new_minute, time.timezone()))
+        while not self._matches(my_time):
+            my_time = self._doMonth(self._doDay(self._doHour(self._doMinute(my_time))))
+
+        return my_time
+
+    def event(self):
+        """
+        return the actual event object/method
+
+        the event object's security permissions control access
+        """
+        try:
+            return self.aq_parent.restrictedTraverse(self.callable_id)
+        except KeyError:
+            return getattr(self, self.callable_id)
+
+    @property
+    def active(self):
+        """
+        active status flag
+        """
+        return self._active
+
+    def timezones(self):
+        """
+        return known timezones
+        """
+        return Timezones()
+
+    def manage_beforeDelete(self, item, container):
+        """
+        delete event from scheduler, also must delete itself if the callable is deleted ...
+        """
+        self.getPhysicalRoot().ZSchedulerTool.unschedule(self)
+        if item.getId() == self.callable_id:
+            container._delObject(self.getId())
+
+    def manage_editSchedule(self, tz, minute, hour, month, day_of_month, day_of_week, active=False, REQUEST=None):
+        """
+        update the schedule info ...
+        """
+        errors = []
+        if not parse_spec(minute, 0, 59):
+            errors.append('Invalid Minute')
+        if not parse_spec(hour, 0, 23):
+            errors.append('Invalid Hour')
+        if not parse_spec(month, 1, 12):
+            errors.append('Invalid Month')
+        if not parse_spec(day_of_week, 0, 7):
+            errors.append('Invalid Day of Week')
+        if not parse_spec(day_of_month, 1, 31):
+            errors.append('Invalid Day of Month')
+        if active and minute == '*' and hour == '*' and month == '*' and day_of_week == '*' and day_of_month == '*':
+            errors.append('Cannot assign task to run every minute forever!')
+        if errors:
+            msg = string.join(errors, '\n')
+            if REQUEST:
+                REQUEST.set('manage_tabs_message', msg)
+                REQUEST.set('management_view', 'Schedule')
+                return self.manage_scheduleForm(self, REQUEST)
+            raise AssertionError, msg
+        self.minute = minute
+        self.hour = hour
+        self.month = month
+        self.day_of_month = day_of_month
+        self.day_of_week = day_of_week
+        self.tz = tz
+        self.time = self.nextEventTime()
+        self._active = active
+        if active:
+            self.manage_schedule()
+        else:
+            self.manage_unschedule()
+        if REQUEST:
+            REQUEST.set('management_view', 'Schedule')
+            return self.manage_scheduleForm(self, REQUEST)
+
+    def manage_unschedule(self, REQUEST=None):
+        """
+        notify the scheduler
+        """
+        if self._active:
+            self._active = False
+            self.getPhysicalRoot().ZSchedulerTool.unschedule(self)
+        else:
+            if REQUEST:
+                REQUEST.set('manage_tabs_message', 'Not active!')
+            if REQUEST:
+                REQUEST.set('management_view', 'Schedule')
+                return self.manage_scheduleForm(self, REQUEST)
+
+    def manage_schedule(self, REQUEST=None):
+        """
+        notify the scheduler
+        """
+        try:
+            self.getPhysicalRoot().ZSchedulerTool.unschedule(self)
+        except:
+            pass
+
+        self.getPhysicalRoot().ZSchedulerTool.schedule(self)
+        if REQUEST:
+            REQUEST.set('management_view', 'Schedule')
+            return self.manage_scheduleForm(self, REQUEST)
+
+    def test_schedule(self, start_time=None, size=10):
+        """
+        visually display next scheduled times ...
+        """
+        if start_time is None:
+            start_time = DateTime(self.tz)
+        if start_time.timezone() != self.tz:
+            start_time = start_time.toZone(self.tz)
+        results = []
+        for index in range(0, size):
+            try:
+                start_time = self.nextEventTime(start_time)
+            except:
+                break
+
+            results.append(start_time)
+
+        return results
+
+    def manage_repair(self, REQUEST=None):
+        """ hmmm fix conversion of derived classes ..."""
+        if not getattr(aq_base(self), 'callable_id', None):
+            self.callable_id = self.id
+        if not getattr(aq_base(self), 'log_batch_size', None):
+            self.log_batch_size = 15
+        if not getattr(aq_base(self), '_logger', None):
+            self._logger = Logger()
+        LogSupport.manage_repair(self)
+        if REQUEST:
+            REQUEST.set('management_view', 'Schedule')
+            return self.manage_scheduleForm(self, REQUEST)
+        else:
+            return
+
+    def manage_invokeEvent(self, *args, **kw):
+        """
+        dispatch to callable and log any results
+        """
+        now = DateTime(self.tz)
+        output = self.event()(*args, **kw)
+        self.log(self, 'executed...', output)
+        self.last_executed = now
+        self.time = self.nextEventTime(now)
+        self.getPhysicalRoot().ZSchedulerTool.log(self, 'executed...', output)
+        return output
+
+    def _matches(self, time):
+        """
+        validity check the given DateTime against our spec
+        """
+        day_ok = 1
+        y = time.year()
+        month_len = _MONTH_LEN[(y % 4 == 0 and (y % 100 != 0 or y % 400 == 0))][time.month()]
+        if self.day_of_week != '*':
+            day_ok = get_time_for_spec(self.day_of_week, time.dow(), 0, 7) == (time.dow(), 0)
+            if self.day_of_month != '*' and not day_ok:
+                day_ok = get_time_for_spec(self.day_of_month, time.day(), 1, month_len) == (time.day(), 0)
+        elif self.day_of_month != '*':
+            day_ok = get_time_for_spec(self.day_of_month, time.day(), 1, month_len) == (time.day(), 0)
+        return get_time_for_spec(self.minute, time.minute(), 0, 59) == (time.minute(), 0) and get_time_for_spec(self.hour, time.hour(), 0, 23) == (time.hour(), 0) and day_ok and get_time_for_spec(self.month, time.month(), 1, 12)
+
+    def _doMinute(self, time):
+        hour = int(time.hour())
+        new_minute, increment_hr = get_time_for_spec(self.minute, time.minute(), 0, 59)
+        if increment_hr:
+            hour += 1
+            if hour == 24:
+                return self._doMinute(DateTime('%s/%s/%s 00:%0.2i %s' % (
+                 time.year(), time.mm(), time.dd(), new_minute, self.tz)) + 1)
+        return DateTime('%s/%s/%s %0.2i:%0.2i %s' % (
+         time.year(), time.mm(), time.dd(), hour, new_minute, self.tz))
+
+    def _doHour(self, time):
+        hour = int(time.hour())
+        day = time.day()
+        new_hour, increment_day = get_time_for_spec(self.hour, hour, 0, 23)
+        time = DateTime('%s/%s/%s %0.2i:%s %s' % (
+         time.year(), time.mm(), time.dd(), new_hour, time.minute(), self.tz))
+        if increment_day:
+            time += 1
+        return time
+
+    def _doDay(self, time):
+        dom_time = dow_time = None
+        if self.day_of_month != '*':
+            dom_time = self._doDOM(time)
+        if self.day_of_week != '*':
+            dow_time = self._doDOW(time)
+        if dom_time and dow_time:
+            return min(dom_time, dow_time)
+        else:
+            return dom_time or dow_time or time
+
+    def _doDOW(self, time):
+        for x in range(0, 7):
+            if get_time_for_spec(self.day_of_week, time.dow(), 0, 7) == (time.dow(), 0):
+                return time
+            time += 1
+
+        raise AssertionError, 'invalid day of week for %s (%s)' % (time, self.day_of_week)
+
+    def _doDOM(self, time):
+        y = time.year()
+        month_len = _MONTH_LEN[(y % 4 == 0 and (y % 100 != 0 or y % 400 == 0))][time.month()]
+        new_day, increment_mm = get_time_for_spec(self.day_of_month, time.day(), 1, month_len)
+        if increment_mm:
+            year = time.year()
+            month = time.month()
+            if month == 12:
+                month = 1
+                year += 1
+            else:
+                month += 1
+            if self.day_of_month == '*':
+                time = DateTime('%i/%0.2i/01 %0.2i:%0.2i %s' % (
+                 year, month, time.hour(), time.minute(), self.tz))
+                return time
+            time = DateTime('%i/%0.2i/%0.2i %0.2i:%0.2i %s' % (
+             year, month, int(get_first_time_for_spec(self.day_of_month, 1)),
+             time.hour(), time.minute(), self.tz))
+            return time
+        time = DateTime('%s/%0.2i/%0.2i %0.2i:%0.2i %s' % (
+         time.year(), time.month(), new_day, time.hour(), time.minute(), self.tz))
+        return time
+
+    def _doMonth(self, time):
+        year = time.year()
+        new_month, increment_yr = get_time_for_spec(self.month, time.month(), 1, 12)
+        if increment_yr:
+            year += 1
+        if new_month != time.month():
+            dd = 1
+        else:
+            dd = time.dd()
+        time = DateTime('%s/%s/%s %0.2i:%0.2i %s' % (
+         year, new_month, dd, time.hour(), time.minute(), self.tz))
+        return time
+
+    def cronTab(self):
+        """
+        crontab-formatted times
+        """
+        return (' ').join((self.minute,
+         self.hour,
+         self.day_of_month,
+         self.month,
+         self.day_of_week))
+
+    def expandedCronTab(self):
+        """
+        cron time with ranges etc expanded into commas
+        """
+        return (' ').join((expand_spec(self.minute),
+         expand_spec(self.hour),
+         expand_spec(self.day_of_month),
+         expand_spec(self.month),
+         expand_spec(self.day_of_week)))
+
+
+AccessControl.class_init.InitializeClass(ZScheduleEvent)
+manage_addZScheduleEventForm = PageTemplateFile('zpt/add_event', globals())
+
+def manage_addZScheduleEvent(self, id, callable, title='', REQUEST=None):
+    """
+    Add an event to the schedule - you *MUST* actually edit the
+    ZScheduleEvent to add it to the ZScheduler!
+    """
+    event = ZScheduleEvent(id, title or '-> %s' % callable, callable)
+    self._setObject(id, event)
+    if REQUEST:
+        REQUEST.RESPONSE.redirect('%s/%s/manage_main' % (REQUEST['URL3'], id))

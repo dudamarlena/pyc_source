@@ -1,0 +1,6 @@
+Scrapy>=1.3
+PyYAML>=3.12
+GitPython>=2.1
+html2text>=2016.9.19
+#bs4>=0.0.1
+beautifulsoup4>=4.5.3

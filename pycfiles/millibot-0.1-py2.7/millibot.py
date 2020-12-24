@@ -1,0 +1,15 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/millibot/millibot.py
+# Compiled at: 2017-01-12 01:47:05
+
+
+class MilliBot(object):
+
+    def __init__(self, name):
+        self.name = name
+
+    def get_response(self, sentence):
+        return sentence

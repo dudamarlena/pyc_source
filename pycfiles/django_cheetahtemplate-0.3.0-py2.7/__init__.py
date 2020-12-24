@@ -1,0 +1,80 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/lib.linux-i686-2.7/django_cheetahtemplate/__init__.py
+# Compiled at: 2018-02-05 17:55:51
+"""
+django-cheetahtemplate
+"""
+from imp import load_source
+import os, py_compile
+from Cheetah.Parser import ParseError
+from Cheetah.Template import Template
+from django.template import TemplateDoesNotExist, TemplateSyntaxError
+from django.template.backends.base import BaseEngine
+from django.template.backends.utils import csrf_input_lazy, csrf_token_lazy
+
+class DjangoCheetahTemplate(BaseEngine):
+    app_dirname = 'cheetahtemplate'
+
+    def __init__(self, params):
+        params = params.copy()
+        options = params.pop('OPTIONS')
+        self.cacheModules = options.get('cacheModules', True)
+        super(DjangoCheetahTemplate, self).__init__(params)
+
+    def from_string(self, template_code):
+        try:
+            return CheetahTemplate(Template.compile(source=template_code))
+        except ParseError as exc:
+            raise TemplateSyntaxError(exc.args)
+
+    def get_template(self, template_name):
+        for template_full_path in self.iter_template_filenames(template_name):
+            if os.path.exists(template_full_path):
+                break
+        else:
+            raise TemplateDoesNotExist(template_name, backend=self)
+
+        template_dirname = os.path.dirname(template_full_path)
+        template_name_base = os.path.splitext(os.path.basename(template_name))[0]
+        generated_template = os.path.join(template_dirname, template_name_base + '.py')
+        if os.path.exists(generated_template) and os.path.getmtime(generated_template) >= os.path.getmtime(template_full_path):
+            template_mod = load_source(template_name_base, generated_template)
+            return CheetahTemplate(getattr(template_mod, template_name_base))
+        try:
+            templateClass = Template.compile(file=template_full_path, moduleName=template_name_base)
+        except IOError as exc:
+            raise TemplateDoesNotExist(exc.args, backend=self)
+        except ParseError as exc:
+            raise TemplateSyntaxError(exc.args)
+        else:
+            if not self.cacheModules:
+                return CheetahTemplate(templateClass)
+            else:
+                try:
+                    with open(generated_template, 'wt') as (pyfile):
+                        pyfile.write(templateClass().generatedModuleCode())
+                except IOError:
+                    return CheetahTemplate(templateClass)
+
+                py_compile.compile(generated_template)
+                template_mod = load_source(template_name_base, generated_template)
+                return CheetahTemplate(getattr(template_mod, template_name_base))
+
+
+class CheetahTemplate(object):
+
+    def __init__(self, templateClass):
+        self.templateClass = templateClass
+
+    def render(self, context=None, request=None):
+        if context is None:
+            context = {}
+        if request is not None:
+            context['request'] = request
+            context['csrf_input'] = csrf_input_lazy(request)
+            context['csrf_token'] = csrf_token_lazy(request)
+        template = self.templateClass(searchList=[context])
+        return template.respond()

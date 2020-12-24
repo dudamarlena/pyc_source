@@ -1,0 +1,6 @@
+scipy
+cython
+matplotlib
+numpy
+biopython
+scikit-learn

@@ -1,0 +1,4 @@
+numpy>=1.15.0
+PyYAML>=3.13
+requests>=2.18.4
+tqdm>=4.19.6

@@ -1,0 +1,29 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/sbo/lib/python3.4/site-packages/vai/models/commands/DeleteToEndOfLineCommand.py
+# Compiled at: 2015-05-02 14:07:56
+# Size of source mod 2**32: 863 bytes
+from .BufferCommand import BufferCommand
+from .CommandResult import CommandResult
+
+class DeleteToEndOfLineCommand(BufferCommand):
+
+    def execute(self):
+        cursor = self._buffer.cursor
+        document = self._buffer.document
+        if self.savedCursorPos() is None:
+            self.saveCursorPos()
+        pos = self.savedCursorPos()
+        cursor.toPos(pos)
+        self.saveModifiedState()
+        self.saveLineMemento(pos[0], BufferCommand.MEMENTO_REPLACE)
+        line_meta = document.lineMetaInfo('Change')
+        changed = line_meta.data(pos[0])
+        if changed:
+            line_meta.setData('modified', pos[0])
+        deleted = document.deleteChars(pos, document.lineLength(pos[0]) - pos[1])
+        cursor.toCharPrev()
+        document.documentMetaInfo('Modified').setData(True)
+        return CommandResult(success=True, info=deleted)

@@ -1,0 +1,42 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/collective/z3cform/kss/tests/test_all.py
+# Compiled at: 2008-06-20 10:10:10
+"""
+collective.z3cform.kss
+
+Licensed under the GPL license, see LICENCE.txt for more details.
+Copyright by Affinitic sprl
+
+$Id: test_all.py 66966 2008-06-19 16:22:57Z jfroche $
+"""
+import unittest
+from zope.testing import doctest, cleanup
+from Products.Five import zcml
+import Products.Five, kss.core, kss.core.tests, plone.app.kss, plone.app.form, collective.z3cform.kss, z3c.form
+optionflags = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
+
+def setUp(test):
+    zcml.load_config('configure.zcml', Products.Five)
+    zcml.load_config('meta.zcml', kss.core)
+    zcml.load_config('configure.zcml', kss.core)
+    zcml.load_config('configure-unittest.zcml', kss.core.tests)
+    zcml.load_config('configure.zcml', plone.app.form)
+    zcml.load_config('configure.zcml', plone.app.kss)
+    zcml.load_config('meta.zcml', z3c.form)
+    zcml.load_config('configure.zcml', z3c.form)
+    zcml.load_config('configure.zcml', collective.z3cform.kss)
+
+
+def tearDown(test):
+    cleanup.cleanUp()
+
+
+def test_suite():
+    return unittest.TestSuite([doctest.DocFileSuite('README.txt', package='collective.z3cform.kss', setUp=setUp, tearDown=tearDown, optionflags=optionflags)])
+
+
+if __name__ == '__main__':
+    unittest.main(defaultTest='test_suite')

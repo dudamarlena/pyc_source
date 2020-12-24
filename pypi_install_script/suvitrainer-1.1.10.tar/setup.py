@@ -1,0 +1,30 @@
+from setuptools import setup, find_packages
+
+with open("Readme.md", "r") as fh:
+    long_description = fh.read()
+
+setup(name='suvitrainer',
+      version='1.1.10',
+      description='Training tool for SUVI thematic map machine learning',
+      url='https://github.com/jmbhughes/suvi-trainer',
+      author='J. Marcus Hughes',
+      author_email='hughes.jmb@gmail.com',
+      license='MIT',
+      packages=['suvitrainer'],
+      package_data={'suvitrainer':['path_length_280_noisy.fits', 'path_length_280.fits']},
+      # test_suite='nose.collector',
+      # tests_require=['nose'],
+      scripts=["run_suvitrainer.py", 'scripts/make_movie_frames.py'],
+      long_description=long_description,
+      long_description_content_type="text/markdown",
+      install_requires=['astropy',
+                        'numpy',
+                        'sunpy',
+                        'scikit-image',
+                        'matplotlib',
+                        'bs4',
+                        'requests',
+                        'suds-jurko',
+                        'drms',
+                        "scipy",
+                        "python-dateutil"])

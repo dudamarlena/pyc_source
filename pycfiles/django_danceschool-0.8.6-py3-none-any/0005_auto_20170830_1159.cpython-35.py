@@ -1,0 +1,52 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3350)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /mnt/c/django-danceschool/currentmaster/django-danceschool/danceschool/discounts/migrations/0005_auto_20170830_1159.py
+# Compiled at: 2018-03-26 19:55:30
+# Size of source mod 2**32: 4505 bytes
+from __future__ import unicode_literals
+import django.core.validators
+from django.db import migrations, models
+import django.db.models.deletion
+
+def create_initial_category(apps, schema_editor):
+    """ Create a default category for existing discounts """
+    DiscountCategory = apps.get_model('discounts', 'DiscountCategory')
+    db_alias = schema_editor.connection.alias
+    DiscountCategory.objects.using(db_alias).create(id=1, name='General Discounts', order=1, cannotCombine=False)
+
+
+def delete_initial_category(apps, schema_editor):
+    """ Category will be deleted anyway """
+    pass
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+     ('discounts', '0004_auto_20170808_2020')]
+    operations = [
+     migrations.CreateModel(name='DiscountCategory', fields=[
+      (
+       'id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+      (
+       'name', models.CharField(max_length=30, unique=True, verbose_name='Category name')),
+      (
+       'order', models.FloatField(help_text='Discounts from categories with lower numbers are applied first.', unique=True, verbose_name='Category order')),
+      (
+       'cannotCombine', models.BooleanField(default=False, help_text='If checked, then discounts in this category cannot be combined with any other type of discount.', verbose_name='Cannot be combined'))], options={'verbose_name_plural': 'Discount categories', 
+      'ordering': ('order', ), 
+      'verbose_name': 'Discount category'}),
+     migrations.RenameField(model_name='discountcombo', old_name='doorGeneralPrice', new_name='doorPrice'),
+     migrations.RenameField(model_name='discountcombo', old_name='onlineGeneralPrice', new_name='onlinePrice'),
+     migrations.RemoveField(model_name='discountcombo', name='doorStudentPrice'),
+     migrations.RemoveField(model_name='discountcombo', name='onlineStudentPrice'),
+     migrations.AlterField(model_name='discountcombo', name='doorPrice', field=models.FloatField(blank=True, null=True, validators=[django.core.validators.MinValueValidator(0)], verbose_name='At-the-door price')),
+     migrations.AlterField(model_name='discountcombo', name='onlinePrice', field=models.FloatField(blank=True, null=True, validators=[django.core.validators.MinValueValidator(0)], verbose_name='Online price')),
+     migrations.AddField(model_name='discountcombo', name='studentsOnly', field=models.BooleanField(default=False, help_text='Check this box to create student discounts.', verbose_name='Discount for HS/college/university students only')),
+     migrations.RunPython(create_initial_category, delete_initial_category),
+     migrations.AddField(model_name='discountcombo', name='category', field=models.ForeignKey(default=1, help_text='One discount can be applied per category, and the order in which discounts are applied depends on the order parameter of the categories.', on_delete=django.db.models.deletion.CASCADE, to='discounts.DiscountCategory', verbose_name='Discount category'), preserve_default=False),
+     migrations.AlterField(model_name='registrationdiscount', name='registration', field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.Registration', verbose_name='Registration')),
+     migrations.AlterField(model_name='temporaryregistrationdiscount', name='registration', field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='core.TemporaryRegistration', verbose_name='Temporary registration')),
+     migrations.AlterUniqueTogether(name='registrationdiscount', unique_together=set([('registration', 'discount')])),
+     migrations.AlterUniqueTogether(name='temporaryregistrationdiscount', unique_together=set([('registration', 'discount')]))]

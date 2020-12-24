@@ -1,0 +1,56 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/trco/github/django-funky-sheets/funky_sheets/formsets.py
+# Compiled at: 2019-10-21 16:33:44
+# Size of source mod 2**32: 1949 bytes
+from extra_views import ModelFormSetView
+
+class HotView(ModelFormSetView):
+    action = 'create'
+    button_text = 'Create'
+    date_format = 'YYYY-MM-DD'
+    checkbox_checked = 'true'
+    checkbox_unchecked = 'false'
+    errors_template = 'hot/errors.html'
+    hot_template = 'hot/hot.html'
+    hot_settings = {}
+
+    def get(self, request, *args, **kwargs):
+        if self.action == 'create':
+            self.hot_settings['minSpareRows'] = 1
+        return (super(HotView, self).get)(request, *args, **kwargs)
+
+    def get_factory_kwargs(self, **kwargs):
+        factory_kwargs = (super(HotView, self).get_factory_kwargs)(**kwargs)
+        if self.action == 'create':
+            factory_kwargs['extra'] = 1
+        else:
+            factory_kwargs['extra'] = 0
+        return factory_kwargs
+
+    def get_queryset(self):
+        if self.action == 'create':
+            return self.model.objects.none()
+        return super(HotView, self).get_queryset()
+
+    def get_context_data(self, **kwargs):
+        context = (super(HotView, self).get_context_data)(**kwargs)
+        context['action'] = self.action
+        context['button_text'] = self.button_text
+        context['date_format'] = self.date_format
+        context['checkbox_checked'] = self.checkbox_checked
+        context['checkbox_unchecked'] = self.checkbox_unchecked
+        context['hot_template'] = self.hot_template
+        context['errors_template'] = self.errors_template
+        context['hot_settings'] = self.hot_settings
+        return context
+
+    def formset_valid(self, formset):
+        print('Form valid')
+        return super(HotView, self).formset_valid(formset)
+
+    def formset_invalid(self, formset):
+        print('Form innnnnvalid')
+        return super(HotView, self).formset_invalid(formset)

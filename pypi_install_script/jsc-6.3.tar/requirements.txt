@@ -1,0 +1,8 @@
+setuptools
+choice
+docopt
+giturlparse.py
+pyparsing
+paramiko
+colorama
+requests

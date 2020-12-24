@@ -1,0 +1,4 @@
+serial
+paho-mqtt
+posix_ipc
+Adafruit_BBIO

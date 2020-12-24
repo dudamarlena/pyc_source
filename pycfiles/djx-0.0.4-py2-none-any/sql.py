@@ -1,0 +1,46 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /tmp/pip-install-n_sfyb/Django/django/core/management/sql.py
+# Compiled at: 2019-02-14 00:35:17
+from __future__ import unicode_literals
+from django.apps import apps
+from django.db import models
+
+def sql_flush(style, connection, only_django=False, reset_sequences=True, allow_cascade=False):
+    """
+    Returns a list of the SQL statements used to flush the database.
+
+    If only_django is True, then only table names that have associated Django
+    models and are in INSTALLED_APPS will be included.
+    """
+    if only_django:
+        tables = connection.introspection.django_table_names(only_existing=True, include_views=False)
+    else:
+        tables = connection.introspection.table_names(include_views=False)
+    seqs = connection.introspection.sequence_list() if reset_sequences else ()
+    statements = connection.ops.sql_flush(style, tables, seqs, allow_cascade)
+    return statements
+
+
+def emit_pre_migrate_signal(verbosity, interactive, db, **kwargs):
+    for app_config in apps.get_app_configs():
+        if app_config.models_module is None:
+            continue
+        if verbosity >= 2:
+            print b'Running pre-migrate handlers for application %s' % app_config.label
+        models.signals.pre_migrate.send(sender=app_config, app_config=app_config, verbosity=verbosity, interactive=interactive, using=db, **kwargs)
+
+    return
+
+
+def emit_post_migrate_signal(verbosity, interactive, db, **kwargs):
+    for app_config in apps.get_app_configs():
+        if app_config.models_module is None:
+            continue
+        if verbosity >= 2:
+            print b'Running post-migrate handlers for application %s' % app_config.label
+        models.signals.post_migrate.send(sender=app_config, app_config=app_config, verbosity=verbosity, interactive=interactive, using=db, **kwargs)
+
+    return

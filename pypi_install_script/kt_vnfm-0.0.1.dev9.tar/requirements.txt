@@ -1,0 +1,7 @@
+pyping
+requests
+pyasn1
+enum34
+pbr
+jsonschema
+pexpect

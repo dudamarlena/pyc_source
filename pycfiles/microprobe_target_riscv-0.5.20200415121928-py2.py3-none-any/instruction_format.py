@@ -1,0 +1,17 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/rbertra/workspace/repos/github.com/IBM/microprobe/targets/riscv/isa/riscv-v2_2/../riscv-common/./instruction_format.py
+# Compiled at: 2020-03-29 13:02:20
+"""
+Docstring
+"""
+from __future__ import absolute_import
+from microprobe.target.isa.instruction_format import GenericInstructionFormat
+
+class RISCVInstructionFormat(GenericInstructionFormat):
+    """
+    RISC-V Instruction Format Class
+    """
+    pass

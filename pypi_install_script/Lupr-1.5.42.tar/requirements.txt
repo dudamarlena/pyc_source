@@ -1,0 +1,3 @@
+setuptools>=36.3
+GitPython==2.1.8
+PyQt5

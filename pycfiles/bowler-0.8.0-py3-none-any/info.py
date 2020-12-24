@@ -1,0 +1,63 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/clewis/Desktop/old-air/github-public/bowl/bowl/cli_opts/info.py
+# Compiled at: 2014-09-01 15:01:52
+__doc__ = '\nThis module is the info command of bowl.\n\nCreated on 14 March 2014\n@author: Charlie Lewis\n'
+import ast, os
+from bowl.cli_opts import version
+
+class Object(object):
+    pass
+
+
+class info(object):
+    """
+    This class is responsible for the info command of the cli.
+    """
+
+    @classmethod
+    def main(self, args):
+        version_args = Object()
+        version_args.z = True
+        containers = 0
+        hosts = 0
+        images = 0
+        repositories = 0
+        snapshots = 0
+        try:
+            directory = args.metadata_path
+            directory = os.path.expanduser(directory)
+            if os.path.exists(os.path.join(directory, 'containers')):
+                with open(os.path.join(directory, 'containers'), 'r') as (f):
+                    for line in f:
+                        containers += 1
+
+            if os.path.exists(os.path.join(directory, 'hosts')):
+                with open(os.path.join(directory, 'hosts'), 'r') as (f):
+                    for line in f:
+                        hosts += 1
+
+            if os.path.exists(os.path.join(directory, 'images')):
+                with open(os.path.join(directory, 'images'), 'r') as (f):
+                    for line in f:
+                        images += 1
+
+            if os.path.exists(os.path.join(directory, 'repositories')):
+                with open(os.path.join(directory, 'repositories'), 'r') as (f):
+                    for line in f:
+                        repositories += 1
+
+            if os.path.exists(os.path.join(directory, 'snapshots')):
+                with open(os.path.join(directory, 'snapshots'), 'r') as (f):
+                    for line in f:
+                        snapshots += 1
+
+            print 'containers: ', containers
+            print 'hosts: ', hosts
+            print 'images: ', images
+            print 'repositories: ', repositories
+            print 'snapshots: ', snapshots
+            print 'version: ', version.version.main(version_args)
+        except:
+            print 'unable to get info'

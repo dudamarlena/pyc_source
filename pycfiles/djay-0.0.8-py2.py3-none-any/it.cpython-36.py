@@ -1,0 +1,78 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /tmp/pip-install-m_4qh6p6/docutils/docutils/parsers/rst/languages/it.py
+# Compiled at: 2019-07-30 18:47:12
+# Size of source mod 2**32: 3268 bytes
+"""
+Italian-language mappings for language-dependent features of
+reStructuredText.
+"""
+__docformat__ = 'reStructuredText'
+directives = {'attenzione':'attention', 
+ 'cautela':'caution', 
+ 'code (translation required)':'code', 
+ 'pericolo':'danger', 
+ 'errore':'error', 
+ 'suggerimento':'hint', 
+ 'importante':'important', 
+ 'nota':'note', 
+ 'consiglio':'tip', 
+ 'avvertenza':'warning', 
+ 'ammonizione':'admonition', 
+ 'riquadro':'sidebar', 
+ 'argomento':'topic', 
+ 'blocco-di-righe':'line-block', 
+ 'blocco-interpretato':'parsed-literal', 
+ 'rubrica':'rubric', 
+ 'epigrafe':'epigraph', 
+ 'punti-salienti':'highlights', 
+ 'estratto-evidenziato':'pull-quote', 
+ 'composito':'compound', 
+ 'container (translation required)':'container', 
+ 'tabella':'table', 
+ 'tabella-csv':'csv-table', 
+ 'tabella-elenco':'list-table', 
+ 'meta':'meta', 
+ 'math (translation required)':'math', 
+ 'immagine':'image', 
+ 'figura':'figure', 
+ 'includi':'include', 
+ 'grezzo':'raw', 
+ 'sostituisci':'replace', 
+ 'unicode':'unicode', 
+ 'data':'date', 
+ 'classe':'class', 
+ 'ruolo':'role', 
+ 'ruolo-predefinito':'default-role', 
+ 'titolo':'title', 
+ 'indice':'contents', 
+ 'contenuti':'contents', 
+ 'seznum':'sectnum', 
+ 'sezioni-autonumerate':'sectnum', 
+ 'annota-riferimenti-esterni':'target-notes', 
+ 'intestazione':'header', 
+ 'piede-pagina':'footer', 
+ 'restructuredtext-test-directive':'restructuredtext-test-directive'}
+roles = {'abbreviazione':'abbreviation', 
+ 'acronimo':'acronym', 
+ 'code (translation required)':'code', 
+ 'indice':'index', 
+ 'deponente':'subscript', 
+ 'esponente':'superscript', 
+ 'riferimento-titolo':'title-reference', 
+ 'riferimento-pep':'pep-reference', 
+ 'riferimento-rfc':'rfc-reference', 
+ 'enfasi':'emphasis', 
+ 'forte':'strong', 
+ 'letterale':'literal', 
+ 'math (translation required)':'math', 
+ 'riferimento-con-nome':'named-reference', 
+ 'riferimento-anonimo':'anonymous-reference', 
+ 'riferimento-nota':'footnote-reference', 
+ 'riferimento-citazione':'citation-reference', 
+ 'riferimento-sostituzione':'substitution-reference', 
+ 'destinazione':'target', 
+ 'riferimento-uri':'uri-reference', 
+ 'grezzo':'raw'}

@@ -1,0 +1,49 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/color_matcher/hist_matcher.py
+# Compiled at: 2020-04-18 14:24:17
+# Size of source mod 2**32: 2772 bytes
+__author__ = 'Christopher Hahne'
+__email__ = 'info@christopherhahne.de'
+__license__ = '\n    Copyright (c) 2020 Christopher Hahne <info@christopherhahne.de>\n\n    This program is free software: you can redistribute it and/or modify\n    it under the terms of the GNU General Public License as published by\n    the Free Software Foundation, either version 3 of the License, or\n    (at your option) any later version.\n\n    This program is distributed in the hope that it will be useful,\n    but WITHOUT ANY WARRANTY; without even the implied warranty of\n    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n    GNU General Public License for more details.\n\n    You should have received a copy of the GNU General Public License\n    along with this program.  If not, see <http://www.gnu.org/licenses/>.\n\n'
+import numpy as np
+from .baseclass import MatcherBaseclass
+
+class HistogramMatcher(MatcherBaseclass):
+
+    def __init__(self, *args, **kwargs):
+        (super(HistogramMatcher, self).__init__)(*args, **kwargs)
+
+    def hist_match(self, src: np.ndarray=None, ref: np.ndarray=None) -> np.ndarray:
+        """
+
+        This function conducts channel-wise histogram matching which is invariant of image resolutions,
+        but requires the same number of color channels in both images.
+
+        :param src: Source image that requires transfer
+        :param ref: Palette image which serves as reference
+        :param ref: Resulting image after the mapping
+
+        :type src: :class:`~numpy:numpy.ndarray`
+        :type ref: :class:`~numpy:numpy.ndarray`
+        :type result: :class:`~numpy:numpy.ndarray`
+
+        :return: **result**
+        :rtype: np.ndarray
+
+        """
+        self._src = src if src is not None else self._src
+        self._ref = ref if ref is not None else self._ref
+        result = np.zeros_like(self._src)
+        for ch in range(self._src.shape[2]):
+            src_vec = self._src[(..., ch)].ravel()
+            ref_vec = self._ref[(..., ch)].ravel()
+            _, src_idxs, src_cnts = np.unique(src_vec, return_inverse=True, return_counts=True)
+            ref_vals, ref_cnts = np.unique(ref_vec, return_counts=True)
+            src_cdf = np.cumsum(src_cnts).astype(np.float64) / src_vec.size
+            ref_cdf = np.cumsum(ref_cnts).astype(np.float64) / ref_vec.size
+            interp_vals = np.interp(src_cdf, ref_cdf, ref_vals)
+            result[(..., ch)] = interp_vals[src_idxs].reshape(src[(..., ch)].shape)
+
+        return result

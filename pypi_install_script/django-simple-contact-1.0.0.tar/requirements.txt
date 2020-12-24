@@ -1,0 +1,2 @@
+bleach
+django>=2.2

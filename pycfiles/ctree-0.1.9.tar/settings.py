@@ -1,0 +1,955 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /usr/local/lib/python2.7/dist-packages/Ctrax/settings.py
+# Compiled at: 2016-05-28 20:43:25
+import os, sys, wx
+from wx import xrc
+import numpy as num, motmot.wxvalidatedtext.wxvalidatedtext as wxvt
+from motmot.wxvideo.wxvideo import DynamicImageCanvas
+import chooseorientations, codedir, draw
+from params import params
+from phonehome import HomePhoner
+import tracking_settings
+from tracking_wizard import TrackingWizard
+from version import __version__, DEBUG
+DEBUG_USERFILE = False
+RSRC_FILE = os.path.join(codedir.codedir, 'xrc', 'Ctrax.xrc')
+if not os.access(RSRC_FILE, os.R_OK):
+    RSRC_FILE = os.path.join('xrc', 'Ctrax.xrc')
+if not os.access(RSRC_FILE, os.R_OK):
+    raise ImportError("couldn't find Ctrax.xrc at %s pwd:%s codedir:%s" % (RSRC_FILE, os.getcwd(), os.path.dirname(__file__)))
+ICON_FILE = os.path.join(codedir.codedir, 'icons', 'Ctraxicon.ico')
+if not os.access(ICON_FILE, os.R_OK):
+    ICON_FILE = os.path.join('icons', 'Ctraxicon.ico')
+if not os.access(ICON_FILE, os.R_OK):
+    raise ImportError("couldn't find Ctraxicon.ico")
+import algorithm as alg, bg
+from bg_settings import BgSettingsDialog
+from ellipses_draw import EllipseFrame
+ID_PRINTINTERVALS = 8377
+ID_PRINTBUFFEREL = 8378
+ID_PRINTFRAME = 8379
+
+class AppWithSettings(wx.App):
+    """Cannot be used alone -- this class only exists
+    to keep settings GUI code together in one file."""
+
+    def InitGUI(self):
+        """Load XML resources, create handles, bind callbacks."""
+        rsrc = xrc.XmlResource(RSRC_FILE)
+        self.frame = rsrc.LoadFrame(None, 'frame_Ctrax')
+        self.frame.SetIcon(wx.Icon(ICON_FILE, wx.BITMAP_TYPE_ICO))
+        self.SetTopWindow(self.frame)
+        self.menu = self.frame.GetMenuBar()
+        if DEBUG:
+            self.debugmenu = wx.Menu()
+            self.debugmenu.Append(ID_PRINTINTERVALS, 'Print Intervals', 'Print frame intervals tracked, buffered, and written.')
+            self.debugmenu.Append(ID_PRINTBUFFEREL, 'Print Buffer...', 'Print ellipses stored at specified element of buffer.')
+            self.debugmenu.Append(ID_PRINTFRAME, 'Print Frame...', 'Pring ellipses for specified frame.')
+            self.menu.Append(self.debugmenu, 'DEBUG')
+        self.status = xrc.XRCCTRL(self.frame, 'bar_status')
+        self.framenumber_text = xrc.XRCCTRL(self.frame, 'text_framenumber')
+        self.num_flies_text = xrc.XRCCTRL(self.frame, 'text_num_flies')
+        self.rate_text = xrc.XRCCTRL(self.frame, 'text_refresh_rate')
+        self.time_text = xrc.XRCCTRL(self.frame, 'text_time')
+        self.slider = xrc.XRCCTRL(self.frame, 'slider_frame')
+        self.slider.Enable(False)
+        self.frameinc_button = xrc.XRCCTRL(self.frame, 'button_frameinc')
+        self.framedec_button = xrc.XRCCTRL(self.frame, 'button_framedec')
+        if not hasattr(self.slider, 'GetThumbPosition'):
+            self.slider.GetThumbPosition = self.slider.GetValue
+            self.slider.SetThumbPosition = self.slider.SetValue
+            self.slider.SetScrollbar = lambda a, lo, hi, b: self.slider.SetRange(lo, hi)
+        self.img_panel = xrc.XRCCTRL(self.frame, 'panel_img')
+        self.reset_img_wind()
+        self.zoommode = False
+        self.zoom_dragging = False
+        self.zoom_drag_roi_scale = 1.0
+        self.toolbar = xrc.XRCCTRL(self.frame, 'toolbar')
+        self.zoom_id = xrc.XRCID('zoom')
+        self.play_id = xrc.XRCID('play')
+        self.stop_id = xrc.XRCID('stop')
+        self.speedup_id = xrc.XRCID('speed_up')
+        self.slowdown_id = xrc.XRCID('slow_down')
+        self.refresh_id = xrc.XRCID('refresh')
+        self.toolbar.SetToggle(self.zoommode, self.zoom_id)
+        self.stop_tracking_tooltip = 'Stop Tracking'
+        self.stop_playback_tooltip = 'Stop Video Playback'
+        self.start_playback_tooltip = 'Start Video Playback'
+        self.speedup_tracking_tooltip = 'Increase Refresh Rate'
+        self.speedup_playback_tooltip = 'Increase Playback Speed'
+        self.slowdown_tracking_tooltip = 'Decrease Refresh Rate'
+        self.slowdown_playback_tooltip = 'Decrease Playback Speed'
+        self.play_speed = 1.0
+        self.tracking_duration = 0
+        self.UpdateToolBar('stopped')
+        self.frame.Bind(wx.EVT_MENU, self.OnOpen, id=xrc.XRCID('menu_file_open'))
+        self.frame.Bind(wx.EVT_MENU, self.OnLoadSettings, id=xrc.XRCID('menu_load_settings'))
+        self.frame.Bind(wx.EVT_MENU, self.OnSaveSettings, id=xrc.XRCID('menu_save_settings'))
+        self.frame.Bind(wx.EVT_MENU, self.OnBatch, id=xrc.XRCID('menu_file_batch'))
+        self.frame.Bind(wx.EVT_MENU, self.OnSave, id=xrc.XRCID('menu_file_export'))
+        self.frame.Bind(wx.EVT_MENU, self.OnSaveAvi, id=xrc.XRCID('menu_file_save_avi'))
+        self.frame.Bind(wx.EVT_MENU, self.OnSaveCsv, id=xrc.XRCID('menu_file_save_csv'))
+        self.frame.Bind(wx.EVT_MENU, self.OnSaveDiagnostics, id=xrc.XRCID('menu_file_save_diagnostics'))
+        self.frame.Bind(wx.EVT_MENU, self.OnQuit, id=xrc.XRCID('menu_file_quit'))
+        self.frame.Bind(wx.EVT_MENU, self.OnHelp, id=xrc.XRCID('menu_help_help'))
+        self.frame.Bind(wx.EVT_MENU, self.OnAbout, id=xrc.XRCID('menu_help_about'))
+        self.frame.Bind(wx.EVT_MENU, self.OnStartTrackingMenu, id=xrc.XRCID('menu_track_start'))
+        self.frame.Bind(wx.EVT_MENU, self.OnStartTrackingMenu, id=xrc.XRCID('menu_track_resume'))
+        self.frame.Bind(wx.EVT_MENU, self.OnStartTrackingMenu, id=xrc.XRCID('menu_track_resume_here'))
+        self.frame.Bind(wx.EVT_MENU, self.OnWriteSBFMF, id=xrc.XRCID('menu_track_writesbfmf'))
+        self.frame.Bind(wx.EVT_MENU, self.OnComputeBg, id=xrc.XRCID('menu_compute_background'))
+        self.frame.Bind(wx.EVT_MENU, self.OnComputeShape, id=xrc.XRCID('menu_compute_shape'))
+        self.frame.Bind(wx.EVT_MENU, self.OnTrackingWizard, id=xrc.XRCID('menu_tracking_wizard'))
+        self.frame.Bind(wx.EVT_MENU, self.OnSettingsBGModel, id=xrc.XRCID('menu_settings_bg_model'))
+        self.frame.Bind(wx.EVT_MENU, self.OnSettingsBG, id=xrc.XRCID('menu_settings_bg'))
+        self.frame.Bind(wx.EVT_MENU, self.OnSettingsTracking, id=xrc.XRCID('menu_settings_tracking'))
+        self.frame.Bind(wx.EVT_MENU, self.OnCheckFlipMovie, id=xrc.XRCID('menu_playback_flipud'))
+        self.frame.Bind(wx.EVT_MENU, self.OnChooseOrientations, id=xrc.XRCID('menu_choose_orientations'))
+        self.frame.Bind(wx.EVT_MENU, self.OnCheckTransposeMovie, id=xrc.XRCID('menu_playback_transpose'))
+        self.frame.Bind(wx.EVT_MENU, self.OnCheckShowAnn, id=xrc.XRCID('menu_playback_show_ann'))
+        self.frame.Bind(wx.EVT_MENU, self.OnCheckRefresh, id=xrc.XRCID('menu_do_refresh'))
+        self.frame.Bind(wx.EVT_MENU, self.OnTailLength, id=xrc.XRCID('menu_playback_tails'))
+        self.frame.Bind(wx.EVT_MENU, self.OnLineThickness, id=xrc.XRCID('menu_playback_thickness'))
+        self.frame.Bind(wx.EVT_MENU, self.OnCheckDim, id=xrc.XRCID('menu_playback_dim'))
+        self.frame.Bind(wx.EVT_MENU, self.OnCheckZoom, id=xrc.XRCID('menu_settings_zoom'))
+        self.frame.Bind(wx.EVT_MENU, self.OnMakePlot, id=xrc.XRCID('menu_analyze_plottraj'))
+        self.frame.Bind(wx.EVT_MENU, self.OnMakePlot, id=xrc.XRCID('menu_analyze_plotvel'))
+        self.frame.Bind(wx.EVT_MENU, self.OnMakePlot, id=xrc.XRCID('menu_analyze_histpos'))
+        self.frame.Bind(wx.EVT_MENU, self.OnMakePlot, id=xrc.XRCID('menu_analyze_histspeed'))
+        self.frame.Bind(wx.EVT_MENU, self.OnMakePlot, id=xrc.XRCID('menu_analyze_histdtheta'))
+        if DEBUG:
+            self.frame.Bind(wx.EVT_MENU, self.OnDebugPrintIntervals, id=ID_PRINTINTERVALS)
+            self.frame.Bind(wx.EVT_MENU, self.OnDebugPrintFrame, id=ID_PRINTFRAME)
+        self.frame.Bind(wx.EVT_CLOSE, self.OnQuit)
+        self.frame.Bind(wx.EVT_SCROLL, self.OnSlider, self.slider)
+        self.frame.Bind(wx.EVT_SIZE, self.OnResize)
+        self.frame.Bind(wx.EVT_MAXIMIZE, self.OnResize)
+        self.frame.Bind(wx.EVT_TOOL, self.ZoomToggle, id=self.zoom_id)
+        self.frame.Bind(wx.EVT_TOOL, self.OnPlayButton, id=self.play_id)
+        self.frame.Bind(wx.EVT_TOOL, self.OnStopButton, id=self.stop_id)
+        self.frame.Bind(wx.EVT_TOOL, self.OnSpeedUpButton, id=self.speedup_id)
+        self.frame.Bind(wx.EVT_TOOL, self.OnSlowDownButton, id=self.slowdown_id)
+        self.frame.Bind(wx.EVT_TOOL, self.OnRefreshButton, id=self.refresh_id)
+        wxvt.setup_validated_integer_callback(self.framenumber_text, xrc.XRCID('text_framenumber'), self.OnFrameNumberValidated, pending_color=params.status_blue)
+        self.frame.Bind(wx.EVT_BUTTON, self.OnFrameIncButton, id=xrc.XRCID('button_frameinc'))
+        self.frame.Bind(wx.EVT_BUTTON, self.OnFrameDecButton, id=xrc.XRCID('button_framedec'))
+        self.do_refresh = self.menu.IsChecked(xrc.XRCID('menu_do_refresh'))
+        params.enable_feedback(True)
+        if self.input_file_was_specified:
+            self.menu.Enable(xrc.XRCID('menu_file_open'), False)
+
+        class DropTarget(wx.FileDropTarget):
+
+            def __init__(self, app):
+                wx.FileDropTarget.__init__(self)
+                self.app = app
+
+            def OnDropFiles(self, x, y, filenames):
+                self.app.MacOpenFile(filenames[0])
+
+        self.frame.SetDropTarget(DropTarget(self))
+        return
+
+    def InitState(self):
+        if sys.platform.startswith('win'):
+            self.dir = os.path.join(os.environ['HOMEDRIVE'], os.environ['HOMEPATH'])
+        else:
+            self.dir = os.environ['HOME']
+        self.start_frame = 0
+        self.tracking = False
+        self.batch = None
+        self.batch_data = None
+        self.bg_window_open = False
+        self.framesbetweenrefresh = 1
+        self.request_refresh = False
+        self.do_refresh = False
+        self.dowritesbfmf = False
+        self.tracking_settings_window_open = False
+        self.choose_orientations_window_open = False
+        return
+
+    def SetPlayToolTip(self, s):
+        self.toolbar.SetToolShortHelp(self.play_id, s)
+
+    def SetStopToolTip(self, s):
+        self.toolbar.SetToolShortHelp(self.stop_id, s)
+
+    def SetSpeedUpToolTip(self, s):
+        self.toolbar.SetToolShortHelp(self.speedup_id, s)
+
+    def SetSlowDownToolTip(self, s):
+        self.toolbar.SetToolShortHelp(self.slowdown_id, s)
+
+    def EnableRefreshBitmap(self, state):
+        self.toolbar.EnableTool(self.refresh_id, state)
+
+    def EnablePlayBitmap(self, state):
+        self.toolbar.EnableTool(self.play_id, state)
+
+    def EnableStopBitmap(self, state):
+        self.toolbar.EnableTool(self.stop_id, state)
+
+    def UpdateToolBar(self, state):
+        if state == 'stopped':
+            self.EnablePlayBitmap(True)
+            self.SetPlayToolTip(self.start_playback_tooltip)
+            self.EnableStopBitmap(True)
+            self.SetSpeedUpToolTip(self.speedup_playback_tooltip)
+            self.SetSlowDownToolTip(self.slowdown_playback_tooltip)
+            self.EnableRefreshBitmap(False)
+            self.set_rate_text(use_refresh=False)
+        else:
+            self.EnableStopBitmap(True)
+            self.EnablePlayBitmap(False)
+            if self.tracking or hasattr(self, 'batch_executing') and self.batch_executing:
+                self.SetStopToolTip(self.stop_tracking_tooltip)
+                self.SetSpeedUpToolTip(self.speedup_tracking_tooltip)
+                self.SetSlowDownToolTip(self.slowdown_tracking_tooltip)
+                self.EnableRefreshBitmap(True)
+                self.set_rate_text(use_refresh=True)
+            else:
+                self.SetStopToolTip(self.stop_playback_tooltip)
+                self.SetSpeedUpToolTip(self.speedup_playback_tooltip)
+                self.SetSlowDownToolTip(self.slowdown_playback_tooltip)
+                self.EnableRefreshBitmap(False)
+                self.set_rate_text(use_refresh=False)
+
+    def OnFrameIncButton(self, evt):
+        self.start_frame = min(self.start_frame + 1, self.movie.get_n_frames())
+        self.ShowCurrentFrame()
+
+    def OnFrameDecButton(self, evt):
+        self.start_frame = max(0, self.start_frame - 1)
+        self.ShowCurrentFrame()
+
+    def reset_img_wind(self):
+        box = wx.BoxSizer(wx.VERTICAL)
+        self.img_panel.SetSizer(box)
+        if self.has('img_wind'):
+            self.img_wind.Show(False)
+        self.img_wind = DynamicImageCanvas(self.img_panel, -1)
+        self.img_wind.doresize = True
+        box.Add(self.img_wind, 1, wx.EXPAND)
+        self.img_panel.SetAutoLayout(True)
+        self.img_panel.Layout()
+
+    def set_rate_text(self, use_refresh=False):
+        if not use_refresh:
+            if self.play_speed >= 1.0:
+                self.rate_text.SetValue('Play Speed: %.1fx' % self.play_speed)
+            elif self.play_speed >= 0.1:
+                self.rate_text.SetValue('Play Speed: %.2fx' % self.play_speed)
+            else:
+                self.rate_text.SetValue('Play Speed: %.3fx' % self.play_speed)
+        elif self.do_refresh:
+            self.rate_text.SetValue('Refresh Period: %02d fr' % self.framesbetweenrefresh)
+        else:
+            self.rate_text.SetValue('Refresh: Never')
+
+    def constrain_window_to_screen(self, pos, size):
+        x = max(min(pos[0], wx.DisplaySize()[0] - size[0]), 0)
+        y = max(min(pos[1], wx.DisplaySize()[1] - size[1]), 0)
+        return (
+         x, y)
+
+    def ReadUserfile(self):
+        """Read user settings from file. Set window size, location. Called on startup."""
+        try:
+            try:
+                if sys.platform.startswith('win'):
+                    homedir = os.path.join(os.environ['HOMEDRIVE'], os.environ['HOMEPATH'])
+                elif sys.platform.startswith('darwin'):
+                    homedir = os.path.join(os.environ['HOME'], 'Library', 'Containers', 'edu.caltech.ctrax', 'Data', 'Library', 'Preferences')
+                else:
+                    homedir = os.environ['HOME']
+                self.userfile_name = os.path.join(homedir, '.Ctraxrc')
+                with open(self.userfile_name, 'r') as (userfile):
+                    line = userfile.readline().strip()
+                    vals = line.split(': ')
+                    if len(vals) == 2:
+                        userfile.seek(0, os.SEEK_SET)
+                        for line in userfile:
+                            if line.startswith('#'):
+                                continue
+                            name, val = line.strip().split(': ')
+                            if name == 'last-version-used':
+                                if val != __version__:
+                                    wx.MessageBox('Welcome to Ctrax version %s' % __version__, 'Ctrax updated', wx.ICON_INFORMATION)
+                                if DEBUG_USERFILE:
+                                    print 'read last version', val
+                            elif name == 'last-ctrax-notified':
+                                self.newest_ctrax_notified = val
+                                if self.newest_ctrax_notified == '':
+                                    self.newest_ctrax_notified = __version__
+                                if DEBUG_USERFILE:
+                                    print 'read last-notified version', self.newest_ctrax_notified
+                            elif name == 'last-matlab-notified':
+                                self.newest_matlab_notified = val
+                                if self.newest_matlab_notified == '' or self.newest_matlab_notified == 'None':
+                                    self.newest_matlab_notified = None
+                                if DEBUG_USERFILE:
+                                    print 'read last matlab version', self.newest_matlab_notified
+                            elif name == 'wants-version-notifications':
+                                self.menu.Check(xrc.XRCID('menu_help_updates'), val == 'True' or val == '')
+                                if DEBUG_USERFILE:
+                                    print 'read wants notifications', val
+                            elif name == 'prompt-for-annfile-names':
+                                self.menu.Check(xrc.XRCID('menu_settings_annprompt'), val == 'True' or val == '')
+                                if DEBUG_USERFILE:
+                                    print 'read wants annfiles prompt', val
+                            elif name == 'working-directory':
+                                self.dir = val
+                                if DEBUG_USERFILE:
+                                    print 'read directory', self.dir
+                            elif name == 'save-directory':
+                                self.save_dir = val
+                                if DEBUG_USERFILE:
+                                    print 'read save directory', self.save_dir
+                            elif name == 'last-movie-ext':
+                                self.last_movie_ext = val
+                                if DEBUG_USERFILE:
+                                    print 'read last extension', self.last_movie_ext
+                            elif name == 'window-pos-size':
+                                last_pos, last_size = str222tuples(val)
+                                last_pos = self.constrain_window_to_screen(last_pos, last_size)
+                                self.frame.SetPosition(last_pos)
+                                self.frame.SetSize(last_size)
+                                if DEBUG_USERFILE:
+                                    print 'read last main window position'
+                            elif name == 'bg-pos-size':
+                                self.last_bg_pos, self.last_bg_size = str222tuples(val)
+                                if DEBUG_USERFILE:
+                                    print 'read last bg window position'
+                            elif name == 'batch-pos-size':
+                                self.last_batch_pos, self.last_batch_size = str222tuples(val)
+                                if DEBUG_USERFILE:
+                                    print 'read last batch window position'
+                            elif name == 'zoom-pos-size':
+                                self.last_zoom_pos, self.last_zoom_size = str222tuples(val)
+                                if DEBUG_USERFILE:
+                                    print 'read last zoom window position', self.last_zoom_pos, self.last_zoom_size
+                            elif name == 'ellipse-thickness':
+                                if val.isdigit():
+                                    params.ellipse_thickness = int(val)
+                                if DEBUG_USERFILE:
+                                    print 'read ellipse thickness', val
+                            elif name == 'tail-length':
+                                if val.isdigit():
+                                    params.tail_length = int(val)
+                                if DEBUG_USERFILE:
+                                    print 'read tail length', val
+                            elif name == 'dim-playback':
+                                if val == 'True':
+                                    self.menu.Check(xrc.XRCID('menu_playback_dim'), True)
+                                if DEBUG_USERFILE:
+                                    print 'read dim-image flag', val
+
+                    else:
+                        if DEBUG_USERFILE:
+                            print 'trying to read legacy rc file'
+                        last_version = line
+                        if last_version != __version__:
+                            wx.MessageBox('Welcome to Ctrax version %s' % __version__, 'Ctrax updated', wx.ICON_INFORMATION)
+                        if DEBUG_USERFILE:
+                            print 'read last version', last_version
+                        self.dir = userfile.readline().rstrip()
+                        if DEBUG_USERFILE:
+                            print 'read directory', self.dir
+                        last_pos, last_size = str222tuples(userfile.readline().rstrip())
+                        last_pos = self.constrain_window_to_screen(last_pos, last_size)
+                        self.frame.SetPosition(last_pos)
+                        self.frame.SetSize(last_size)
+                        if DEBUG_USERFILE:
+                            print 'read last main window position'
+                        try:
+                            self.last_bg_pos, self.last_bg_size = str222tuples(userfile.readline().rstrip())
+                        except (ValueError, IndexError):
+                            self.last_bg_pos = None
+                            self.last_bg_size = None
+
+                        if DEBUG_USERFILE:
+                            print 'read last bg window position'
+                        try:
+                            self.last_batch_pos, self.last_batch_size = str222tuples(userfile.readline().rstrip())
+                        except (ValueError, IndexError):
+                            self.last_batch_pos = None
+                            self.last_batch_size = None
+
+                        if DEBUG_USERFILE:
+                            print 'read last batch window position'
+                        use_cb = userfile.readline().rstrip()
+                        if DEBUG_USERFILE:
+                            print 'read colorblind palette setting', use_cb
+                        use_et = userfile.readline().rstrip()
+                        if use_et.isdigit():
+                            params.ellipse_thickness = int(use_et)
+                        if DEBUG_USERFILE:
+                            print 'read ellipse thickness', use_et
+                        use_tl = userfile.readline().rstrip()
+                        if use_tl.isdigit():
+                            params.tail_length = int(use_tl)
+                        if DEBUG_USERFILE:
+                            print 'read tail length', use_tl
+                        use_di = userfile.readline().rstrip()
+                        if use_di == 'True':
+                            self.menu.Check(xrc.XRCID('menu_playback_dim'), True)
+                        if DEBUG_USERFILE:
+                            print 'read dim-image flag', use_di
+                        self.save_dir = userfile.readline().rstrip()
+                        if DEBUG_USERFILE:
+                            print 'read save directory', self.save_dir
+                        try:
+                            self.last_zoom_pos, self.last_zoom_size = str222tuples(userfile.readline().rstrip())
+                        except (ValueError, IndexError):
+                            self.last_zoom_pos = None
+                            self.last_zoom_size = None
+
+                        if DEBUG_USERFILE:
+                            print 'read last zoom window position', self.last_zoom_pos, self.last_zoom_size
+                        self.last_movie_ext = userfile.readline().rstrip()
+                        if DEBUG_USERFILE:
+                            print 'read last extension', self.last_movie_ext
+                        self.newest_ctrax_notified = userfile.readline().rstrip()
+                        if self.newest_ctrax_notified == '':
+                            self.newest_ctrax_notified = __version__
+                        if DEBUG_USERFILE:
+                            print 'read last-notified version', self.newest_ctrax_notified
+                        self.newest_matlab_notified = userfile.readline().rstrip()
+                        if self.newest_matlab_notified == '' or self.newest_matlab_notified == 'None':
+                            self.newest_matlab_notified = None
+                        if DEBUG_USERFILE:
+                            print 'read last matlab version', self.newest_matlab_notified
+                        use_note = userfile.readline().rstrip()
+                        self.menu.Check(xrc.XRCID('menu_help_updates'), use_note == 'True' or use_note == '')
+                        if DEBUG_USERFILE:
+                            print 'read wants notifications', use_note
+                        use_annprompt = userfile.readline().rstrip()
+                        self.menu.Check(xrc.XRCID('menu_settings_annprompt'), use_annprompt == 'True' or use_annprompt == '')
+            except:
+                pass
+
+        finally:
+            try:
+                userfile.close()
+            except:
+                pass
+
+        if not hasattr(self, 'last_bg_pos'):
+            self.last_bg_pos = None
+            self.last_bg_size = None
+        if not hasattr(self, 'last_batch_pos'):
+            self.last_batch_pos = None
+            self.last_batch_size = None
+        if not hasattr(self, 'save_dir'):
+            if hasattr(self, 'dir'):
+                self.save_dir = self.dir
+            elif sys.platform.startswith('win'):
+                self.save_dir = os.path.join(os.environ['HOMEDRIVE'], os.environ['HOMEPATH'])
+            else:
+                self.save_dir = os.environ['HOME']
+        if not hasattr(self, 'last_zoom_pos'):
+            self.last_zoom_pos = None
+            self.last_zoom_size = None
+        if not hasattr(self, 'last_movie_ext'):
+            self.last_movie_ext = '.fmf'
+        if not hasattr(self, 'newest_ctrax_notified'):
+            self.newest_ctrax_notified = __version__
+        if not hasattr(self, 'newest_matlab_notified'):
+            self.newest_matlab_notified = None
+        HomePhoner(self.alert_new_version)
+        return
+
+    def alert_new_version(self, latest_ctrax_version, latest_matlab_version):
+        """Alert user if new version of Ctrax is available."""
+        if latest_ctrax_version is None:
+            return
+        else:
+            alert_str = ''
+            if latest_ctrax_version > self.newest_ctrax_notified:
+                alert_str += 'Version %s of Ctrax is now available.\n\n' % latest_ctrax_version
+                self.newer_ctrax_avail = latest_ctrax_version
+            if latest_matlab_version > self.newest_matlab_notified:
+                alert_str += 'Version %s of the Ctrax toolboxes for Matlab is now available.\n\n' % latest_matlab_version
+                self.newer_matlab_avail = latest_matlab_version
+            if alert_str != '':
+                alert_str += 'Download from https://sourceforge.net/projects/ctrax/files/'
+                self.update_alert_string = alert_str
+            return
+
+    def WriteUserfile(self):
+        """Write current user settings to file. Called on quit."""
+        try:
+            userfile = open(self.userfile_name, 'w')
+        except IOError:
+            pass
+        else:
+            userfile.write('last-version-used: %s\n' % __version__)
+            userfile.write('last-ctrax-notified: %s\n' % self.newest_ctrax_notified)
+            userfile.write('last-matlab-notified: %s\n' % self.newest_matlab_notified)
+            userfile.write('wants-version-notifications: %s\n' % str(self.menu.IsChecked(xrc.XRCID('menu_help_updates'))))
+            userfile.write('prompt-for-annfile-names: %s\n' % str(self.menu.IsChecked(xrc.XRCID('menu_settings_annprompt'))))
+            userfile.write('working-directory: %s\n' % self.dir)
+            userfile.write('save-directory: %s\n' % self.save_dir)
+            userfile.write('last-movie-ext: %s\n' % self.last_movie_ext)
+            userfile.write('window-pos-size: %s %s\n' % (str(self.frame.GetPosition()),
+             str(self.frame.GetSize())))
+            if self.last_bg_pos is not None:
+                userfile.write('bg-pos-size: %s %s\n' % (str(self.last_bg_pos),
+                 str(self.last_bg_size)))
+            if self.last_batch_pos is not None:
+                userfile.write('batch-pos-size: %s %s\n' % (str(self.last_batch_pos),
+                 str(self.last_batch_size)))
+            if self.last_zoom_pos is not None:
+                userfile.write('zoom-pos-size: %s %s\n' % (str(self.last_zoom_pos),
+                 str(self.last_zoom_size)))
+            userfile.write('ellipse-thickness: %d\n' % params.ellipse_thickness)
+            userfile.write('tail-length: %d\n' % params.tail_length)
+            userfile.write('dim-playback: %s\n' % str(self.menu.IsChecked(xrc.XRCID('menu_playback_dim'))))
+            userfile.close()
+
+        return
+
+    def OnFrameNumberValidated(self, evt):
+        if self.has('movie'):
+            new_frame = int(self.framenumber_text.GetValue())
+            if new_frame < 0:
+                new_frame = 0
+            elif new_frame >= self.movie.get_n_frames():
+                new_frame = self.movie.get_n_frames() - 1
+            self.start_frame = new_frame
+            self.ShowCurrentFrame()
+        else:
+            self.framenumber_text.SetValue('000000')
+
+    def OnTrackingWizard(self, evt):
+        """Open tracking-wizard window."""
+        if self.has('wizard'):
+            self.wizard.frame.Raise()
+            return
+        self.wizard = TrackingWizard(self.frame, self.bg_imgs, self.movie.get_n_frames(), self.movie.get_frame, self.OnComputeBg, self.OnStartTracking, self.movie.type == 'sbfmf')
+        self.wizard.frame.Bind(wx.EVT_CLOSE, self.OnQuitTrackingWizard)
+        self.wizard.frame.Show()
+
+    def update_wizard_imgs(self):
+        if self.has('wizard'):
+            self.wizard.redraw()
+
+    def OnQuitTrackingWizard(self, evt):
+        self.wizard.frame.Destroy()
+        delattr(self, 'wizard')
+
+    def OnSettingsBG(self, evt):
+        """Open window for bg threshold settings."""
+        if self.bg_window_open:
+            self.bg_imgs.frame.Raise()
+            return
+        else:
+            if self.has('ann_file'):
+                old_thresh = params.n_bg_std_thresh
+            else:
+                old_thresh = None
+            isbgmodel = self.CheckForBGModel()
+            if isbgmodel == False:
+                return
+            self.bg_imgs.ShowBG(self.frame, self.start_frame, old_thresh, self.update_wizard_imgs)
+            self.bg_imgs.frame.Bind(wx.EVT_SIZE, self.OnResizeBG)
+            self.bg_imgs.frame.Bind(wx.EVT_MOVE, self.OnResizeBG)
+            self.bg_imgs.frame.Bind(wx.EVT_MENU, self.OnQuitBG, id=xrc.XRCID('menu_window_close'))
+            self.bg_imgs.frame.Bind(wx.EVT_CLOSE, self.OnQuitBG)
+            if self.last_bg_pos is not None:
+                bg_pos = self.constrain_window_to_screen(self.last_bg_pos, self.last_bg_size)
+                self.bg_imgs.frame.SetPosition(bg_pos)
+                self.bg_imgs.frame.SetSize(self.last_bg_size)
+            self.bg_imgs.frame.Show()
+            self.bg_window_open = True
+            self.bg_imgs.DoSub()
+            self.bg_imgs.frame_slider.SetMinSize(wx.Size(self.bg_imgs.img_panel.GetRect().GetWidth(), self.bg_imgs.frame_slider.GetRect().GetHeight()))
+            return
+
+    def OnQuitBG(self, evt):
+        """Take data from bg threshold window and close it."""
+        self.bg_imgs.hf.frame.Destroy()
+        self.bg_imgs.frame.Destroy()
+        delattr(self.bg_imgs, 'frame')
+        self.bg_window_open = False
+
+    def OnSettingsBGModel(self, evt):
+        """Open window for bg model settings."""
+        if self.movie.type == 'sbfmf':
+            if not DEBUG:
+                resp = wx.MessageBox('Background Model is already set for SBFMF files, and cannot be changed', 'Cannot Change Background Model', wx.OK)
+            return
+        if not hasattr(self.bg_imgs, 'modeldlg'):
+            self.bg_imgs.modeldlg = BgSettingsDialog(self.frame, self.bg_imgs)
+            self.bg_imgs.modeldlg.frame.Bind(wx.EVT_CLOSE, self.OnQuitBGModel)
+            self.bg_imgs.modeldlg.frame.Bind(wx.EVT_BUTTON, self.OnQuitBGModel, id=xrc.XRCID('done_button'))
+        else:
+            self.bg_imgs.modeldlg.frame.Raise()
+
+    def OnQuitBGModel(self, evt):
+        if hasattr(self.bg_imgs, 'modeldlg'):
+            self.bg_imgs.modeldlg.frame.Destroy()
+            delattr(self.bg_imgs, 'modeldlg')
+
+    def OnSettingsTracking(self, evt):
+        """Open window for bg model settings."""
+        if hasattr(self, 'tracking_settings_window_open') and self.tracking_settings_window_open:
+            self.tracking_settings.frame.Raise()
+            return
+        isbgmodel = self.CheckForBGModel()
+        if isbgmodel == False:
+            return
+        self.tracking_settings = tracking_settings.TrackingSettings(self.frame, self.bg_imgs, self.start_frame)
+        self.tracking_settings.frame.Bind(wx.EVT_CLOSE, self.OnQuitTrackingSettings)
+        self.tracking_settings.frame.Bind(wx.EVT_BUTTON, self.OnQuitTrackingSettings, id=xrc.XRCID('done'))
+        self.tracking_settings.frame.Show()
+        self.tracking_settings_window_open = True
+
+    def OnQuitTrackingSettings(self, evt):
+        self.tracking_settings.frame.Destroy()
+        delattr(self, 'tracking_settings')
+        self.tracking_settings_window_open = False
+
+    def OnChooseOrientations(self, evt=None):
+        """Open window for choosing orientations."""
+        if hasattr(self, 'choose_orientations_window_open') and self.choose_orientations_window_open:
+            self.choose_orientations.frame.Raise()
+            return
+        self.choose_orientations = chooseorientations.ChooseOrientations(self.frame)
+        self.choose_orientations.frame.Bind(wx.EVT_CLOSE, self.OnQuitChooseOrientations)
+        self.choose_orientations.frame.Bind(wx.EVT_BUTTON, self.OnQuitChooseOrientations, id=xrc.XRCID('ID_CANCEL'))
+        self.choose_orientations.frame.Bind(wx.EVT_BUTTON, self.ChooseOrientations, id=xrc.XRCID('ID_OK'))
+        self.choose_orientations.frame.Show()
+        self.choose_orientations_window_open = True
+
+    def OnQuitChooseOrientations(self, evt):
+        self.choose_orientations.frame.Destroy()
+        delattr(self, 'choose_orientations')
+        self.choose_orientations_window_open = False
+
+    def ChooseOrientations(self, evt):
+        self.ann_file = self.choose_orientations.ChooseOrientations(self.ann_file, bg_model=self.bg_imgs)
+        self.OnQuitChooseOrientations(evt)
+
+    def OnResizeBG(self, evt):
+        """BG window was moved or resized. Rescale image and slider,
+        and remember new location."""
+        evt.Skip()
+        if hasattr(self, 'img_size') and hasattr(self.bg_imgs, 'img_panel'):
+            sizer = self.bg_imgs.frame.GetSizer()
+            panel_item = sizer.GetItem(self.bg_imgs.img_panel, recursive=True)
+            panel_item.SetFlag(panel_item.GetFlag() | wx.SHAPED)
+            panel_item.SetRatio(float(self.img_size[1]) / self.img_size[0])
+        self.bg_imgs.frame.Layout()
+        self.bg_imgs.redraw()
+        self.bg_imgs.frame_slider.SetMinSize(wx.Size(self.bg_imgs.img_panel.GetRect().GetWidth(), self.bg_imgs.frame_slider.GetRect().GetHeight()))
+        self.last_bg_size = self.bg_imgs.frame.GetSize()
+        self.last_bg_pos = self.bg_imgs.frame.GetPosition()
+
+    def OnCheckZoom(self, evt):
+        """Open ellipse zoom window."""
+        if self.menu.IsChecked(xrc.XRCID('menu_settings_zoom')):
+            self.zoom_window = EllipseFrame(self.frame)
+            self.zoom_window.frame.Bind(wx.EVT_CLOSE, self.OnCloseZoom)
+            self.zoom_window.frame.Bind(wx.EVT_SIZE, self.OnZoomResize)
+            self.zoom_window.frame.Bind(wx.EVT_MOVE, self.OnZoomMove)
+            if self.last_zoom_pos is not None:
+                set_size = self.last_zoom_size
+                zoom_pos = self.constrain_window_to_screen(self.last_zoom_pos, self.last_zoom_size)
+                self.zoom_window.frame.SetPosition(zoom_pos)
+                self.zoom_window.frame.SetSize(set_size)
+            if evt is not None:
+                self.ShowCurrentFrame()
+        else:
+            self.OnCloseZoom(None)
+        return
+
+    def OnCloseZoom(self, evt):
+        """Close ellipse zoom window."""
+        self.menu.Check(xrc.XRCID('menu_settings_zoom'), False)
+        self.zoom_window.frame.Destroy()
+
+    def remember_zoom_window_size(self):
+        """Remember current size of zoom window."""
+        try:
+            self.last_zoom_size = self.zoom_window.frame.GetSize()
+            self.last_zoom_pos = self.zoom_window.frame.GetPosition()
+        except AttributeError:
+            pass
+
+    def OnZoomResize(self, evt):
+        """Zoom window was resized; remember position and redraw."""
+        evt.Skip()
+        self.zoom_window.Redraw()
+        self.remember_zoom_window_size()
+
+    def OnZoomMove(self, evt):
+        """Zoom window moved; remember position."""
+        evt.Skip()
+        self.remember_zoom_window_size()
+
+    def ZoomToggle(self, evt):
+        self.zoommode = not self.zoommode
+
+    def OnMouseDown(self, evt):
+        """Mouse clicked in movie window. Zoom in on selected fly."""
+        self.zoom_dragging = False
+        if not self.zoommode:
+            return
+        else:
+            windowheight = self.img_wind_child.GetRect().GetHeight()
+            windowwidth = self.img_wind_child.GetRect().GetWidth()
+            if self.has('zoom_drag_roi'):
+                x = float(evt.GetX()) / windowwidth
+                x = x / self.zoom_drag_roi_scale + self.zoom_drag_roi[0]
+                x *= self.img_size[1]
+                y = 1.0 - float(evt.GetY()) / windowheight
+                y = y / self.zoom_drag_roi_scale + self.zoom_drag_roi[1]
+                y *= self.img_size[0]
+            else:
+                x = evt.GetX() * self.img_size[1] / windowwidth
+                y = self.img_size[0] - evt.GetY() * self.img_size[0] / windowheight
+            if x > self.img_size[1] or y > self.img_size[0]:
+                return
+            fly_clicked = False
+            min_dist = num.inf
+            if self.start_frame <= self.ann_file.lastframetracked and self.start_frame >= self.ann_file.firstframetracked:
+                ells = self.ann_file[self.start_frame]
+                for i, ellipse in ells.iteritems():
+                    this_dist = (ellipse.center.x - x) ** 2 + (ellipse.center.y - y) ** 2
+                    if this_dist < min_dist:
+                        min_ind = i
+                        min_dist = this_dist
+
+            maxdshowinfo = (num.maximum(params.movie_size[0], params.movie_size[1]) / params.MAXDSHOWINFO) ** 2
+            if min_dist <= maxdshowinfo:
+                fly_clicked = True
+                if not self.menu.IsChecked(xrc.XRCID('menu_settings_zoom')):
+                    self.menu.Check(xrc.XRCID('menu_settings_zoom'), True)
+                    self.OnCheckZoom(None)
+                    self.zoom_window.ellipse_windows[0].spinner.SetValue(ells[min_ind].identity)
+                else:
+                    nwindows = self.zoom_window.n_ell
+                    for i in range(nwindows):
+                        if ells[min_ind].identity == self.zoom_window.ellipse_windows[i].spinner.GetValue():
+                            return
+
+                    maxnwindows = self.zoom_window.n_ell_spinner.GetMax()
+                    if nwindows < maxnwindows:
+                        self.zoom_window.AddEllipseWindow(ells[min_ind].identity)
+                    else:
+                        if hasattr(self, 'firstzoomwindowcreated'):
+                            window = self.firstzoomwindowcreated
+                            self.firstzoomwindowcreated = (self.firstzoomwindowcreated + 1) % maxnwindows
+                        else:
+                            window = 0
+                            self.firstzoomwindowcreated = 1
+                        self.zoom_window.ellipse_windows[window].spinner.SetValue(ells[min_ind].identity)
+            if not fly_clicked:
+                self.zoom_dragging = True
+                self.zoom_drag_origin = (float(evt.GetX()) / windowwidth,
+                 1.0 - float(evt.GetY()) / windowheight)
+                if self.has('zoom_drag_roi'):
+                    self.zoom_drag_origin = (
+                     self.zoom_drag_origin[0] / self.zoom_drag_roi_scale + self.zoom_drag_roi[0],
+                     self.zoom_drag_origin[1] / self.zoom_drag_roi_scale + self.zoom_drag_roi[1])
+                self.zoom_drag_current = self.zoom_drag_origin
+            self.ShowCurrentFrame()
+            evt.Skip()
+            return
+
+    def OnMouseMoved(self, evt):
+        """Mouse motion occurred. Do nothing unless drag mode is active."""
+        if self.zoom_dragging:
+            if not evt.LeftIsDown():
+                self.OnMouseUp(evt)
+                return
+            self.zoom_drag_current = (
+             float(evt.GetX() - self.img_wind.GetPosition()[0]) / self.img_wind.GetSize()[0],
+             1.0 - float(evt.GetY() - self.img_wind.GetPosition()[1]) / self.img_wind.GetSize()[1])
+            if self.has('zoom_drag_roi'):
+                self.zoom_drag_current = (
+                 self.zoom_drag_current[0] / self.zoom_drag_roi_scale + self.zoom_drag_roi[0],
+                 self.zoom_drag_current[1] / self.zoom_drag_roi_scale + self.zoom_drag_roi[1])
+            self.ShowCurrentFrame()
+        evt.Skip()
+
+    def OnMouseUp(self, evt):
+        """Mouse button released. If dragging, zoom in on ROI."""
+        evt.Skip()
+        needs_refresh = self.zoom_dragging
+        self.zoom_dragging = False
+        if needs_refresh:
+            if self.zoom_drag_origin[0] == self.zoom_drag_current[0] or self.zoom_drag_origin[1] == self.zoom_drag_current[1]:
+                return
+            left = max(min(self.zoom_drag_origin[0], self.zoom_drag_current[0]), 0.0)
+            top = max(min(self.zoom_drag_origin[1], self.zoom_drag_current[1]), 0.0)
+            right = min(max(self.zoom_drag_origin[0], self.zoom_drag_current[0]), 1.0)
+            bottom = min(max(self.zoom_drag_origin[1], self.zoom_drag_current[1]), 1.0)
+            self.zoom_drag_roi = (left, top, right, bottom)
+            self.ShowCurrentFrame()
+
+    def OnMouseDoubleClick(self, evt):
+        """Mouse was double-clicked. Reset ROI, if present."""
+        if evt is not None:
+            evt.Skip()
+        if hasattr(self, 'zoom_drag_roi'):
+            delattr(self, 'zoom_drag_roi')
+        self.zoom_drag_roi_scale = 1.0
+        if evt is not None:
+            self.ShowCurrentFrame()
+        return
+
+    def OnMakePlot(self, evt):
+        """Make a data plot."""
+        window = wx.Frame(self.frame)
+        window.SetSize((400, 300))
+        hsizer = wx.BoxSizer(wx.HORIZONTAL)
+        vsizer = wx.BoxSizer(wx.VERTICAL)
+        vsizer.Add(hsizer, 1, wx.EXPAND)
+        window.SetSizer(vsizer)
+        wx.BeginBusyCursor()
+        wx.Yield()
+        if evt.GetId() == xrc.XRCID('menu_analyze_plottraj'):
+            data = self.ann_file[self.ann_file.firstframetracked:min(self.ann_file.lastframetracked, self.ann_file.firstframetracked + 499)]
+        else:
+            data = self.ann_file[self.ann_file.firstframetracked:min(self.ann_file.lastframetracked, self.ann_file.firstframetracked + 4999)]
+        if evt.GetId() == xrc.XRCID('menu_analyze_plottraj'):
+            window.SetTitle('Trajectories')
+            panel = draw.TrajectoryPlotPanel(window, data)
+        elif evt.GetId() == xrc.XRCID('menu_analyze_plotvel'):
+            window.SetTitle('Velocities')
+            panel = draw.VelocityPlotPanel(window, data)
+        elif evt.GetId() == xrc.XRCID('menu_analyze_histpos'):
+            window.SetTitle('Positions')
+            panel = draw.PosHistPanel(window, data, self.movie.get_width(), self.movie.get_height())
+        elif evt.GetId() == xrc.XRCID('menu_analyze_histspeed'):
+            window.SetTitle('Speeds')
+            panel = draw.VelPlotPanel(window, data)
+        elif evt.GetId() == xrc.XRCID('menu_analyze_histdtheta'):
+            window.SetTitle('Turn rates')
+            panel = draw.TurnPlotPanel(window, data)
+        else:
+            panel = None
+        if panel is not None:
+            hsizer.Add(panel, 1, wx.EXPAND)
+            window.Show()
+        wx.EndBusyCursor()
+        return
+
+    def OnCheckFlipMovie(self, evt):
+        """"Flip vertically" box checked. Repaint current frame."""
+        params.movie_flipud = self.menu.IsChecked(xrc.XRCID('menu_playback_flipud'))
+        if self.has('movie'):
+            self.movie.bufferedframe_num = -1
+        self.ShowCurrentFrame()
+
+    def OnCheckTransposeMovie(self, evt):
+        """"Transpose movie" box checked. Repaint current frame."""
+        params.movie_index_transpose = self.menu.IsChecked(xrc.XRCID('menu_playback_transpose'))
+        if self.has('movie'):
+            self.movie.bufferedframe_num = -1
+        self.ShowCurrentFrame()
+
+    def OnCheckShowAnn(self, evt):
+        """"Show annotation" box checked. Repaint current frame."""
+        self.ShowCurrentFrame()
+        self.menu.Enable(xrc.XRCID('menu_playback_tails'), self.menu.IsChecked(xrc.XRCID('menu_playback_show_ann')))
+
+    def OnCheckRefresh(self, evt):
+        if self.menu.IsChecked(xrc.XRCID('menu_do_refresh')):
+            self.do_refresh = True
+        else:
+            self.do_refresh = False
+        if self.tracking:
+            self.set_rate_text(use_refresh=True)
+
+    def OnCheckDim(self, evt):
+        self.ShowCurrentFrame()
+
+    def OnTailLength(self, evt):
+        dlg = wx.NumberEntryDialog(self.frame, 'Enter new tail length', '(0-200 frames)', 'Tail Length', value=params.tail_length, min=0, max=200)
+        if dlg.ShowModal() == wx.ID_OK:
+            params.tail_length = dlg.GetValue()
+        dlg.Destroy()
+        self.ShowCurrentFrame()
+
+    def OnLineThickness(self, evt):
+        dlg = wx.NumberEntryDialog(self.frame, 'Enter new line thickness', '(1-5 pixels)', 'Line thickness', value=params.ellipse_thickness, min=1, max=5)
+        if dlg.ShowModal() == wx.ID_OK:
+            params.ellipse_thickness = dlg.GetValue()
+        dlg.Destroy()
+        self.ShowCurrentFrame()
+
+    def IsBGModel(self):
+        return hasattr(self.bg_imgs, 'center')
+
+    def CheckForBGModel(self):
+        if hasattr(self.bg_imgs, 'center'):
+            return True
+        if params.feedback_enabled:
+            if self.bg_imgs.use_median:
+                algtxt = 'Median'
+            else:
+                algtxt = 'Mean'
+            if not DEBUG:
+                msgtxt = 'Background model has not been computed for this movie.\nAutomatically estimate using the following parameters?\n(For better results, use Settings->Background tools instead.)\n\nAlgorithm: %s\nNumber of Frames: %d' % (algtxt, self.bg_imgs.n_bg_frames)
+                if wx.MessageBox(msgtxt, 'Auto-calculate?', wx.YES_NO) == wx.NO:
+                    return False
+        return self.OnComputeBg()
+
+    def CheckForShapeModel(self):
+        havevalue = not params.maxshape.area == 9999.0
+        haveshape = not num.isinf(params.maxshape.area)
+        if haveshape and havevalue:
+            return True
+        if params.interactive and not DEBUG:
+            if haveshape:
+                msgtxt = 'Shape model has not been automatically computed for this movie. Currently:\n\nMin Area = %.2f\nMax Area = %.2f\n\nDo you want to automatically compute now with the following parameters?\n\nNumber of Frames: %d\nNumber of Standard Deviations: %.2f' % (params.minshape.area, params.maxshape.area, params.n_frames_size, params.n_std_thresh)
+            else:
+                msgtxt = 'Shape is currently unbounded. Do you want to automatically compute now with the following parameters?\n\nNumber of Frames: %d\nNumber of Standard Deviations: %.2f' % (params.n_frames_size, params.n_std_thresh)
+            resp = wx.MessageBox(msgtxt, 'Auto-calculate?', wx.YES_NO | wx.CANCEL)
+            if resp == wx.NO:
+                return True
+            if resp == wx.CANCEL:
+                return False
+        return self.OnComputeShape()
+
+    def OnDebugPrintIntervals(self, evt):
+        print 'DEBUG INTERVALS: framestracked = [%d,%d]' % (self.ann_file.firstframetracked, self.ann_file.lastframetracked)
+        sys.stdout.flush()
+
+    def OnDebugPrintFrame(self, evt):
+        q = wx.TextEntryDialog(self.frame, 'Frames tracked: %d through %d' % self.ann_file.firstframetracked, 'Choose frame to print', '0')
+        q.ShowModal()
+        v = q.GetValue()
+        try:
+            i = int(v)
+            if i < self.ann_file.firstframetracked or i > self.ann_file.lastframetracked:
+                raise NotImplementedError
+        except:
+            print 'DEBUG FRAME: Must enter integer between %d and %d' % (self.ann_file.firstframetracked, self.ann_file.lastframetracked)
+        else:
+            print 'DEBUG FRAME: Frame %d = ' % i + str(self.ann_file[i])
+
+        sys.stdout.flush()
+
+
+def str222tuples(string):
+    """Converts string into two 2-tuples."""
+    vals = string.split()
+    for vv in range(len(vals)):
+        vals[vv] = int(vals[vv].strip('(), '))
+
+    return ((vals[0], vals[1]), (vals[2], vals[3]))
+
+
+def str22tuple(string):
+    """Converts string into a 2-tuple."""
+    vals = string.split()
+    for vv in range(len(vals)):
+        vals[vv] = int(vals[vv].strip('(), '))
+
+    return (vals[0], vals[1])

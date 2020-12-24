@@ -1,0 +1,121 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /aedir_pproc/pwd/expreset.py
+# Compiled at: 2020-02-05 10:20:59
+# Size of source mod 2**32: 4635 bytes
+"""
+aedir_pproc.pwd.expreset - Remove expired msPwdResetObject attributes
+"""
+import time
+from socket import getfqdn
+import ldap0, ldap0.functions, aedir.process
+from aedirpwd_cnf import FILTERSTR_EXPIRE, NOTIFY_OLDEST_TIMESPAN, PWD_ADMIN_LEN, SERVER_ID
+from ..__about__ import __version__, __author__, __license__
+
+class AEDIRPwdJob(aedir.process.AEProcess):
+    __doc__ = '\n    Job instance\n    '
+    script_version = __version__
+    notify_oldest_timespan = NOTIFY_OLDEST_TIMESPAN
+    user_attrs = [
+     'objectClass',
+     'uid',
+     'cn',
+     'displayName',
+     'description',
+     'mail',
+     'creatorsName']
+    admin_attrs = [
+     'objectClass',
+     'uid',
+     'cn',
+     'mail']
+
+    def __init__(self, server_id):
+        aedir.process.AEProcess.__init__(self)
+        self.host_fqdn = getfqdn()
+        self.server_id = server_id
+        self.notification_counter = 0
+        self._smtp_conn = None
+        self.logger.debug('running on %r with (serverID %r)', self.host_fqdn, self.server_id)
+
+    def _get_time_strings(self):
+        """
+        Determine
+        1. oldest possible last timestamp (sounds strange, yeah!)
+        2. and current time
+        """
+        current_time = time.time()
+        return (
+         ldap0.functions.strf_secs(current_time - self.notify_oldest_timespan),
+         ldap0.functions.strf_secs(current_time))
+
+    def _expire_pwd_reset(self, last_run_timestr, current_run_timestr):
+        """
+        Remove expired msPwdResetObject attributes
+        """
+        expired_pwreset_filter = FILTERSTR_EXPIRE.format(currenttime=current_run_timestr)
+        ldap_results = self.ldap_conn.search_s((self.ldap_conn.search_base),
+          (ldap0.SCOPE_SUBTREE),
+          filterstr=expired_pwreset_filter,
+          attrlist=[
+         'objectClass',
+         'msPwdResetExpirationTime',
+         'msPwdResetTimestamp',
+         'msPwdResetAdminPw'])
+        self.logger.debug('%d expired password resets found with %r', len(ldap_results), expired_pwreset_filter)
+        for res in ldap_results:
+            self.logger.debug('Found %r: %r', res.dn_s, res.entry_as)
+            ldap_mod_list = [
+             (
+              ldap0.MOD_DELETE, b'objectClass', [b'msPwdResetObject']),
+             (
+              ldap0.MOD_DELETE,
+              b'msPwdResetTimestamp',
+              [
+               res.entry_as['msPwdResetTimestamp'][0]]),
+             (
+              ldap0.MOD_DELETE,
+              b'msPwdResetExpirationTime',
+              [
+               res.entry_as['msPwdResetExpirationTime'][0]]),
+             (
+              ldap0.MOD_DELETE, b'msPwdResetEnabled', None),
+             (
+              ldap0.MOD_DELETE, b'msPwdResetPasswordHash', None)]
+            if not PWD_ADMIN_LEN:
+                if 'msPwdResetAdminPw' in res.entry_as:
+                    ldap_mod_list.append((
+                     ldap0.MOD_DELETE, b'msPwdResetAdminPw', None))
+                try:
+                    self.ldap_conn.modify_s(res.dn_s, ldap_mod_list)
+                except ldap0.LDAPError as ldap_error:
+                    try:
+                        self.logger.warning('LDAPError removing msPwdResetObject attrs in %r: %s', res.dn_s, ldap_error)
+                    finally:
+                        ldap_error = None
+                        del ldap_error
+
+                else:
+                    self.logger.info('Removed msPwdResetObject attributes from %r', res.dn_s)
+
+    def run_worker(self, state):
+        """
+        Run the job
+        """
+        last_run_timestr, current_run_timestr = self._get_time_strings()
+        self._expire_pwd_reset(last_run_timestr, current_run_timestr)
+        return current_run_timestr
+
+
+def main():
+    """
+    run the process
+    """
+    with AEDIRPwdJob(SERVER_ID) as (ae_process):
+        ae_process.run(max_runs=1)
+
+
+if __name__ == '__main__':
+    main()

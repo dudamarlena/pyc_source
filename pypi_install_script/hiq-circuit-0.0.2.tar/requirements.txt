@@ -1,0 +1,2 @@
+mpi4py
+hiq-projectq>=0.6.0

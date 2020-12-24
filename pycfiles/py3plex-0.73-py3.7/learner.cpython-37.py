@@ -1,0 +1,259 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/py3plex/algorithms/hedwig/learners/learner.py
+# Compiled at: 2019-02-24 13:10:35
+# Size of source mod 2**32: 10842 bytes
+"""
+Main learner class.
+
+@author: anze.vavpetic@ijs.si
+"""
+from collections import defaultdict
+from ..core import UnaryPredicate, Rule, Example
+from core.settings import logger
+from stats.significance import is_redundant
+from stats.scorefunctions import interesting
+
+class Learner:
+    __doc__ = '\n    Learner class, supporting various types of induction\n    from the knowledge base.\n\n    TODO:\n        - bottom clause approach\n        - feature construction\n    '
+    Similarity = 'similarity'
+    Improvement = 'improvement'
+    Default = 'default'
+
+    def __init__(self, kb, n=None, min_sup=1, sim=1, depth=4, target=None, use_negations=False, optimal_subclass=False):
+        self.kb = kb
+        self.n = n
+        self.min_sup = min_sup
+        self.sim = sim
+        self.extending = Learner.Improvement
+        self.depth = depth
+        self.use_negations = use_negations
+        self.optimal_subclass = optimal_subclass
+        if kb.is_discrete_target():
+            self.target = list(self.kb.class_values)[0] if not target else target
+        else:
+            self.target = None
+        self.pruned_subclasses = self._pruned_subclasses()
+        self.pruned_superclasses_closure = self._pruned_superclasses()
+        self.implicit_roots = self._implicit_roots()
+
+    def _pruned_subclasses(self):
+        min_sup = lambda pred: self.kb.n_members(pred) >= self.min_sup
+        pruned_subclasses = {}
+        for pred in self.kb.predicates:
+            subclasses = self.kb.get_subclasses(pred)
+            pruned_subclasses[pred] = filter(min_sup, subclasses)
+
+        return pruned_subclasses
+
+    def _pruned_superclasses(self):
+        min_sup = lambda pred: self.kb.n_members(pred) >= self.min_sup
+        pruned_superclasses = {}
+        for pred in self.kb.predicates:
+            superclasses = self.kb.super_classes(pred)
+            pruned_superclasses[pred] = filter(min_sup, superclasses)
+
+        return pruned_superclasses
+
+    def _implicit_roots(self):
+        implicit_roots = set()
+        n_examples = self.kb.n_examples()
+        for pred in self.kb.predicates:
+            if self.kb.n_members(pred) == n_examples:
+                implicit_roots.add(pred)
+
+        return implicit_roots
+
+    def get_subclasses(self, pred):
+        return self.pruned_subclasses[pred.label]
+
+    def get_superclasses(self, pred):
+        return self.pruned_superclasses_closure[pred]
+
+    def is_implicit_root(self, pred):
+        return pred in self.implicit_roots
+
+    def induce(self):
+        """
+        Induces rules for the given knowledge base.
+        """
+        root_pred = self.kb.get_root()
+        rules = [
+         Rule((self.kb), predicates=[root_pred], target=(self.target))]
+        rules = self._Learner__induce_level(rules)
+        interesting_rules = list(filter(interesting, rules))
+        return interesting_rules
+
+    def __induce_level(self, rules):
+        """
+        Specializes the rules for the last level with unary predicates.
+        """
+        while 1:
+            old_score = self.group_score(rules)
+            new_rules = rules[:]
+            for i, rule in enumerate(rules):
+                specializations = self.specialize(rule)
+                self.extend(new_rules, specializations)
+
+            rules = sorted(new_rules, key=(lambda rule: rule.score),
+              reverse=True)[:self.n]
+            new_score = self.group_score(rules)
+            logger.debug('Old score: %.3f, New score: %.3f' % (old_score, new_score))
+            if 1 - abs(old_score / (new_score + 0.0001)) < 0.01:
+                break
+
+        return rules
+
+    def extend(self, rules, specializations):
+        """
+        Extends the ruleset in the given way.
+        """
+        if self.extending == Learner.Default:
+            return rules.extend(specializations)
+        if self.extending == Learner.Improvement:
+            return self.extend_replace_worst(rules, specializations)
+        if self.extending == Learner.Similarity:
+            return self.extend_with_similarity(rules, specializations)
+
+    def extend_with_similarity(self, rules, specializations):
+        """
+        Extends the list based on how similar is 'new_rule'
+        to the rules contained in 'rules'.
+        """
+        for new_rule in specializations:
+            tmp_rules = rules[:]
+            for rule in tmp_rules:
+                sim = rule.similarity(new_rule)
+                if sim >= self.sim and len(rules) > 0.5 * self.n:
+                    break
+            else:
+                rules.append(new_rule)
+
+    def extend_replace_worst(self, rules, specializations):
+        """
+        Extends the list by replacing the worst rules.
+        """
+
+        def is_similar(new_rule):
+            for rule in rules[:]:
+                if rule.similarity(new_rule) == 1:
+                    return True
+
+            return False
+
+        improved = False
+        for new_rule in sorted(specializations, key=(lambda rule: rule.score)):
+            worst = sorted(rules, key=(lambda rule: rule.score))[0]
+            if len(rules) < self.n:
+                rules.append(new_rule)
+                improved = True
+            elif new_rule.score > worst.score:
+                is_similar(new_rule) or self._replace(rules, worst, new_rule)
+                improved = True
+
+        return improved
+
+    def _replace(self, rules, worst, new_rule):
+        idx = rules.index(worst)
+        rules[idx] = new_rule
+
+    def specialize(self, rule):
+        """
+        Returns a list of all specializations of 'rule'.
+        """
+        is_unary = lambda p: isinstance(p, UnaryPredicate)
+
+        def specialize_optimal_subclass(rule):
+            rules = []
+            eligible_preds = rule.shared_var[rule.latest_var]
+            for pred in filter(is_unary, eligible_preds):
+                for sub_class in self.get_subclasses(pred):
+                    logger.debug('Swapping with %s' % sub_class)
+                    new_rule = rule.clone_swap_with_subclass(pred, sub_class)
+                    if self.can_specialize(new_rule):
+                        rules.append(new_rule)
+                        rules.extend(specialize_optimal_subclass(new_rule))
+
+            return rules
+
+        logger.debug('Specializing rule: %s' % rule)
+        specializations = []
+        eligible_preds = rule.shared_var[rule.latest_var]
+        if not self.optimal_subclass:
+            for pred in filter(is_unary, eligible_preds):
+                logger.debug('Predicate to swap: %s' % pred.label)
+                for sub_class in self.get_subclasses(pred):
+                    logger.debug('Swapping with %s' % sub_class)
+                    new_rule = rule.clone_swap_with_subclass(pred, sub_class)
+                    if self.can_specialize(new_rule):
+                        specializations.append(new_rule)
+
+        else:
+            specializations.extend(specialize_optimal_subclass(rule))
+        if self.use_negations:
+            for pred in filter(is_unary, eligible_preds):
+                logger.debug('Predicate to negate: %s' % pred.label)
+                new_rule = rule.clone_negate(pred)
+                if self.can_specialize(new_rule):
+                    specializations.append(new_rule)
+
+        if len(eligible_preds) == 1 and not eligible_preds[0].label == self.kb.get_root().label:
+            if not self.is_implicit_root(eligible_preds[0].label):
+                supers = set()
+                for pred in eligible_preds:
+                    if type(pred) == str:
+                        supers.update(self.get_superclasses(pred.label))
+                        supers.add(pred)
+
+                for lvl in sorted(self.kb.levels.keys()):
+                    level = self.kb.levels[lvl]
+                    diff = level.difference(supers)
+                    if diff:
+                        for pred in sorted(list(diff)):
+                            last_pred = rule.predicates[(-1)]
+                            new_rule = rule.clone_append(pred, producer_pred=last_pred)
+                            if self.can_specialize(new_rule) and self.non_redundant(rule, new_rule):
+                                specializations.append(new_rule)
+                                break
+
+            if isinstance(rule.predicates[(-1)], UnaryPredicate):
+                specializations.extend(self.specialize_add_relation(rule))
+        logger.debug('All specializations %s' % [str(rule) for rule in specializations])
+        return specializations
+
+    def specialize_add_relation(self, rule):
+        """
+        Specialize with new binary relation.
+        """
+        specializations = []
+        for pred in self.kb.binary_predicates:
+            last_pred = rule.predicates[(-1)]
+            new_rule = rule.clone_append(pred, producer_pred=last_pred, bin=True)
+            if self.can_specialize(new_rule):
+                specializations.append(new_rule)
+
+        return specializations
+
+    def can_specialize(self, rule):
+        """
+        Is the rule good enough to be further refined?
+        """
+        return rule.coverage >= self.min_sup and rule.size() <= self.depth
+
+    def non_redundant(self, rule, new_rule):
+        """
+        Is the rule non-redundant compared to its immediate generalization?
+        """
+        if new_rule.score < rule.score:
+            return False
+        if rule.target_type == Example.Ranked:
+            return True
+        return not is_redundant(rule, new_rule)
+
+    def group_score(self, rules):
+        """
+        Calculates the score of the whole list of rules.
+        """
+        return sum([rule.score for rule in rules])

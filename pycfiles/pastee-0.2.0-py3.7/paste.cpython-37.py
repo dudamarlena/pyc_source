@@ -1,0 +1,233 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win-amd64\egg\pastee\paste.py
+# Compiled at: 2020-03-27 20:45:16
+# Size of source mod 2**32: 7229 bytes
+from typing import Dict, Optional, List, Union
+import aiohttp, datetime, json, base64, hashlib
+from Crypto.Cipher import AES
+from Crypto import Random
+BLOCK_SIZE = 16
+
+def pad(text: str):
+    return text + (BLOCK_SIZE - len(text) % BLOCK_SIZE) * chr(BLOCK_SIZE - len(text) % BLOCK_SIZE)
+
+
+def unpad(text: str):
+    return text[:-ord(text[len(text) - 1:])]
+
+
+class MainPaste:
+
+    def __init__(self, data: dict):
+        self.raw = data
+        self._sucess = data['sucess']
+        self._id = data['paste']['id']
+        self._encrypted = data['paste']['encrypted']
+        self._description = data['paste']['description']
+        self._views = data['paste']['views']
+        self._created_at = datetime.datetime.fromisoformat(data['paste']['created_at'])
+        self._expires_at = datetime.datetime.fromisoformat(data['paste']['expires_at'])
+        self._sections = [PasteSection(d) for d in data['paste']['sections']]
+
+    @property
+    def sucess(self):
+        return self._sucess
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def encrypted(self):
+        return self._encrypted
+
+    @property
+    def description(self):
+        return self._description
+
+    @property
+    def views(self):
+        return self._views
+
+
+class Syntax:
+
+    def __init__(self, context):
+        self.raw = context
+        self._id = context['id']
+        self._short = context['short']
+        self._name = context['name']
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def short(self):
+        return self._short
+
+    @property
+    def id(self):
+        return self._id
+
+
+class PasteSection:
+
+    def __init__(self, context: dict):
+        self.raw = context
+        self._name = context['name']
+        self._syntax = Syntax(context['syntax'])
+        self._contents = context['content']
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def syntax(self):
+        return self._syntax
+
+    @property
+    def contents(self):
+        return self._contents
+
+
+class PasteFormat:
+
+    def __init__(self, contents: str, name: Optional[str]='Paste', syntax: Optional[str]=None):
+        self._name = name
+        self._syntax = syntax
+        self._contents = contents
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def syntax(self):
+        return self._syntax
+
+    @property
+    def contents(self):
+        return self._contents
+
+
+class Paste:
+
+    def __init__(self, context: dict):
+        self.raw = context
+        self._id = context['id']
+        self._description = context['description']
+        self._created_at = datetime.datetime.fromisoformat(context['created_at'])
+        self._sections = [PasteSection(item) for item in context['sections']]
+
+
+class PasteResults:
+
+    def __init__(self, paste: dict):
+        self.raw = paste
+        self._per_page = paste['per_page']
+        self._total = paste['total']
+        self._current_page = paste['current_page']
+        self._last_page = paste['last_page']
+        self._next_page_url = paste['next_page_url']
+        self._from = paste['from']
+        self._to = paste['to']
+        self._data = [Paste(item) for item in paste['data']]
+
+    @property
+    def per_page(self):
+        return self._per_page
+
+    @property
+    def total(self):
+        return self._total
+
+    @property
+    def current_page(self):
+        return self._current_page
+
+    @property
+    def last_page(self):
+        return self._last_page
+
+    @property
+    def next_page_url(self):
+        return self._next_page_url
+
+    @property
+    def start(self):
+        return self._from
+
+    @property
+    def to(self):
+        return self._to
+
+    @property
+    def data(self):
+        self._data
+
+
+class Client:
+
+    def __init__(self, authorization: str, **kwargs) -> None:
+        self.auth_code = authorization
+        self.headers = {}
+        self.session = None
+        self.API_BASE = kwargs.get('API_BASE', 'https://api.paste.ee/v1')
+
+    async def initialize(self) -> None:
+        self.session = aiohttp.ClientSession()
+        self.headers['X-Auth-Token'] = self.auth_code
+
+    async def request(self, method: str, url: str, **params) -> dict:
+        async with (self.session.request)(method, f"{self.API_BASE}{url}", headers=self.headers, **params) as r:
+            return await r.json(content_type=None)
+
+    async def post(self, url: str, **params) -> dict:
+        return await (self.request)('POST', url, **params)
+
+    async def get(self, url: str, **params) -> dict:
+        return await (self.request)('GET', url, **params)
+
+    async def delete(self, url: str, **params) -> dict:
+        return await (self.request)('DELETE', url, **params)
+
+    async def get_pastes(self, page: int=1, per_page: int=25, **params) -> PasteResults:
+        return await PasteResults((self.get)(f"/pastes?perpage={per_page}&page={page}", **params))
+
+    def encrypt(self, raw_text: str, secret: str):
+        private_key = hashlib.sha256(secret.encode('utf-8')).digest()
+        raw = pad(raw_text)
+        iv = Random.new().read(AES.block_size)
+        cipher = AES.new(private_key, AES.MODE_CBC, iv)
+        return base64.b64encode(iv + cipher.encrypt(raw))
+
+    def decrypt(self, to_encrypt: str, secret: str):
+        private_key = hashlib.sha256(secret.encode('utf-8')).digest()
+        enc = base64.b64decode(to_encrypt)
+        iv = enc[:16]
+        cipher = AES.new(private_key, AES.MODE_CBC, iv)
+        return unpad(cipher.decrypt(enc[16:]))
+
+    async def create_paste(self, sections: Union[(PasteFormat, List[PasteFormat])], encrypted: Optional[bool]=False, description: Optional[str]='', **params):
+        paste_formats = []
+        for section in sections:
+            paste_formats.append({'name':section.name, 
+             'syntax':section.syntax, 
+             'contents':section.contents})
+
+        body = json.dumps({'encrypt':encrypted, 
+         'description':description, 
+         'sections':paste_formats})
+        return await (self.post)('/pastes', headers={'Content-Type': 'application/json'}, data=body, **params)
+
+    async def get_paste(self, paste_id: str) -> MainPaste:
+        return MainPaste(await self.get(f"/pastes/{paste_id}"))
+
+    async def delete_paste(self, paste_id: str) -> bool:
+        r = await self.delete(f"/pastes/{paste_id}")
+        return r['sucess']

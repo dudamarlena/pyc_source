@@ -1,0 +1,31 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.macosx-10.7-x86_64/egg/airflow/operators/latest_only_operator.py
+# Compiled at: 2019-09-11 03:47:34
+# Size of source mod 2**32: 2455 bytes
+import pendulum
+from airflow.models import BaseOperator, SkipMixin
+
+class LatestOnlyOperator(BaseOperator, SkipMixin):
+    """LatestOnlyOperator"""
+    ui_color = '#e9ffdb'
+
+    def execute(self, context):
+        if context['dag_run']:
+            if context['dag_run'].external_trigger:
+                self.log.info('Externally triggered DAG_Run: allowing execution to proceed.')
+                return
+        now = pendulum.utcnow()
+        left_window = context['dag'].following_schedule(context['execution_date'])
+        right_window = context['dag'].following_schedule(left_window)
+        self.log.info('Checking latest only with left_window: %s right_window: %s now: %s', left_window, right_window, now)
+        if not left_window < now <= right_window:
+            self.log.info('Not latest execution, skipping downstream.')
+            downstream_tasks = context['task'].get_flat_relatives(upstream=False)
+            self.log.debug('Downstream task_ids %s', downstream_tasks)
+            if downstream_tasks:
+                self.skip(context['dag_run'], context['ti'].execution_date, downstream_tasks)
+            self.log.info('Done.')
+        else:
+            self.log.info('Latest, allowing execution to proceed.')

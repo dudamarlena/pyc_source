@@ -1,0 +1,16 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/pympris/__init__.py
+# Compiled at: 2013-12-11 14:49:35
+from .MediaPlayer import MediaPlayer
+from .PlayLists import PlayLists, PlaylistOrdering
+from .Player import Player
+from .Root import Root
+from .TrackList import TrackList
+from .common import available_players, PyMPRISException
+__version__ = '1.4'
+__description__ = 'Library to control media players using MPRIS2 interfaces'
+requires = []
+README = 'pympris is a Python library used\nto control media players using MPRIS2 interfaces.\n\nUsage\n=====\n\n::\n\nimport gobject\nimport dbus\nfrom dbus.mainloop.glib import DBusGMainLoop\n\nimport pympris\n\ndbus_loop = DBusGMainLoop()\nbus = dbus.SessionBus(mainloop=dbus_loop)\n\n# get unique ids for all available players\nplayers_ids = list(pympris.available_players())\nmp = pympris.MediaPlayer(players_ids[1], bus)\n\n# mp.root implements org.mpris.MediaPlayer2 interface\n# mp.player implements org.mpris.MediaPlayer2.Player\n# mp.track_list implements org.mpris.MediaPlayer2.TrackList\n# mp.playlists implements org.mpris.MediaPlayer2.Playlists\n\n# print player Identity\nprint mp.root.Identity\n\nif mp.root.CanRaise:\n    mp.root.Raise()\n\nif mp.player.CanPlay and mp.player.CanPause:\n    mp.player.PlayPause()\n\nmp.player.Volume = mp.player.Volume*2\n\nif mp.player.CanGoNext:\n    mp.player.Next()\n\ntracks = mp.track_list.Tracks\nfor track_id in tracks:\n    print track_id\n\nif len(tracks) > 1:\n    mp.track_list.RemoveTrack(tracks[-1])\n    mp.track_list.GoTo(tracks[0])\n\nn = mp.playlists.PlaylistCount\nordering = pympris.PlaylistOrdering.LastPlayDate\nplaylists = mp.playlists.GetPlaylists(0, n, ordering, reversed=False)\npl_id, pl_name, pl_icon = playlists[-2]\nmp.playlists.ActivatePlaylist(pl_id)\n\n# setup signal handlers\n\n\ndef seeked(x):\n    print(x)\n\n\ndef PlaylistChanged(arg):\n    print "PlaylistChanged", arg\n\n\ndef TrackMetadataChanged(track_id, metadata):\n    print "TrackMetadataChanged", track_id, metadata\n\n\ndef TrackListReplaced(tracks, current_track):\n    print "TrackListReplaced", tracks, current_track\n\n\ndef TrackAdded(metadata, after_track):\n    print "TrackAdded", metadata, after_track\n\n\ndef TrackRemoved(track_id):\n    print "TrackRemoved", track_id\n\n\nmp.player.register_signal_handler(\'Seeked\', seeked)\nmp.playlists.register_signal_handler(\'PlaylistChanged\', PlaylistChanged)\nmp.track_list.register_signal_handler(\'TrackMetadataChanged\',\n                                      TrackMetadataChanged)\nmp.track_list.register_signal_handler(\'TrackListReplaced\', TrackListReplaced)\nmp.track_list.register_signal_handler(\'TrackAdded\', TrackAdded)\nmp.track_list.register_signal_handler(\'TrackRemoved\', TrackRemoved)\n\nloop = gobject.MainLoop()\nloop.run()\n\n'

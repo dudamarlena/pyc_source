@@ -1,0 +1,117 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: \Python34\Lib\site-packages\autohdl\configuration.py
+# Compiled at: 2015-05-17 13:47:45
+# Size of source mod 2**32: 3914 bytes
+import pprint, logging, sys, os
+from copy import deepcopy
+import re, shutil, importlib
+from autohdl import FILE_USER_CFG, FILE_DEFAULT_CFG, CONSTRAINTS_EXT
+alog = logging.getLogger(__name__)
+
+def load_default_cfg():
+    sys.path.append(os.path.dirname(FILE_DEFAULT_CFG))
+    module_with_default_cfg = os.path.splitext(os.path.basename(FILE_DEFAULT_CFG))[0]
+    return importlib.import_module(module_with_default_cfg).cfg
+
+
+def load_user_cfg():
+    sys.path.append(os.path.dirname(FILE_USER_CFG))
+    module_with_user_cfg = os.path.splitext(os.path.basename(FILE_USER_CFG))[0]
+    return importlib.import_module(module_with_user_cfg).cfg
+
+
+def dump_relative_paths(cfg):
+    cfg_old = deepcopy(cfg)
+    convert_to_relative(cfg)
+    if cfg != cfg_old:
+        main_script = sys.modules['__main__'].__file__
+        with open(main_script) as (f):
+            contents = f.read()
+            for p, r in zip(cfg_old['src'], cfg['src']):
+                if p != r:
+                    contents = re.sub(pattern=p, repl=r, string=contents, flags=re.MULTILINE | re.S)
+                    continue
+
+            for p, r in zip(cfg_old['include_paths'], cfg['include_paths']):
+                if p != r:
+                    contents = re.sub(pattern=p, repl=r, string=contents, flags=re.MULTILINE | re.S)
+                    continue
+
+        with open(main_script, 'w') as (f):
+            f.write(contents)
+
+
+def convert_to_relative(cfg):
+    d = {'src': [],  'include_paths': []}
+    for k in d:
+        for i in cfg[k]:
+            if not os.path.exists(i):
+                sys.exit('Wrong path {}, cwd = {}'.format(i, os.getcwd()))
+            afile = os.path.relpath(i).replace('\\', '/')
+            if not os.path.exists(afile):
+                sys.exit('Wrong path {}, cwd = {}'.format(afile, os.getcwd()))
+            d[k].append(afile)
+
+    cfg.update(d)
+
+
+def convert_to_abs(cfg):
+    d = {'src': [],  'include_paths': []}
+    for k in d:
+        for i in cfg[k]:
+            if not os.path.exists(i):
+                sys.exit('Wrong path {}, cwd = {}'.format(i, os.getcwd()))
+            if os.path.isabs(i):
+                continue
+            afile = os.path.abspath(i).replace('\\', '/')
+            if not os.path.exists(afile):
+                sys.exit('Wrong path {}, cwd = {}'.format(afile, os.getcwd()))
+            d[k].append(afile)
+
+    cfg.update(d)
+
+
+def load_env(cfg):
+    cfg['cwd'] = os.getcwd()
+    cfg['dsn_root'] = os.path.dirname(os.getcwd())
+    cfg['dsn_name'] = os.path.basename(cfg['dsn_root'])
+
+
+def get_constraints(cfg):
+    return [i for i in cfg['src'] if os.path.splitext(i)[1] in CONSTRAINTS_EXT]
+
+
+def load(script_cfg, command_line_cfg):
+    result_cfg = {}
+    load_env(result_cfg)
+    default_cfg = load_default_cfg()
+    user_cfg = load_user_cfg()
+    alog.debug('Script config:\n ' + pprint.pformat(script_cfg))
+    result_cfg.update(default_cfg)
+    result_cfg.update(user_cfg)
+    result_cfg.update(script_cfg)
+    {result_cfg.update({k: v}) for k, v in vars(command_line_cfg).items() if v}
+    if command_line_cfg.mcs:
+        result_cfg.update({'eeprom_kilobytes': command_line_cfg.mcs})
+    dump_relative_paths(result_cfg)
+    convert_to_abs(result_cfg)
+    result_cfg.update({'constraints': get_constraints(result_cfg)})
+    return result_cfg
+
+
+def copy():
+    dst = FILE_DEFAULT_CFG
+    src = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'data', 'kungfu.py')
+    folder = os.path.dirname(dst)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    shutil.copy(src, dst)
+    dst = FILE_USER_CFG
+    if not os.path.exists(dst):
+        folder = os.path.dirname(dst)
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        shutil.copy(src, dst)

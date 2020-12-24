@@ -1,0 +1,171 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.5 (62131)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.6-i386/egg/birdsuitepriors/birdseed/sumz_reformat.py
+# Compiled at: 2010-07-13 12:32:46
+import sys, re, optparse, mpgutils.utils as utils
+from mpgutils import fk_utils
+numlines_sample = 100000
+key_begin = 1
+na_get = re.compile('NA\\d+', re.IGNORECASE)
+
+def loadGender(genderFile):
+    dctGender = {}
+    f = open(genderFile, 'r')
+    for strLine in f:
+        if not strLine.startswith('sampleID'):
+            line = strLine.split()
+            dctGender[line[0]] = line[1]
+
+    f.close()
+    return dctGender
+
+
+def extract_na(colname):
+    na_match = na_get.search(colname)
+    if na_match:
+        return na_match.group().upper()
+    else:
+        sys.exit('Could not extract NA # from %s!' % colname)
+
+
+def get_answers(snp, hapmap_key, sample_hapmap_index):
+    return [ hapmap_key[snp][i] for i in sample_hapmap_index ]
+
+
+def floatformat(x):
+    return '%2.4f' % x
+
+
+def calculateAverageIntensity(inFile, strMissingValueLabel):
+    print 'Calculating the average intensity...'
+    line = '#'
+    f = open(inFile, 'r')
+    while line[0] == '#':
+        line = f.readline()
+
+    f.readline()
+    total = 0
+    probes_sampled = 0
+    lines_sampled = 0
+    for line in f:
+        if lines_sampled >= numlines_sample:
+            break
+        line = line.split()
+        num_cols = len(line)
+        for k in range(1, num_cols):
+            if line[k] != strMissingValueLabel:
+                total += float(line[k])
+                probes_sampled += 1
+
+        lines_sampled = lines_sampled + 1
+
+    f.close()
+    average_intensity = total / probes_sampled
+    print 'The average intensity is: %2.2f' % average_intensity
+    return average_intensity
+
+
+def loadHapmapAnswers(hapmap_answers_fname):
+    print 'Loading hapmap data...'
+    f = open(hapmap_answers_fname, 'r')
+    line = '#'
+    while line[0] == '#':
+        line = f.readline()
+
+    hapmap_header = line.split()
+    hapmap_header = hapmap_header[key_begin:]
+    hapmap_key = {}
+    counter = 0
+    for line in f:
+        line = line.split()
+        hapmap_key[line[0]] = line[key_begin:]
+        counter = counter + 1
+        if counter % 50000 == 0:
+            print str(counter)
+
+    f.close()
+    return (hapmap_key, hapmap_header)
+
+
+def processLine(a_line, b_line, hapmap_key, sample_hapmap_index, average_intensity, strMissingValueLabel, out):
+    snp = a_line[0][0:-2]
+    if snp != b_line[0][0:-2]:
+        sys.exit('Mismatched SNPs!  %s %s Exiting' % (snp, b_line[0]))
+    missingDataIndex = fk_utils.indices(a_line, strMissingValueLabel)
+    if len(missingDataIndex) > 0:
+        a_line = fk_utils.arbNegSlice(a_line, missingDataIndex)
+    missingDataIndex = fk_utils.indices(b_line, strMissingValueLabel)
+    if len(missingDataIndex) > 0:
+        b_line = fk_utils.arbNegSlice(b_line, missingDataIndex)
+    a_thetas = [ float(e) / average_intensity for e in a_line[1:] ]
+    b_thetas = [ float(e) / average_intensity for e in b_line[1:] ]
+    snp_answers = get_answers(snp, hapmap_key, sample_hapmap_index)
+    out.write(snp)
+    for i in xrange(0, len(a_thetas)):
+        out.write(';' + snp_answers[i] + ' ' + floatformat(a_thetas[i]) + ' ' + floatformat(b_thetas[i]))
+
+    out.write('\n')
+
+
+def processHeader(headerLine, hapmap_header, gender_dictionary, out):
+    source_header = headerLine.split()
+    source_header = [ extract_na(e) for e in source_header[1:] ]
+    sample_hapmap_index = [ hapmap_header.index(e) for e in source_header ]
+    num_samples = len(source_header)
+    out.write('probeset_id')
+    for na in source_header:
+        if na in gender_dictionary:
+            out.write('\t' + gender_dictionary[na])
+        else:
+            print 'Sample missing from gender dictionary:' + na + ' quitting!'
+            sys.exit(1)
+
+    out.write('\n')
+    return sample_hapmap_index
+
+
+def writeSumZ(input_fname, strMissingValueLabel, hapmap_answers_fname, hapmapGenderFile, output_fname):
+    gender_dictionary = loadGender(hapmapGenderFile)
+    average_intensity = calculateAverageIntensity(input_fname, strMissingValueLabel)
+    (hapmap_key, hapmap_header) = loadHapmapAnswers(hapmap_answers_fname)
+    print 'Writing out the new table...'
+    f = open(input_fname, 'r')
+    out = open(output_fname, 'w')
+    a_line = None
+    for strLine in f:
+        if not strLine.startswith('#'):
+            if strLine.startswith('probeset_id'):
+                sample_hapmap_index = processHeader(strLine, hapmap_header, gender_dictionary, out)
+            elif a_line is None:
+                a_line = strLine.split()
+            else:
+                b_line = strLine.split()
+                processLine(a_line, b_line, hapmap_key, sample_hapmap_index, average_intensity, strMissingValueLabel, out)
+                a_line = None
+
+    out.close()
+    return
+
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
+    parser = optparse.OptionParser(usage=__doc__)
+    parser.add_option('-o', '--output', dest='output_fname', help='Where to write output.  Default: stdout')
+    parser.add_option('-i', '--intensity_file', dest='input_fname', help='Intensity summary file, (output using the sumz option of apt-probeset-genotype).  Can be\n                      generated by other programs.  The first column name is probeset_id, followed by sample names.  \n                      Each row contains the intensity information for an A or B probe for those samples (with a -A or -B \n                      to indicate which allele is being measured.)  \n                      Example: \n                      probeset_id     NA06985_GW6-R_P2RJ_C_F3.CEL     NA06991_GW6-R_P2RJ_C_E5.CEL\n                      SNP_A-2131660-A 1403.81353      1175.07797\n                      SNP_A-2131660-B 1507.16102      1160.32130      2240.28761')
+    parser.add_option('--genotype_file', dest='hapmap_answers_fname', help='Hapmap genotype file.  Each row is a SNP, each column an individual.  \n                      SNPS should match the SNPs in the intensity file.\n                      Example:\n                      probeset_id     NA06985 NA06991\n                      AFFX-SNP_10000979       1       1')
+    parser.add_option('--genderFile', dest='hapmapGenderFile', help='Hapmap gender file.  Contains two columns, the sample ID, and a 1 for males, 2 for females.  The file is tab seperated.')
+    parser.add_option('-m', '--missing_value_label', dest='strMissingValueLabel', default='NaN', help='Label of data that is missing from the platform. \nIllumina products do not always have data available for every probe/individual combination. \nDefault is %default.')
+    (dctOptions, lstArgs) = parser.parse_args(argv)
+    lstRequiredOptions = ['output_fname', 'input_fname', 'hapmap_answers_fname', 'hapmapGenderFile']
+    if not utils.validateRequiredOptions(dctOptions, lstRequiredOptions):
+        parser.print_help()
+        return 1
+    writeSumZ(dctOptions.input_fname, dctOptions.strMissingValueLabel, dctOptions.hapmap_answers_fname, dctOptions.hapmapGenderFile, dctOptions.output_fname)
+    return
+
+
+if __name__ == '__main__':
+    sys.exit(main())

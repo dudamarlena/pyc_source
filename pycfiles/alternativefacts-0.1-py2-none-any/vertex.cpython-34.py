@@ -1,0 +1,61 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/alteraparser/syntaxgraph/vertex.py
+# Compiled at: 2015-12-30 04:57:43
+# Size of source mod 2**32: 1418 bytes
+from .abstract_vertex import AbstractVertex
+from .dockable import Dockable
+
+class VertexCategory:
+    NORMAL = 1
+    GROUP_START = 2
+    GROUP_END = 3
+    MATCHER = 4
+    FINAL = 5
+
+
+class Vertex(AbstractVertex, Dockable):
+
+    def __init__(self, category=VertexCategory.NORMAL):
+        AbstractVertex.__init__(self)
+        self._Vertex__successors = []
+        self._category = category
+
+    def get_category(self):
+        return self._category
+
+    def is_normal(self):
+        return self._category == VertexCategory.NORMAL
+
+    def is_group_start(self):
+        return self._category == VertexCategory.GROUP_START
+
+    def is_group_end(self):
+        return self._category == VertexCategory.GROUP_END
+
+    def is_matcher(self):
+        return self._category == VertexCategory.MATCHER
+
+    def is_final(self):
+        return self._category == VertexCategory.FINAL
+
+    def num_successors(self):
+        return len(self._Vertex__successors)
+
+    def nth_successor(self, idx):
+        if 0 <= idx < len(self._Vertex__successors):
+            return self._Vertex__successors[idx]
+        else:
+            return
+
+    def connect(self, dockable):
+        self._Vertex__successors.append(dockable.get_dock_vertex())
+        return dockable
+
+    def get_dock_vertex(self):
+        return self
+
+    def _on_clone_creation(self, original):
+        for successor in original._Vertex__successors:
+            self._Vertex__successors.append(successor.clone())

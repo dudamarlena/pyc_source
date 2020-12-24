@@ -1,0 +1,30 @@
+from distutils.core import setup
+setup(
+  name = 'morphe',
+  packages = ['morphe'],
+  version = '0.4',
+  license='MIT',
+  description = 'Modular Forms',
+  author = 'Navtej Singh',
+  author_email = 'singhnav@umich.edu',
+  url = 'http://www-personal.umich.edu/~singhnav/',
+  download_url = 'https://github.com/singhn27/morphe/archive/v_04.tar.gz',
+  keywords = ['Mathematics', 'Number Theory', 'Modular Forms'],
+  install_requires=[
+          'requests',
+          'time',
+      ],
+  classifiers=[
+    'Development Status :: 3 - Alpha',
+    'Intended Audience :: Developers',
+    'Topic :: Software Development :: Build Tools',
+    'License :: OSI Approved :: MIT License',
+    'Programming Language :: Python :: 2',
+    'Programming Language :: Python :: 2.6',
+    'Programming Language :: Python :: 2.7',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.4',
+    'Programming Language :: Python :: 3.5',
+    'Programming Language :: Python :: 3.6',
+  ],
+)

@@ -1,0 +1,696 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/runner/work/pkgcheck/pkgcheck/build/lib/pkgcheck/checks/repo_metadata.py
+# Compiled at: 2020-02-09 15:46:32
+# Size of source mod 2**32: 24940 bytes
+from collections import defaultdict
+from difflib import SequenceMatcher
+from itertools import chain
+from pkgcore import fetch
+from snakeoil.contexts import patch
+from snakeoil.klass import jit_attr
+from snakeoil.sequences import iflatten_instance
+from snakeoil.strings import pluralism
+from .. import addons, base, results, sources
+from . import Check
+
+class MultiMovePackageUpdate(results.ProfilesResult, results.Warning):
+    __doc__ = 'Entry for package moved multiple times in profiles/updates files.'
+
+    def __init__(self, pkg, moves):
+        super().__init__()
+        self.pkg = pkg
+        self.moves = tuple(moves)
+
+    @property
+    def desc(self):
+        return f"{self.pkg!r}: multi-move update: {' -> '.join(self.moves)}"
+
+
+class OldMultiMovePackageUpdate(results.ProfilesResult, results.Warning):
+    __doc__ = 'Old entry for removed package moved multiple times in profiles/updates files.\n\n    This means that the reported pkg has been moved at least three times and\n    finally removed from the tree. All the related lines should be removed from\n    the update files.\n    '
+
+    def __init__(self, pkg, moves):
+        super().__init__()
+        self.pkg = pkg
+        self.moves = tuple(moves)
+
+    @property
+    def desc(self):
+        return f"{self.pkg!r} unavailable: old multi-move update: {' -> '.join(self.moves)}"
+
+
+class OldPackageUpdate(results.ProfilesResult, results.Warning):
+    __doc__ = 'Old entry for removed package in profiles/updates files.'
+
+    def __init__(self, pkg, updates):
+        super().__init__()
+        self.pkg = pkg
+        self.updates = tuple(updates)
+
+    @property
+    def desc(self):
+        return f"{self.pkg!r} unavailable: old update line: {' '.join(self.updates)!r}"
+
+
+class MovedPackageUpdate(results.ProfilesResult, results.LogWarning):
+    __doc__ = 'Entry for package already moved in profiles/updates files.'
+
+
+class BadPackageUpdate(results.ProfilesResult, results.LogError):
+    __doc__ = 'Badly formatted package update in profiles/updates files.'
+
+
+class PackageUpdatesCheck(Check):
+    __doc__ = 'Scan profiles/updates/* for outdated entries and other issues.'
+    scope = base.profiles_scope
+    _source = (sources.EmptySource, (), (('scope', base.profiles_scope),))
+    known_results = frozenset([
+     MultiMovePackageUpdate, OldMultiMovePackageUpdate,
+     OldPackageUpdate, MovedPackageUpdate, BadPackageUpdate])
+
+    def __init__(self, *args):
+        (super().__init__)(*args)
+        self.repo = self.options.target_repo
+
+    def finish(self):
+        update_reports = []
+        report_bad_updates = lambda x: update_reports.append(BadPackageUpdate(x))
+        report_old_updates = lambda x: update_reports.append(MovedPackageUpdate(x))
+        with patch('pkgcore.log.logger.error', report_bad_updates):
+            with patch('pkgcore.log.logger.warning', report_old_updates):
+                repo_updates = self.repo.config.updates
+        yield from update_reports
+        multi_move_updates = {}
+        old_move_updates = {}
+        old_slotmove_updates = {}
+        for pkg, updates in repo_updates.items():
+            move_updates = [x for x in updates if x[0] == 'move']
+            slotmove_updates = [x for x in updates if x[0] == 'slotmove']
+            if len(move_updates) > 1:
+                multi_move_updates[move_updates[(-1)][2]] = (
+                 pkg, [x[2] for x in move_updates])
+            else:
+                for x in move_updates:
+                    _, _old, new = x
+                    if not self.repo.match(new):
+                        old_move_updates[new] = x
+
+            for x in slotmove_updates:
+                _, pkg, newslot = x
+                if not self.repo.match(pkg.unversioned_atom):
+                    x = ('slotmove', str(pkg)[:-(len(pkg.slot) + 1)], pkg.slot, newslot)
+                    old_slotmove_updates[pkg.key] = x
+
+        for pkg, v in multi_move_updates.items():
+            orig_pkg, moves = v
+            moves = [
+             str(orig_pkg)] + list(map(str, moves))
+            if not self.repo.match(pkg):
+                yield OldMultiMovePackageUpdate(str(moves[(-1)]), moves)
+                old_move_updates.pop(pkg, None)
+            else:
+                yield MultiMovePackageUpdate(str(orig_pkg), moves)
+
+        for pkg, move in chain(old_move_updates.items(), old_slotmove_updates.items()):
+            updates = map(str, move)
+            yield OldPackageUpdate(str(pkg), updates)
+
+
+class UnusedLicenses(results.Warning):
+    __doc__ = 'Unused license(s) detected.'
+
+    def __init__(self, licenses):
+        super().__init__()
+        self.licenses = tuple(licenses)
+
+    @property
+    def desc(self):
+        s = pluralism(self.licenses)
+        licenses = ', '.join(self.licenses)
+        return f"unused license{s}: {licenses}"
+
+
+class UnusedLicensesCheck(Check):
+    __doc__ = 'Check for unused license files.'
+    scope = base.repo_scope
+    _source = sources.RepositoryRepoSource
+    known_results = frozenset([UnusedLicenses])
+
+    def __init__(self, *args):
+        (super().__init__)(*args)
+        self.unused_licenses = None
+
+    def start(self):
+        master_licenses = set()
+        for repo in self.options.target_repo.masters:
+            master_licenses.update(repo.licenses)
+
+        self.unused_licenses = set(self.options.target_repo.licenses) - master_licenses
+
+    def feed(self, pkg):
+        self.unused_licenses.difference_update(iflatten_instance(pkg.license))
+        yield from ()
+        if False:
+            yield None
+
+    def finish(self):
+        if self.unused_licenses:
+            yield UnusedLicenses(sorted(self.unused_licenses))
+
+
+class UnusedMirrors(results.Warning):
+    __doc__ = 'Unused mirrors detected.'
+
+    def __init__(self, mirrors):
+        super().__init__()
+        self.mirrors = tuple(mirrors)
+
+    @property
+    def desc(self):
+        s = pluralism(self.mirrors)
+        mirrors = ', '.join(self.mirrors)
+        return f"unused mirror{s}: {mirrors}"
+
+
+class _MirrorsCheck(Check):
+    __doc__ = 'Check for unused mirrors.'
+    required_addons = (
+     addons.UseAddon,)
+
+    def __init__(self, *args, use_addon):
+        (super().__init__)(*args)
+        self.iuse_filter = use_addon.get_filter('fetchables')
+
+    def _get_mirrors(self, pkg):
+        mirrors = []
+        fetchables, _ = self.iuse_filter((
+         fetch.fetchable,), pkg, pkg._get_attr['fetchables'](pkg,
+          allow_missing_checksums=True, ignore_unknown_mirrors=True))
+        for f in fetchables:
+            for m in f.uri.visit_mirrors(treat_default_as_mirror=False):
+                mirrors.append(m[0].mirror_name)
+
+        return set(mirrors)
+
+
+class UnusedMirrorsCheck(_MirrorsCheck):
+    __doc__ = 'Check for unused mirrors.'
+    scope = base.repo_scope
+    _source = sources.RepositoryRepoSource
+    known_results = frozenset([UnusedMirrors])
+
+    def start(self):
+        master_mirrors = set()
+        for repo in self.options.target_repo.masters:
+            master_mirrors.update(repo.mirrors.keys())
+
+        self.unused_mirrors = set(self.options.target_repo.mirrors.keys()) - master_mirrors
+
+    def feed(self, pkg):
+        if self.unused_mirrors:
+            self.unused_mirrors.difference_update(self._get_mirrors(pkg))
+        yield from ()
+        if False:
+            yield None
+
+    def finish(self):
+        if self.unused_mirrors:
+            yield UnusedMirrors(sorted(self.unused_mirrors))
+
+
+class UnusedEclasses(results.Warning):
+    __doc__ = 'Unused eclasses detected.'
+
+    def __init__(self, eclasses):
+        super().__init__()
+        self.eclasses = tuple(eclasses)
+
+    @property
+    def desc(self):
+        es = pluralism((self.eclasses), plural='es')
+        eclasses = ', '.join(self.eclasses)
+        return f"unused eclass{es}: {eclasses}"
+
+
+class UnusedEclassesCheck(Check):
+    __doc__ = 'Check for unused eclasses.'
+    scope = base.repo_scope
+    _source = sources.RepositoryRepoSource
+    known_results = frozenset([UnusedEclasses])
+
+    def __init__(self, *args):
+        (super().__init__)(*args)
+        self.unused_eclasses = None
+
+    def start(self):
+        master_eclasses = set()
+        for repo in self.options.target_repo.masters:
+            master_eclasses.update(repo.eclass_cache.eclasses.keys())
+
+        self.unused_eclasses = set(self.options.target_repo.eclass_cache.eclasses.keys()) - master_eclasses
+
+    def feed(self, pkg):
+        self.unused_eclasses.difference_update(pkg.inherited)
+        yield from ()
+        if False:
+            yield None
+
+    def finish(self):
+        if self.unused_eclasses:
+            yield UnusedEclasses(sorted(self.unused_eclasses))
+
+
+class UnknownLicenses(results.Warning):
+    __doc__ = "License(s) listed in license group(s) that don't exist."
+
+    def __init__(self, group, licenses):
+        super().__init__()
+        self.group = group
+        self.licenses = tuple(licenses)
+
+    @property
+    def desc(self):
+        s = pluralism(self.licenses)
+        licenses = ', '.join(self.licenses)
+        return f"license group {self.group!r} has unknown license{s}: [ {licenses} ]"
+
+
+class LicenseGroupsCheck(Check):
+    __doc__ = 'Scan license groups for unknown licenses.'
+    scope = base.repo_scope
+    _source = sources.EmptySource
+    known_results = frozenset([UnknownLicenses])
+
+    def __init__(self, *args):
+        (super().__init__)(*args)
+        self.repo = self.options.target_repo
+
+    def finish(self):
+        for group, licenses in self.repo.licenses.groups.items():
+            unknown_licenses = set(licenses).difference(self.repo.licenses)
+            if unknown_licenses:
+                yield UnknownLicenses(group, sorted(unknown_licenses))
+
+
+class PotentialLocalUse(results.Info):
+    __doc__ = 'Global USE flag is a potential local USE flag.'
+
+    def __init__(self, flag, pkgs):
+        super().__init__()
+        self.flag = flag
+        self.pkgs = tuple(pkgs)
+
+    @property
+    def desc(self):
+        s = pluralism(self.pkgs)
+        pkgs = ', '.join(self.pkgs)
+        return f"global USE flag {self.flag!r} is a potential local, used by {len(self.pkgs)} package{s}: {pkgs}"
+
+
+class UnusedGlobalUse(results.Warning):
+    __doc__ = 'Unused use.desc flag(s).'
+
+    def __init__(self, flags):
+        super().__init__()
+        self.flags = tuple(flags)
+
+    @property
+    def desc(self):
+        s = pluralism(self.flags)
+        flags = ', '.join(self.flags)
+        return f"use.desc unused flag{s}: {flags}"
+
+
+class PotentialGlobalUse(results.Info):
+    __doc__ = 'Local USE flag is a potential global USE flag.'
+
+    def __init__(self, flag, pkgs):
+        super().__init__()
+        self.flag = flag
+        self.pkgs = tuple(pkgs)
+
+    @property
+    def desc(self):
+        return f"local USE flag {self.flag!r} is a potential global used by {len(self.pkgs)} packages: {', '.join(self.pkgs)}"
+
+
+def _dfs(graph, start, visited=None):
+    if visited is None:
+        visited = set()
+    visited.add(start)
+    for node in graph[start] - visited:
+        _dfs(graph, node, visited)
+
+    return visited
+
+
+class GlobalUseCheck(Check):
+    __doc__ = 'Check global USE and USE_EXPAND flags for various issues.'
+    scope = base.repo_scope
+    _source = (sources.RepositoryRepoSource, (), (('source', sources.PackageRepoSource),))
+    required_addons = (addons.UseAddon,)
+    known_results = frozenset([PotentialLocalUse, PotentialGlobalUse, UnusedGlobalUse])
+
+    def __init__(self, *args, use_addon):
+        (super().__init__)(*args)
+        self.global_flag_usage = defaultdict(set)
+        self.repo = self.options.target_repo
+
+    @jit_attr
+    def local_use(self):
+        return self.repo.config.use_local_desc
+
+    @jit_attr
+    def global_use(self):
+        return {flag:desc for matcher, (flag, desc) in self.repo.config.use_desc}
+
+    @jit_attr
+    def use_expand(self):
+        return {flag:desc for flags in self.repo.config.use_expand_desc.values() for flag, desc in flags}
+
+    def start(self):
+        master_flags = set()
+        for repo in self.options.target_repo.masters:
+            master_flags.update(flag for matcher, (flag, desc) in repo.config.use_desc)
+
+    def feed(self, pkgs):
+        local_use = set(pkgs[0].local_use.keys())
+        for pkg in pkgs:
+            pkg_global_use = pkg.iuse_stripped.difference(local_use)
+            for flag in pkg_global_use:
+                self.global_flag_usage[flag].add(pkg.unversioned_atom)
+
+        yield from ()
+        if False:
+            yield None
+
+    @staticmethod
+    def _similar_flags(pkgs):
+        """Yield groups of packages with similar local USE flag descriptions."""
+        diffs = {}
+        for i, (i_pkg, i_desc) in enumerate(pkgs):
+            for j, (j_pkg, j_desc) in enumerate(pkgs[i + 1:]):
+                diffs[(i, i + j + 1)] = SequenceMatcher(None, i_desc, j_desc).ratio()
+
+        similar = defaultdict(set)
+        for (i, j), r in diffs.items():
+            if r >= 0.75:
+                similar[i].add(j)
+                similar[j].add(i)
+
+        if len(similar.keys()) < 5:
+            return
+        nodes = set(similar.keys())
+        components = []
+        while nodes:
+            visited = _dfs(similar, nodes.pop())
+            components.append(visited)
+            nodes -= visited
+
+        for component in components:
+            if len(component) >= 5:
+                yield [pkgs[i][0] for i in component]
+
+    def finish(self):
+        unused_global_flags = []
+        potential_locals = []
+        for flag in self.global_use.keys():
+            pkgs = self.global_flag_usage[flag]
+            if not pkgs:
+                unused_global_flags.append(flag)
+            else:
+                if len(pkgs) < 5:
+                    potential_locals.append((flag, pkgs))
+
+        if unused_global_flags:
+            yield UnusedGlobalUse(sorted(unused_global_flags))
+        for flag, pkgs in sorted(potential_locals, key=(lambda x: len(x[1]))):
+            pkgs = sorted(map(str, pkgs))
+            yield PotentialLocalUse(flag, pkgs)
+
+        local_use = defaultdict(list)
+        for pkg, (flag, desc) in self.local_use:
+            if flag not in self.global_use:
+                local_use[flag].append((pkg, desc))
+
+        potential_globals = []
+        for flag, pkgs in sorted((k, v) for k, v in local_use.items() if len(v) >= 5):
+            for matching_pkgs in self._similar_flags(pkgs):
+                potential_globals.append((flag, matching_pkgs))
+
+        for flag, pkgs in sorted(potential_globals, key=(lambda x: len(x[1])),
+          reverse=True):
+            pkgs = sorted(map(str, pkgs))
+            yield PotentialGlobalUse(flag, pkgs)
+
+
+class MissingChksum(results.VersionResult, results.Warning):
+    __doc__ = 'A file in the chksum data lacks required checksums.'
+
+    def __init__(self, filename, missing, existing, **kwargs):
+        (super().__init__)(**kwargs)
+        self.filename = filename
+        self.missing = tuple(missing)
+        self.existing = tuple(existing)
+
+    @property
+    def desc(self):
+        return f"{self.filename!r} missing required chksums: {', '.join(self.missing)}; has chksums: {', '.join(self.existing)}"
+
+
+class DeprecatedChksum(results.VersionResult, results.Warning):
+    __doc__ = 'A file in the chksum data does not use modern checksum set.'
+
+    def __init__(self, filename, deprecated, **kwargs):
+        (super().__init__)(**kwargs)
+        self.filename = filename
+        self.deprecated = tuple(deprecated)
+
+    @property
+    def desc(self):
+        s = pluralism(self.deprecated)
+        deprecated = ', '.join(self.deprecated)
+        return f"{self.filename!r} has deprecated checksum{s}: {deprecated}"
+
+
+class MissingManifest(results.VersionResult, results.Error):
+    __doc__ = 'SRC_URI targets missing from Manifest file.'
+
+    def __init__(self, files, **kwargs):
+        (super().__init__)(**kwargs)
+        self.files = tuple(files)
+
+    @property
+    def desc(self):
+        s = pluralism(self.files)
+        files = ', '.join(self.files)
+        return f"distfile{s} missing from Manifest: [ {files} ]"
+
+
+class UnknownManifest(results.PackageResult, results.Warning):
+    __doc__ = 'Manifest entries not matching any SRC_URI targets.'
+
+    def __init__(self, files, **kwargs):
+        (super().__init__)(**kwargs)
+        self.files = tuple(files)
+
+    @property
+    def desc(self):
+        s = pluralism(self.files)
+        files = ', '.join(self.files)
+        return f"unknown distfile{s} in Manifest: [ {files} ]"
+
+
+class UnnecessaryManifest(results.PackageResult, results.Warning):
+    __doc__ = 'Manifest entries for non-DIST targets on a repo with thin manifests enabled.'
+
+    def __init__(self, files, **kwargs):
+        (super().__init__)(**kwargs)
+        self.files = tuple(files)
+
+    @property
+    def desc(self):
+        s = pluralism(self.files)
+        files = ', '.join(self.files)
+        return f"unnecessary file{s} in Manifest: [ {files} ]"
+
+
+class ManifestCheck(Check):
+    __doc__ = "Manifest related checks.\n\n    Verify that the Manifest file exists, doesn't have missing or\n    extraneous entries, and that the required hashes are in use.\n    "
+    required_addons = (
+     addons.UseAddon,)
+    scope = base.package_scope
+    _source = sources.PackageRepoSource
+    known_results = frozenset([
+     MissingChksum, MissingManifest, UnknownManifest, UnnecessaryManifest,
+     DeprecatedChksum])
+
+    def __init__(self, *args, use_addon):
+        (super().__init__)(*args)
+        repo = self.options.target_repo
+        self.preferred_checksums = frozenset(repo.config.manifests.hashes if hasattr(repo, 'config') else ())
+        self.required_checksums = frozenset(repo.config.manifests.required_hashes if hasattr(repo, 'config') else ())
+        self.iuse_filter = use_addon.get_filter('fetchables')
+
+    def feed(self, pkgset):
+        pkg_manifest = pkgset[0].manifest
+        manifest_distfiles = set(pkg_manifest.distfiles.keys())
+        seen = set()
+        for pkg in pkgset:
+            pkg.release_cached_data()
+            fetchables, _ = self.iuse_filter((
+             fetch.fetchable,), pkg, pkg._get_attr['fetchables'](pkg,
+              allow_missing_checksums=True, ignore_unknown_mirrors=True))
+            fetchables = set(fetchables)
+            pkg.release_cached_data()
+            fetchable_files = {f.filename for f in fetchables}
+            missing_manifests = fetchable_files.difference(manifest_distfiles)
+            if missing_manifests:
+                yield MissingManifest((sorted(missing_manifests)), pkg=pkg)
+            for f_inst in fetchables:
+                if f_inst.filename in seen:
+                    pass
+                else:
+                    missing = self.required_checksums.difference(f_inst.chksums)
+                    if f_inst.filename not in missing_manifests:
+                        if missing:
+                            yield MissingChksum((f_inst.filename),
+                              (sorted(missing)), (sorted(f_inst.chksums)),
+                              pkg=pkg)
+                    if f_inst.chksums and self.preferred_checksums != frozenset(f_inst.chksums):
+                        deprecated = set(f_inst.chksums).difference(self.preferred_checksums)
+                        yield DeprecatedChksum((f_inst.filename), (sorted(deprecated)), pkg=pkg)
+                    seen.add(f_inst.filename)
+
+        if pkg_manifest.thin:
+            unnecessary_manifests = []
+            for attr in ('aux_files', 'ebuilds', 'misc'):
+                unnecessary_manifests.extend(getattr(pkg_manifest, attr, []))
+
+            if unnecessary_manifests:
+                yield UnnecessaryManifest((sorted(unnecessary_manifests)), pkg=(pkgset[0]))
+        unknown_manifests = manifest_distfiles.difference(seen)
+        if unknown_manifests:
+            yield UnknownManifest((sorted(unknown_manifests)), pkg=(pkgset[0]))
+
+
+class ConflictingChksums(results.VersionResult, results.Error):
+    __doc__ = 'Checksum conflict detected between two files.'
+
+    def __init__(self, filename, chksums, pkgs, **kwargs):
+        (super().__init__)(**kwargs)
+        self.filename = filename
+        self.chksums = tuple(chksums)
+        self.pkgs = tuple(pkgs)
+
+    @property
+    def desc(self):
+        s = pluralism(self.chksums)
+        chksums = ', '.join(self.chksums)
+        pkgs_s = pluralism(self.pkgs)
+        pkgs = ', '.join(self.pkgs)
+        return f"distfile {self.filename!r} has different checksum{s} ({chksums}) for package{pkgs_s}: {pkgs}"
+
+
+class MatchingChksums(results.VersionResult, results.Warning):
+    __doc__ = 'Two distfiles share the same checksums but use different names.'
+
+    def __init__(self, filename, orig_file, orig_pkg, **kwargs):
+        (super().__init__)(**kwargs)
+        self.filename = filename
+        self.orig_file = orig_file
+        self.orig_pkg = orig_pkg
+
+    @property
+    def desc(self):
+        msg = f"distfile {self.filename!r} matches checksums for {self.orig_file!r}"
+        if f"{self.category}/{self.package}" != self.orig_pkg:
+            msg += f" from {self.orig_pkg}"
+        return msg
+
+
+class ManifestCollisionCheck(Check):
+    __doc__ = 'Search Manifest entries for different types of distfile collisions.\n\n    In particular, search for matching filenames with different checksums and\n    different filenames with matching checksums.\n    '
+    scope = base.repo_scope
+    _source = (sources.RepositoryRepoSource, (), (('source', sources.PackageRepoSource),))
+    known_results = frozenset([ConflictingChksums, MatchingChksums])
+
+    def __init__(self, *args):
+        (super().__init__)(*args)
+        self.seen_files = {}
+        self.seen_chksums = {}
+
+    def _conflicts(self, pkg):
+        """Check for similarly named distfiles with different checksums."""
+        for filename, chksums in pkg.manifest.distfiles.items():
+            existing = self.seen_files.get(filename)
+            if existing is None:
+                self.seen_files[filename] = ([pkg.key], dict(chksums.items()))
+            else:
+                seen_pkgs, seen_chksums = existing
+                conflicting_chksums = []
+                for chf_type, value in seen_chksums.items():
+                    our_value = chksums.get(chf_type)
+                    if our_value is not None and our_value != value:
+                        conflicting_chksums.append(chf_type)
+
+                if conflicting_chksums:
+                    pkgs = map(str, sorted(seen_pkgs))
+                    yield ConflictingChksums(filename, (sorted(conflicting_chksums)), pkgs, pkg=pkg)
+                else:
+                    seen_chksums.update(chksums)
+                    seen_pkgs.append(pkg.key)
+
+    def _matching(self, pkg):
+        """Check for distfiles with matching checksums and different names."""
+        for filename, chksums in pkg.manifest.distfiles.items():
+            key = tuple(chksums.values())
+            existing = self.seen_chksums.get(key)
+            if existing is None:
+                self.seen_chksums[key] = (
+                 pkg.key, filename)
+            else:
+                seen_pkg, seen_file = existing
+                if seen_file == filename:
+                    pass
+                else:
+                    yield MatchingChksums(filename, seen_file, seen_pkg, pkg=pkg)
+
+    def feed(self, pkgs):
+        pkg = pkgs[0]
+        yield from self._conflicts(pkg)
+        yield from self._matching(pkg)
+        if False:
+            yield None
+
+
+class EmptyProject(results.Warning):
+    __doc__ = 'A project has no developers.'
+
+    def __init__(self, project):
+        super().__init__()
+        self.project = project
+
+    @property
+    def desc(self):
+        return f"Project has no members: {self.project}"
+
+
+class ProjectMetadataCheck(Check):
+    __doc__ = 'Check projects.xml for issues.'
+    scope = base.repo_scope
+    _source = sources.EmptySource
+    known_results = frozenset([
+     EmptyProject])
+
+    def __init__(self, *args):
+        (super().__init__)(*args)
+        self.repo = self.options.target_repo
+
+    def finish(self):
+        for key, project in self.repo.projects_xml.projects.items():
+            if not project.recursive_members:
+                yield EmptyProject(project)

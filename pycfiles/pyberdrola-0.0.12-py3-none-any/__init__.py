@@ -1,0 +1,9 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: D:\Subrata Sarkar\Text\Class XI\kaka\bangla key1.4\banglakey1.4\pyengengphonetic-1.0.0\pybengengphonetic-1.0.0\pybengengphonetic\__init__.py
+# Compiled at: 2016-09-25 02:06:39
+__doc__ = 'Python implementation of Avro Phonetic in hindi.\n\n-------------------------------------------------------------------------------\nCopyright (C) 2016 Subrata Sarkar <subrotosarkar32@gmail.com>\nmodified by:- Subrata Sarkar <subrotosarkar32@gmail.com>\noriginal by:- Kaustav Das Modak <kaustav.dasmodak@yahoo.co.in.\nCopyright (C) 2013 Kaustav Das Modak <kaustav.dasmodak@yahoo.co.in.\n\nThis file is part of pyAvroPhonetic.\n\npyAvroPhonetic is free software: you can redistribute it and/or modify\nit under the terms of the GNU General Public License as published by\nthe Free Software Foundation, either version 3 of the License, or\n(at your option) any later version.\n\npyAvroPhonetic is distributed in the hope that it will be useful,\nbut WITHOUT ANY WARRANTY; without even the implied warranty of\nMERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\nGNU General Public License for more details.\n\nYou should have received a copy of the GNU General Public License\nalong with pyAvroPhonetic.  If not, see <http://www.gnu.org/licenses/>.\nP.S.:the file conparse.py & avrodict.json is under\nCopyright (C)GNU General Public License 2016 version 3\nSubrata Sarkar <subrotosarkar32@gmail.com>\n'
+__version_info__ = ('0', '1', '0')
+__version__ = ('.').join(__version_info__)
+print __version__

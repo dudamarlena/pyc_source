@@ -1,0 +1,133 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.7-x86_64/egg/traits_finder/Traits_MG.py
+# Compiled at: 2020-01-23 22:23:29
+# Size of source mod 2**32: 7428 bytes
+import os
+from Bio import SeqIO
+import argparse, glob
+parser = argparse.ArgumentParser(formatter_class=(argparse.RawDescriptionHelpFormatter))
+parser.add_argument('-db', help='file name of your input database',
+  type=str,
+  default='Butyrate.pro.aa',
+  metavar='database.aa')
+parser.add_argument('-dbf', help="sequence format of your input database                    (1: nucleotide; 2: protein),                     (default '1' for nucleotide)",
+  metavar='1 or 2',
+  choices=[
+ 1, 2],
+  action='store',
+  default=1,
+  type=int)
+parser.add_argument('-i', help='input dir of MG',
+  type=str,
+  default='.',
+  metavar='current dir (.)')
+parser.add_argument('-l', help='input list of MG',
+  type=str,
+  default='None',
+  metavar='rep_metagenomes.txt')
+parser.add_argument('-m', help="set the model to predict the results                     (1: simple; 2: phylogenetic; 3: advanced),                     (default '1' for simple)",
+  metavar='1 or 2 or 3',
+  choices=[
+ 1, 2, 3],
+  action='store',
+  default=1,
+  type=int)
+parser.add_argument('-s', help="set the method to search the your database                     (1: blast; 2: hmm; 3: alignment),                     (default '1' for blast search)",
+  metavar='1 or 2',
+  choices=[
+ 1, 2, 3],
+  action='store',
+  default=1,
+  type=int)
+parser.add_argument('--fa', help='input format of metagenomes sequence',
+  type=str,
+  default='.fasta',
+  metavar='.fasta, .fna or .fa')
+parser.add_argument('--r', help='output directory or folder of your results',
+  type=str,
+  default='Result_traits',
+  metavar='Result_traits')
+parser.add_argument('--r16', help='output directory or folder of your 16S sequences',
+  type=str,
+  default='Result_16S',
+  metavar='Result_16S')
+parser.add_argument('--t', help='Optional: set the thread number assigned for running XXX (default 100)',
+  metavar='1 or more',
+  action='store',
+  default=100,
+  type=int)
+parser.add_argument('--id', default=75.0,
+  action='store',
+  type=float,
+  metavar='60.0',
+  help='Optional: set the amno acid based identity cutoff for blast (default is 80.0)\nLeave it alone if hmm is used')
+parser.add_argument('--ht', default=75.0,
+  action='store',
+  type=float,
+  metavar='60.0',
+  help='Optional: set the amno acid based hit-length cutoff for blast (default is 80.0)\nLeave it alone if hmm is used')
+parser.add_argument('--e', default=0.1,
+  action='store',
+  type=float,
+  metavar='1e-5',
+  help='Optional: set the evalue cutoff for blast or hmm (default is 1e-5)')
+parser.add_argument('--u', '--usearch', help=('Optional: use two-step method for blast search,' + " 'None' for using one step, 'usearch' for using two-step                              (complete path to usearch if not in PATH), (default: 'None')"),
+  metavar='None or usearch',
+  action='store',
+  default='None',
+  type=str)
+parser.add_argument('--dm', '--diamond', help=('Optional: use two-step method for blast search,' + " 'None' for using one step, 'diamond' for using two-step                            (complete path to diamond if not in PATH), (default: 'None')"),
+  metavar='None or diamond',
+  action='store',
+  default='None',
+  type=str)
+parser.add_argument('--hs', help=('Optional: use two-step method for blast search,' + " 'None' for using one step, 'hs-blastn' for using two-step                            (complete path to hs-blastn if not in PATH), (default: 'None')"),
+  metavar='None or hs-blastn',
+  action='store',
+  default='None',
+  type=str)
+parser.add_argument('--hmm', help='Optional: complete path to hmmscan if not in PATH,',
+  metavar='/usr/local/bin/hmmscan',
+  action='store',
+  default='hmmscan',
+  type=str)
+parser.add_argument('--bp', help='Optional: complete path to blast if not in PATH,',
+  metavar='/usr/local/bin/blast',
+  action='store',
+  default='blast',
+  type=str)
+parser.add_argument('--bwa', help='Optional: complete path to bwa if not in PATH,',
+  metavar='/usr/local/bin/bwa',
+  action='store',
+  default='None',
+  type=str)
+parser.add_argument('--mf', '--mafft', help='Optional: complete path to mafft if not in PATH,',
+  metavar='/usr/local/bin/mafft',
+  action='store',
+  default='None',
+  type=str)
+args = parser.parse_args()
+try:
+    os.mkdir(args.r)
+except OSError:
+    pass
+
+try:
+    os.mkdir('subscripts')
+except OSError:
+    pass
+
+workingdir = os.path.abspath(os.path.dirname(__file__))
+cmds = 'python ' + workingdir + '/scripts/Search.MG.py -i ' + args.i + ' -db ' + args.db + ' -dbf ' + str(args.dbf) + ' -s ' + str(args.s) + ' --r ' + str(args.r) + ' --t ' + str(args.t) + ' --dm ' + str(args.dm) + ' --u ' + str(args.u) + ' --hs ' + str(args.hs) + ' --hmm ' + str(args.hmm) + ' --bp ' + str(args.bp) + ' --ht ' + str(args.ht) + ' --id ' + str(args.id) + ' --fa ' + str(args.fa) + ' --e ' + str(args.e) + ' -l ' + str(args.l) + ' --r16 ' + str(args.r16) + ' --bwa ' + str(args.bwa) + ' \n'
+os.system(cmds)
+list_of_files = glob.glob('subscripts/*.sh')
+f1 = open('all.sh', 'w')
+f1.write('#!/bin/bash\nmodule add c3ddb/blast+/2.7.1\n')
+for file_name in list_of_files:
+    if not any(files in file_name for files in ['all.sh', 'SearchMG.sh']):
+        f1.write('sbatch -p defq,sched_mem1TB -c 40 -t 3-00:00:00 --mem=100000 -J ' + os.path.split(str(file_name))[(-1)] + '_' + str(os.path.split(args.db)[1]) + ' -o ' + str(file_name) + '.out -e ' + str(file_name) + '.err ' + str(file_name) + ' \n')
+
+f1.close()

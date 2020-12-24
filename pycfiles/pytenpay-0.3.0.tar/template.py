@@ -1,0 +1,8 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/lerry/pytenpay/pytenpay/template.py
+# Compiled at: 2013-07-15 01:14:59
+TEMPALTE_PAY = '\n<root>\n    <op_code>${op_code}</op_code>\n    <op_name>${op_name}</op_name>\n    <op_user>${op_user}</op_user>\n    <op_passwd>${op_passwd}</op_passwd>\n    <op_time>${op_time}</op_time>\n    <sp_id>${sp_id}</sp_id>\n    <package_id>${package_id}</package_id>\n    <total_num>${total_num}</total_num>\n    <total_amt>${total_amt}</total_amt>\n    <client_ip>${client_ip}</client_ip>\n    <record_set>\n        % for record in record_set:\n        <%\n        num, rec_bankacc, bank_type, rec_name, pay_amt, acc_type, area, city, subbank_name, desc, recv_mobile = record\n        %>\n        <record>\n            <serial>${num}</serial>\n          <rec_bankacc>${rec_bankacc}</rec_bankacc>\n        <bank_type>${bank_type}</bank_type>\n        <rec_name>${rec_name}</rec_name>\n        <pay_amt>${pay_amt}</pay_amt>\n        <acc_type>${acc_type}</acc_type>\n        <area>${area}</area>\n        <city>${city}</city>\n        <subbank_name>${subbank_name}</subbank_name>\n          <desc>${desc}</desc>\n        <recv_mobile>${recv_mobile}</recv_mobile>\n        </record>\n        % endfor\n    </record_set>\n</root>'
+TEMPALTE_QUERY = '\n<root>\n    <op_code>${op_code}</op_code>\n    <op_name>${op_name}</op_name>\n<service_version>${service_version}</service_version>\n    <op_user>${op_user}</op_user>\n    <op_passwd>${op_passwd}</op_passwd>\n    <op_time>${op_time}</op_time>\n    <sp_id>${sp_id}</sp_id>\n    <package_id>${package_id}</package_id>\n    <client_ip>${client_ip}</client_ip>\n</root>'

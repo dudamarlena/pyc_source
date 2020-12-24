@@ -1,0 +1,14 @@
+Flask
+Flask-Babel
+Flask-Login
+Flask-SocketIO
+Jinja2
+MarkupSafe
+Werkzeug
+gevent
+gevent-socketio
+gevent-websocket
+greenlet
+itsdangerous
+ujson
+bts

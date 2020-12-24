@@ -1,0 +1,240 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /home/orient/pydpi/src/pydpi/drug/estate.py
+# Compiled at: 2013-07-12 21:44:29
+__doc__ = "\n##############################################################################\nThis module is to compute the estate fingerprints and values based on Kier \n\nand Hall's paper. If you have any question please contact me via email.\n\nMy email adress is : orientalcds@gmail.com\n\nCreated on Tue May 24 14:32:52 2011\n\n@author: Dongsheng Cao\n##############################################################################\n"
+from rdkit.Chem.EState import Fingerprinter as ESFP
+from rdkit import Chem
+import AtomTypes as ATEstate, numpy
+Version = 1.0
+
+def _CalculateEState(mol, skipH=1):
+    """
+    #################################################################
+    **Internal used only**
+    
+    Get the EState value of each atom in a molecule
+    #################################################################
+    """
+    mol = Chem.AddHs(mol)
+    if skipH == 1:
+        mol = Chem.RemoveHs(mol)
+    tb1 = Chem.GetPeriodicTable()
+    nAtoms = mol.GetNumAtoms()
+    Is = numpy.zeros(nAtoms, numpy.float)
+    for i in range(nAtoms):
+        at = mol.GetAtomWithIdx(i)
+        atNum = at.GetAtomicNum()
+        d = at.GetDegree()
+        if d > 0:
+            h = at.GetTotalNumHs()
+            dv = tb1.GetNOuterElecs(atNum) - h
+            N = _GetPrincipleQuantumNumber(atNum)
+            Is[i] = (4.0 / (N * N) * dv + 1) / d
+
+    dists = Chem.GetDistanceMatrix(mol, useBO=0, useAtomWts=0)
+    dists += 1
+    accum = numpy.zeros(nAtoms, numpy.float)
+    for i in range(nAtoms):
+        for j in range(i + 1, nAtoms):
+            p = dists[(i, j)]
+            if p < 1000000.0:
+                temp = (Is[i] - Is[j]) / (p * p)
+                accum[i] += temp
+                accum[j] -= temp
+
+    res = accum + Is
+    return res
+
+
+def _GetPrincipleQuantumNumber(atNum):
+    """
+    #################################################################
+    *Internal Use Only*
+    
+    Get the principle quantum number of atom with atomic
+    
+    number equal to atNum 
+    #################################################################
+    """
+    if atNum <= 2:
+        return 1
+    else:
+        if atNum <= 10:
+            return 2
+        if atNum <= 18:
+            return 3
+        if atNum <= 36:
+            return 4
+        if atNum <= 54:
+            return 5
+        if atNum <= 86:
+            return 6
+        return 7
+
+
+def CalculateEstateFingerprint(mol):
+    """
+    #################################################################
+    The Calculation of EState Fingerprints.
+    
+    It is the number of times each possible atom type is hit.
+    
+    Usage:
+        
+        result=CalculateEstateFingerprint(mol)
+        
+        Input: mol is a molecule object.
+        
+        Output: result is a dict form containing 79 estate fragments.
+    #################################################################
+    """
+    temp = ESFP.FingerprintMol(mol)
+    res = {}
+    for i, j in enumerate(temp[0]):
+        res['Sfinger' + str(i + 1)] = j
+
+    return res
+
+
+def CalculateEstateValue(mol):
+    """
+    #################################################################
+    The Calculate of EState Values.
+    
+    It is the sum of the Estate indices for atoms of each type.
+    
+    Usage:
+        
+        result=CalculateEstateValue(mol)
+        
+        Input: mol is a molecule object.
+        
+        Output: result is a dict form containing 79 estate values.
+    #################################################################
+    """
+    temp = ESFP.FingerprintMol(mol)
+    res = {}
+    for i, j in enumerate(temp[1]):
+        res['S' + str(i + 1)] = round(j, 3)
+
+    return res
+
+
+def CalculateMaxAtomTypeEState(mol):
+    """
+    #################################################################
+    Calculation of maximum of E-State value of specified atom type
+    
+    res---->dict type
+    
+    Usage:
+        
+        result=CalculateMaxAtomTypeEState(mol)
+        
+        Input: mol is a molecule object.
+        
+        Output: result is a dict form containing 79 max estate values.
+    #################################################################
+    """
+    AT = ATEstate.GetAtomLabel(mol)
+    Estate = _CalculateEState(mol)
+    res = []
+    for i in AT:
+        if i == []:
+            res.append(0)
+        else:
+            res.append(max([ Estate[k] for k in i ]))
+
+    ESresult = {}
+    for n, es in enumerate(res):
+        ESresult['Smax' + str(n)] = round(es, 3)
+
+    return ESresult
+
+
+def CalculateMinAtomTypeEState(mol):
+    """
+    #################################################################
+    Calculation of minimum of E-State value of specified atom type
+    
+    res---->dict type
+    
+    Usage:
+        
+        result=CalculateMinAtomTypeEState(mol)
+        
+        Input: mol is a molecule object.
+        
+        Output: result is a dict form containing 79 min estate values.
+    #################################################################
+    """
+    AT = ATEstate.GetAtomLabel(mol)
+    Estate = _CalculateEState(mol)
+    res = []
+    for i in AT:
+        if i == []:
+            res.append(0)
+        else:
+            res.append(min([ Estate[k] for k in i ]))
+
+    ESresult = {}
+    for n, es in enumerate(res):
+        ESresult['Smin' + str(n)] = round(es, 3)
+
+    return ESresult
+
+
+def GetEstate(mol):
+    """
+    #################################################################
+    Obtain all descriptors related to Estate.
+
+    Usage:
+        
+        result=GetEstate(mol)
+        
+        Input: mol is a molecule object.
+        
+        Output: result is a dict form containing all estate values.
+    #################################################################
+    """
+    result = {}
+    result.update(CalculateEstateFingerprint(mol))
+    result.update(CalculateEstateValue(mol))
+    result.update(CalculateMaxAtomTypeEState(mol))
+    result.update(CalculateMinAtomTypeEState(mol))
+    return result
+
+
+def _GetEstate(mol):
+    """
+    #################################################################
+    Obtain all Estate descriptors except Estate fingerprints .
+
+    Usage:
+        
+        result=_GetEstate(mol)
+        
+        Input: mol is a molecule object.
+        
+        Output: result is a dict form containing all estate values.
+    #################################################################
+    """
+    result = {}
+    result.update(CalculateEstateValue(mol))
+    result.update(CalculateMaxAtomTypeEState(mol))
+    result.update(CalculateMinAtomTypeEState(mol))
+    return result
+
+
+if __name__ == '__main__':
+    smi5 = [
+     'COCCCC', 'CCC(C)CC', 'CC(C)CCC', 'CC(C)C(C)C', 'CCOCCN', 'c1ccccc1N']
+    smis = ['CCCC', 'CCCCC', 'CCCCCC', 'CC(N)C(=O)O', 'CC(N)C(=O)[O-].[Na+]']
+    for index, smi in enumerate(smis):
+        m = Chem.MolFromSmiles(smi)
+        print index + 1
+        print smi
+        print GetEstate(m)

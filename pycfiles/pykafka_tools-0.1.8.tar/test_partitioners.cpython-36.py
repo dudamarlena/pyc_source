@@ -1,0 +1,59 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/tests/pykafka/test_partitioners.py
+# Compiled at: 2018-05-14 12:02:28
+# Size of source mod 2**32: 2138 bytes
+import unittest2
+from hashlib import sha1
+from pykafka.partitioners import GroupHashingPartitioner
+
+class TestGroupHashingPartitioner(unittest2.TestCase):
+
+    def test_valid_inputs_success(self):
+        key = 'foo'.encode('utf-8')
+        data = [[1, 16, key],
+         [
+          2, 16, key],
+         [
+          4, 16, key],
+         [
+          16, 16, key],
+         [
+          1, 1, key]]
+        for row in data:
+            self._run_test(row[0], row[1], row[2])
+
+    def test_invalid_inputs_error(self):
+        key = 'foo'.encode('utf-8')
+        data = [[0, 16, key],
+         [
+          17, 16, key]]
+        for row in data:
+            with self.assertRaises(ValueError):
+                self._run_test(row[0], row[1], row[2])
+                continue
+
+    def test_create_with_zero_group_size_raises_error(self):
+        with self.assertRaises(ValueError):
+            GroupHashingPartitioner(hash_func=None, group_size=0)
+
+    def test_create_with_negative_group_size_raises_error(self):
+        with self.assertRaises(ValueError):
+            GroupHashingPartitioner(hash_func=None, group_size=(-1))
+
+    def test_missing_hash_function_raises_error(self):
+        with self.assertRaises(ValueError):
+            GroupHashingPartitioner(hash_func=None, group_size=1)
+
+    def _run_test(self, group_size, total_partition_count, key):
+
+        def hash_func(k):
+            return int(sha1(k).hexdigest(), 16)
+
+        hashed_keys = [abs(hash_func(key) + x) for x in range(group_size)]
+        valid_partitions = list(map(lambda x: x % total_partition_count, hashed_keys))
+        self.assertEquals(len(valid_partitions), group_size)
+        partitioner = GroupHashingPartitioner(hash_func, group_size)
+        x = partitioner.__call__(list(range(total_partition_count)), key)
+        self.assertTrue(x in valid_partitions)

@@ -1,0 +1,6 @@
+setuptools_scm>=3.3.3
+PyYaml>=5.2
+joblib>=0.12.5
+scipy>=1.0.0
+pandas>=0.25.0
+requests>=2.21.0

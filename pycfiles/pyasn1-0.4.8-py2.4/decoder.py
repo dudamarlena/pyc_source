@@ -1,0 +1,104 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/pyasn1/codec/native/decoder.py
+# Compiled at: 2019-10-17 01:00:19
+from pyasn1 import debug
+from pyasn1 import error
+from pyasn1.type import base
+from pyasn1.type import char
+from pyasn1.type import tag
+from pyasn1.type import univ
+from pyasn1.type import useful
+__all__ = [
+ 'decode']
+LOG = debug.registerLoggee(__name__, flags=debug.DEBUG_DECODER)
+
+class AbstractScalarDecoder(object):
+    __module__ = __name__
+
+    def __call__(self, pyObject, asn1Spec, decodeFun=None, **options):
+        return asn1Spec.clone(pyObject)
+
+
+class BitStringDecoder(AbstractScalarDecoder):
+    __module__ = __name__
+
+    def __call__(self, pyObject, asn1Spec, decodeFun=None, **options):
+        return asn1Spec.clone(univ.BitString.fromBinaryString(pyObject))
+
+
+class SequenceOrSetDecoder(object):
+    __module__ = __name__
+
+    def __call__(self, pyObject, asn1Spec, decodeFun=None, **options):
+        asn1Value = asn1Spec.clone()
+        componentsTypes = asn1Spec.componentType
+        for field in asn1Value:
+            if field in pyObject:
+                asn1Value[field] = decodeFun(pyObject[field], componentsTypes[field].asn1Object, **options)
+
+        return asn1Value
+
+
+class SequenceOfOrSetOfDecoder(object):
+    __module__ = __name__
+
+    def __call__(self, pyObject, asn1Spec, decodeFun=None, **options):
+        asn1Value = asn1Spec.clone()
+        for pyValue in pyObject:
+            asn1Value.append(decodeFun(pyValue, asn1Spec.componentType), **options)
+
+        return asn1Value
+
+
+class ChoiceDecoder(object):
+    __module__ = __name__
+
+    def __call__(self, pyObject, asn1Spec, decodeFun=None, **options):
+        asn1Value = asn1Spec.clone()
+        componentsTypes = asn1Spec.componentType
+        for field in pyObject:
+            if field in componentsTypes:
+                asn1Value[field] = decodeFun(pyObject[field], componentsTypes[field].asn1Object, **options)
+                break
+
+        return asn1Value
+
+
+tagMap = {univ.Integer.tagSet: AbstractScalarDecoder(), univ.Boolean.tagSet: AbstractScalarDecoder(), univ.BitString.tagSet: BitStringDecoder(), univ.OctetString.tagSet: AbstractScalarDecoder(), univ.Null.tagSet: AbstractScalarDecoder(), univ.ObjectIdentifier.tagSet: AbstractScalarDecoder(), univ.Enumerated.tagSet: AbstractScalarDecoder(), univ.Real.tagSet: AbstractScalarDecoder(), univ.Sequence.tagSet: SequenceOrSetDecoder(), univ.Set.tagSet: SequenceOrSetDecoder(), univ.Choice.tagSet: ChoiceDecoder(), char.UTF8String.tagSet: AbstractScalarDecoder(), char.NumericString.tagSet: AbstractScalarDecoder(), char.PrintableString.tagSet: AbstractScalarDecoder(), char.TeletexString.tagSet: AbstractScalarDecoder(), char.VideotexString.tagSet: AbstractScalarDecoder(), char.IA5String.tagSet: AbstractScalarDecoder(), char.GraphicString.tagSet: AbstractScalarDecoder(), char.VisibleString.tagSet: AbstractScalarDecoder(), char.GeneralString.tagSet: AbstractScalarDecoder(), char.UniversalString.tagSet: AbstractScalarDecoder(), char.BMPString.tagSet: AbstractScalarDecoder(), useful.ObjectDescriptor.tagSet: AbstractScalarDecoder(), useful.GeneralizedTime.tagSet: AbstractScalarDecoder(), useful.UTCTime.tagSet: AbstractScalarDecoder()}
+typeMap = {univ.Integer.typeId: AbstractScalarDecoder(), univ.Boolean.typeId: AbstractScalarDecoder(), univ.BitString.typeId: BitStringDecoder(), univ.OctetString.typeId: AbstractScalarDecoder(), univ.Null.typeId: AbstractScalarDecoder(), univ.ObjectIdentifier.typeId: AbstractScalarDecoder(), univ.Enumerated.typeId: AbstractScalarDecoder(), univ.Real.typeId: AbstractScalarDecoder(), univ.Set.typeId: SequenceOrSetDecoder(), univ.SetOf.typeId: SequenceOfOrSetOfDecoder(), univ.Sequence.typeId: SequenceOrSetDecoder(), univ.SequenceOf.typeId: SequenceOfOrSetOfDecoder(), univ.Choice.typeId: ChoiceDecoder(), univ.Any.typeId: AbstractScalarDecoder(), char.UTF8String.typeId: AbstractScalarDecoder(), char.NumericString.typeId: AbstractScalarDecoder(), char.PrintableString.typeId: AbstractScalarDecoder(), char.TeletexString.typeId: AbstractScalarDecoder(), char.VideotexString.typeId: AbstractScalarDecoder(), char.IA5String.typeId: AbstractScalarDecoder(), char.GraphicString.typeId: AbstractScalarDecoder(), char.VisibleString.typeId: AbstractScalarDecoder(), char.GeneralString.typeId: AbstractScalarDecoder(), char.UniversalString.typeId: AbstractScalarDecoder(), char.BMPString.typeId: AbstractScalarDecoder(), useful.ObjectDescriptor.typeId: AbstractScalarDecoder(), useful.GeneralizedTime.typeId: AbstractScalarDecoder(), useful.UTCTime.typeId: AbstractScalarDecoder()}
+
+class Decoder(object):
+    __module__ = __name__
+
+    def __init__(self, tagMap, typeMap):
+        self.__tagMap = tagMap
+        self.__typeMap = typeMap
+
+    def __call__(self, pyObject, asn1Spec, **options):
+        if LOG:
+            debug.scope.push(type(pyObject).__name__)
+            LOG('decoder called at scope %s, working with type %s' % (debug.scope, type(pyObject).__name__))
+        if asn1Spec is None or not isinstance(asn1Spec, base.Asn1Item):
+            raise error.PyAsn1Error('asn1Spec is not valid (should be an instance of an ASN.1 Item, not %s)' % asn1Spec.__class__.__name__)
+        try:
+            valueDecoder = self.__typeMap[asn1Spec.typeId]
+        except KeyError:
+            baseTagSet = tag.TagSet(asn1Spec.tagSet.baseTag, asn1Spec.tagSet.baseTag)
+            try:
+                valueDecoder = self.__tagMap[baseTagSet]
+            except KeyError:
+                raise error.PyAsn1Error('Unknown ASN.1 tag %s' % asn1Spec.tagSet)
+
+        if LOG:
+            LOG('calling decoder %s on Python type %s <%s>' % (type(valueDecoder).__name__, type(pyObject).__name__, repr(pyObject)))
+        value = valueDecoder(pyObject, asn1Spec, self, **options)
+        if LOG:
+            LOG('decoder %s produced ASN.1 type %s <%s>' % (type(valueDecoder).__name__, type(value).__name__, repr(value)))
+            debug.scope.pop()
+        return value
+
+
+decode = Decoder(tagMap, typeMap)

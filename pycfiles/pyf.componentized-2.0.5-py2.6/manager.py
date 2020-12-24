@@ -1,0 +1,16 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/pyf/componentized/error/manager.py
+# Compiled at: 2011-02-05 06:39:28
+
+
+class ManagerError(Exception):
+    """the base class for all exceptions raised by Nostromo Manager
+    """
+    pass
+
+
+class DataPathError(ManagerError):
+    pass

@@ -1,0 +1,90 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /home/gmartine/pyscannerbit/tests/tests.py
+# Compiled at: 2020-03-04 01:47:30
+# Size of source mod 2**32: 2329 bytes
+__doc__ = '\nClass representing HDF5 results from ScannerBit\n===============================================\n'
+import h5py
+import matplotlib.pyplot as plt
+import numpy as np
+
+class HDF5(h5py.File):
+    """HDF5"""
+
+    def __init__(self, file_name, model=None, loglike='LogLike', posterior='Posterior'):
+        """
+        """
+        self.loglike = loglike
+        self.posterior = posterior
+        super(HDF5, self).__init__(file_name, mode='r')
+        self.group = self.keys()[0]
+        self.model = model if model else self.get_model_name()
+
+    def get_model_name(self):
+        """
+        """
+        for k in self[self.group].keys():
+            if '::' in k:
+                return k.split('::')[0]
+
+    def get_param_names(self):
+        """
+        """
+        prefix = '{}::'.format(self.model)
+        suffix = '_isvalid'
+        return [k[len(prefix):] for k in self[self.group].keys() if k.startswith(prefix) if not k.endswith(suffix)]
+
+    def get_param(self, name):
+        """
+        """
+        try:
+            valid = self[self.group]['{}_isvalid'.format(name)]
+        except KeyError:
+            name = '{}::{}'.format(self.model, name)
+            valid = self[self.group]['{}_isvalid'.format(name)]
+
+        mask = np.array(valid, dtype=(np.bool))
+        return self[self.group][name][mask]
+
+    def get_loglike(self):
+        """
+        """
+        return self.get_param(self.loglike)
+
+    def get_posterior(self):
+        """
+        """
+        return self.get_param(self.posterior)
+
+    def get_best_fit(self, name):
+        """
+        """
+        loglike = self.get_loglike()
+        index = np.argmax(loglike)
+        return self.get_param(name)[index]
+
+    def get_min_chi_squared(self):
+        """
+        """
+        return -2.0 * self.get_loglike().max()
+
+    def make_plot(self, name_x, name_y):
+        """
+        """
+        fig = plt.figure(figsize=(8, 6))
+        ax = fig.add_subplot(111)
+        ax.scatter((self.get_param(name_x)), (self.get_param(name_y)), marker='o',
+          facecolor='k',
+          edgecolor='',
+          alpha=0.5,
+          s=20)
+        ax.scatter((self.get_best_fit(name_x)), (self.get_best_fit(name_y)), marker='*',
+          facecolor='Gold',
+          alpha=1.0,
+          s=250,
+          label='Best-fit')
+        ax.set_xlabel(name_x)
+        ax.set_ylabel(name_y)
+        ax.legend()
+        plt.show()

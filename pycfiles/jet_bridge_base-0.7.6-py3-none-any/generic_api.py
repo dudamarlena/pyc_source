@@ -1,0 +1,88 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/f1nal/Dropbox/python/jet-bridge/src/packages/jet_bridge_base/jet_bridge_base/views/base/generic_api.py
+# Compiled at: 2019-10-06 12:51:17
+from jet_bridge_base.paginators.page_number import PageNumberPagination
+from jet_bridge_base.views.base.api import APIView
+
+class GenericAPIView(APIView):
+    serializer_class = None
+    filter_class = None
+    pagination_class = PageNumberPagination
+    _paginator = None
+    lookup_field = 'id'
+    lookup_url_kwarg = None
+    action = None
+
+    def get_model(self):
+        raise NotImplementedError
+
+    def get_queryset(self):
+        raise NotImplementedError
+
+    def get_object(self):
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or 'pk'
+        assert lookup_url_kwarg in self.request.path_kwargs
+        model_field = getattr(self.get_model(), self.lookup_field)
+        obj = queryset.filter(getattr(model_field, '__eq__')(self.request.path_kwargs[lookup_url_kwarg])).first()
+        self.check_object_permissions(obj)
+        return obj
+
+    def get_filter(self, *args, **kwargs):
+        filter_class = self.get_filter_class()
+        if not filter_class:
+            return
+        kwargs['context'] = self.filter_context()
+        return filter_class(*args, **kwargs)
+
+    def get_filter_class(self):
+        return self.filter_class
+
+    def filter_context(self):
+        return {'request': self.request, 
+           'handler': self}
+
+    def filter_queryset(self, queryset):
+        filter_instance = self.get_filter()
+        if filter_instance:
+            queryset = filter_instance.filter_queryset(queryset)
+        return queryset
+
+    @property
+    def paginator(self):
+        if not self._paginator:
+            if self.pagination_class is None:
+                self._paginator = None
+            else:
+                self._paginator = self.pagination_class()
+        return self._paginator
+
+    def paginate_queryset(self, queryset):
+        if self.paginator is None:
+            return
+        else:
+            return self.paginator.paginate_queryset(queryset, self)
+
+    def get_paginated_response(self, data):
+        assert self.paginator is not None
+        return self.paginator.get_paginated_response(data)
+
+    def get_serializer(self, *args, **kwargs):
+        serializer_class = self.get_serializer_class()
+        kwargs['context'] = self.get_serializer_context()
+        return serializer_class(*args, **kwargs)
+
+    def get_serializer_class(self):
+        return self.serializer_class
+
+    def get_serializer_context(self):
+        return {'request': self.request, 
+           'view': self, 
+           'session': self.session}
+
+    def write_error(self, status_code, **kwargs):
+        self.session.rollback()
+        super(GenericAPIView, self).write_error(status_code, **kwargs)

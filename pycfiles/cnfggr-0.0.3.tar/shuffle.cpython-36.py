@@ -1,0 +1,82 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/cnfformula/transformations/shuffle.py
+# Compiled at: 2019-10-28 05:33:57
+# Size of source mod 2**32: 3418 bytes
+import random
+from ..cmdline import register_cnf_transformation_subcommand
+from ..transformations import register_cnf_transformation
+from ..cnf import CNF
+
+@register_cnf_transformation
+def Shuffle(cnf, variable_permutation=None, clause_permutation=None, polarity_flip=None):
+    """ Reshuffle the given cnf. Returns a formula logically
+    equivalent to the input with the following transformations
+    applied in order:
+
+    1. Polarity flips. polarity_flip is a {-1,1}^n vector. If the i-th
+    entry is -1, all the literals with the i-th variable change its
+    sign.
+
+    2. Variable permutations. variable_permutation is a permutation of
+    [vars(cnf)]. All the literals with the old i-th variable are
+    replaced with the new i-th variable.
+
+    3. Clause permutations. clause_permutation is a permutation of
+    [0..m-1]. The resulting clauses are reordered according to the
+    permutation.
+"""
+    out = CNF(header='')
+    out.header = 'Reshuffling of:\n\n' + cnf.header
+    variables = list(cnf.variables())
+    N = len(variables)
+    M = len(cnf)
+    if variable_permutation == None:
+        variable_permutation = variables
+        random.shuffle(variable_permutation)
+    else:
+        assert len(variable_permutation) == N
+        if polarity_flip == None:
+            polarity_flip = [random.choice([-1, 1]) for x in range(N)]
+        else:
+            assert len(polarity_flip) == N
+        for v in variable_permutation:
+            out.add_variable(v)
+
+        substitution = [None] * (2 * N + 1)
+        reverse_idx = dict([(v, i) for i, v in enumerate(out.variables(), 1)])
+        polarity_flip = [None] + polarity_flip
+        for i, v in enumerate(cnf.variables(), 1):
+            substitution[i] = polarity_flip[i] * reverse_idx[v]
+            substitution[-i] = -substitution[i]
+
+        if clause_permutation == None:
+            clause_permutation = list(range(M))
+            random.shuffle(clause_permutation)
+        out._clauses = [
+         None] * M
+        for old, new in enumerate(clause_permutation):
+            out._clauses[new] = tuple(substitution[l] for l in cnf._clauses[old])
+
+        assert out._check_coherence(force=True)
+    return out
+
+
+@register_cnf_transformation_subcommand
+class ShuffleCmd:
+    """ShuffleCmd"""
+    name = 'shuffle'
+    description = 'Permute variables, clauses and polarity of literals at random'
+
+    @staticmethod
+    def setup_command_line(parser):
+        parser.add_argument('--no-polarity-flips', '-p', action='store_true', dest='no_polarity_flips', help='No polarity flips')
+        parser.add_argument('--no-variables-permutation', '-v', action='store_true', dest='no_variable_permutations', help='No permutation of variables')
+        parser.add_argument('--no-clauses-permutation', '-c', action='store_true', dest='no_clause_permutations', help='No permutation of clauses')
+
+    @staticmethod
+    def transform_cnf(F, args):
+        return Shuffle(F, variable_permutation=(None if not args.no_variable_permutations else list(F.variables())),
+          clause_permutation=(None if not args.no_clause_permutations else list(range(len(F)))),
+          polarity_flip=(None if not args.no_polarity_flips else [1] * len(list(F.variables()))))

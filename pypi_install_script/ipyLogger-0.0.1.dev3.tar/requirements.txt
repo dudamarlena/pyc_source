@@ -1,0 +1,5 @@
+ipython
+
+ipywidgets>=7.1.2
+
+toolz

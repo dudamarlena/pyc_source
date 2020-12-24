@@ -1,0 +1,164 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/opengen/builder/ros_builder.py
+# Compiled at: 2020-05-11 18:43:50
+# Size of source mod 2**32: 9396 bytes
+import opengen.definitions as og_dfn, os, logging, jinja2, shutil, datetime
+_ROS_PREFIX = 'ros_node_'
+
+def make_dir_if_not_exists(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+
+def get_template(name):
+    file_loader = jinja2.FileSystemLoader(og_dfn.templates_dir())
+    env = jinja2.Environment(loader=file_loader, autoescape=True)
+    return env.get_template(name)
+
+
+def get_ros_template(name):
+    file_loader = jinja2.FileSystemLoader(og_dfn.templates_subdir('ros'))
+    env = jinja2.Environment(loader=file_loader, autoescape=True)
+    return env.get_template(name)
+
+
+class RosBuilder:
+    __doc__ = '\n    Code generation for ROS-related files\n    '
+
+    def __init__(self, meta, build_config, solver_config):
+        self._RosBuilder__meta = meta
+        self._RosBuilder__build_config = build_config
+        self._RosBuilder__solver_config = solver_config
+        self._RosBuilder__logger = logging.getLogger('opengen.builder.RosBuilder')
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(1)
+        c_format = logging.Formatter('[%(levelname)s] <<ROS>> %(message)s')
+        stream_handler.setFormatter(c_format)
+        self._RosBuilder__logger.setLevel(1)
+        self._RosBuilder__logger.addHandler(stream_handler)
+
+    def __target_dir(self):
+        return os.path.abspath(os.path.join(self._RosBuilder__build_config.build_dir, self._RosBuilder__meta.optimizer_name))
+
+    def __ros_target_dir(self):
+        ros_config = self._RosBuilder__build_config.ros_config
+        ros_target_dir_name = ros_config.package_name
+        return os.path.abspath(os.path.join(self._RosBuilder__build_config.build_dir, self._RosBuilder__meta.optimizer_name, ros_target_dir_name))
+
+    def __generate_ros_dir_structure(self):
+        self._RosBuilder__logger.info('Generating directory structure')
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        make_dir_if_not_exists(target_ros_dir)
+        make_dir_if_not_exists(os.path.abspath(os.path.join(target_ros_dir, 'include')))
+        make_dir_if_not_exists(os.path.abspath(os.path.join(target_ros_dir, 'extern_lib')))
+        make_dir_if_not_exists(os.path.abspath(os.path.join(target_ros_dir, 'src')))
+        make_dir_if_not_exists(os.path.abspath(os.path.join(target_ros_dir, 'msg')))
+        make_dir_if_not_exists(os.path.abspath(os.path.join(target_ros_dir, 'config')))
+        make_dir_if_not_exists(os.path.abspath(os.path.join(target_ros_dir, 'launch')))
+
+    def __generate_ros_package_xml(self):
+        self._RosBuilder__logger.info('Generating package.xml')
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        template = get_ros_template('package.xml')
+        output_template = template.render(meta=(self._RosBuilder__meta), ros=(self._RosBuilder__build_config.ros_config))
+        target_rospkg_path = os.path.join(target_ros_dir, 'package.xml')
+        with open(target_rospkg_path, 'w') as (fh):
+            fh.write(output_template)
+
+    def __generate_ros_cmakelists(self):
+        self._RosBuilder__logger.info('Generating CMakeLists')
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        template = get_ros_template('CMakeLists.txt')
+        output_template = template.render(meta=(self._RosBuilder__meta), ros=(self._RosBuilder__build_config.ros_config))
+        target_rospkg_path = os.path.join(target_ros_dir, 'CMakeLists.txt')
+        with open(target_rospkg_path, 'w') as (fh):
+            fh.write(output_template)
+
+    def __copy__ros_files(self):
+        self._RosBuilder__logger.info('Copying external dependencies')
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        header_file_name = self._RosBuilder__meta.optimizer_name + '_bindings.hpp'
+        target_include_filename = os.path.abspath(os.path.join(target_ros_dir, 'include', header_file_name))
+        original_include_file = os.path.abspath(os.path.join(self._RosBuilder__target_dir(), header_file_name))
+        shutil.copyfile(original_include_file, target_include_filename)
+        lib_file_name = 'lib' + self._RosBuilder__meta.optimizer_name + '.a'
+        target_lib_file_name = os.path.abspath(os.path.join(target_ros_dir, 'extern_lib', lib_file_name))
+        original_lib_file = os.path.abspath(os.path.join(self._RosBuilder__target_dir(), 'target', self._RosBuilder__build_config.build_mode, lib_file_name))
+        shutil.copyfile(original_lib_file, target_lib_file_name)
+        original_params_msg = os.path.abspath(os.path.join(og_dfn.templates_dir(), 'ros', 'OptimizationParameters.msg'))
+        target_params_msg = os.path.abspath(os.path.join(target_ros_dir, 'msg', 'OptimizationParameters.msg'))
+        shutil.copyfile(original_params_msg, target_params_msg)
+        original_result_msg = os.path.abspath(os.path.join(og_dfn.templates_dir(), 'ros', 'OptimizationResult.msg'))
+        target_result_msg = os.path.abspath(os.path.join(target_ros_dir, 'msg', 'OptimizationResult.msg'))
+        shutil.copyfile(original_result_msg, target_result_msg)
+
+    def __generate_ros_params_file(self):
+        self._RosBuilder__logger.info('Generating open_params.yaml')
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        template = get_ros_template('open_params.yaml')
+        output_template = template.render(meta=(self._RosBuilder__meta), ros=(self._RosBuilder__build_config.ros_config))
+        target_yaml_fname = os.path.join(target_ros_dir, 'config', 'open_params.yaml')
+        with open(target_yaml_fname, 'w') as (fh):
+            fh.write(output_template)
+
+    def __generate_ros_node_header(self):
+        self._RosBuilder__logger.info('Generating open_optimizer.hpp')
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        template = get_ros_template('open_optimizer.hpp')
+        output_template = template.render(meta=(self._RosBuilder__meta), ros=(self._RosBuilder__build_config.ros_config),
+          solver_config=(self._RosBuilder__solver_config))
+        target_rosnode_header_path = os.path.join(target_ros_dir, 'include', 'open_optimizer.hpp')
+        with open(target_rosnode_header_path, 'w') as (fh):
+            fh.write(output_template)
+
+    def __generate_ros_node_cpp(self):
+        self._RosBuilder__logger.info('Generating open_optimizer.cpp')
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        template = get_ros_template('open_optimizer.cpp')
+        output_template = template.render(meta=(self._RosBuilder__meta), ros=(self._RosBuilder__build_config.ros_config),
+          timestamp_created=(datetime.datetime.now()))
+        target_rosnode_cpp_path = os.path.join(target_ros_dir, 'src', 'open_optimizer.cpp')
+        with open(target_rosnode_cpp_path, 'w') as (fh):
+            fh.write(output_template)
+
+    def __generate_ros_launch_file(self):
+        self._RosBuilder__logger.info('Generating open_optimizer.launch')
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        template = get_ros_template('open_optimizer.launch')
+        output_template = template.render(meta=(self._RosBuilder__meta), ros=(self._RosBuilder__build_config.ros_config))
+        target_rosnode_launch_path = os.path.join(target_ros_dir, 'launch', 'open_optimizer.launch')
+        with open(target_rosnode_launch_path, 'w') as (fh):
+            fh.write(output_template)
+
+    def __generate_ros_readme_file(self):
+        self._RosBuilder__logger.info('Generating README.md')
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        template = get_ros_template('README.md')
+        output_template = template.render(ros=(self._RosBuilder__build_config.ros_config))
+        target_readme_path = os.path.join(target_ros_dir, 'README.md')
+        with open(target_readme_path, 'w') as (fh):
+            fh.write(output_template)
+
+    def __symbolic_link_info_message(self):
+        target_ros_dir = self._RosBuilder__ros_target_dir()
+        self._RosBuilder__logger.info('ROS package was built successfully. Now run:')
+        self._RosBuilder__logger.info('ln -s %s  ~/catkin_ws/src/', target_ros_dir)
+        self._RosBuilder__logger.info('cd ~/catkin_ws/; catkin_make')
+
+    def build(self):
+        """
+        Build ROS-related files
+        """
+        self._RosBuilder__generate_ros_dir_structure()
+        self._RosBuilder__generate_ros_package_xml()
+        self._RosBuilder__generate_ros_cmakelists()
+        self._RosBuilder__copy__ros_files()
+        self._RosBuilder__generate_ros_params_file()
+        self._RosBuilder__generate_ros_node_header()
+        self._RosBuilder__generate_ros_node_cpp()
+        self._RosBuilder__generate_ros_launch_file()
+        self._RosBuilder__generate_ros_readme_file()
+        self._RosBuilder__symbolic_link_info_message()

@@ -1,0 +1,68 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/msherry/Dropbox (Personal)/Synced files/projects/nose-cprof/nose_cprofile/nose_cprofile.py
+# Compiled at: 2018-01-01 23:02:47
+import cProfile, logging, os, pstats, nose
+from nose.plugins.base import Plugin
+log = logging.getLogger('nose.plugins')
+
+class cProfiler(Plugin):
+    """
+    Use this plugin to run tests using the cProfile profiler.
+    """
+    enabled = True
+    name = 'cprofile'
+    pfile_name = None
+
+    def options(self, parser, env):
+        """Register commandline options.
+        """
+        Plugin.options(self, parser, env)
+        parser.add_option('--cprofile-stats-file', action='store', dest='profile_stats_file', metavar='FILE', default='stats.dat', help='Output file name; default "stats.dat"')
+        parser.add_option('--cprofile-stats-erase', action='store_true', default=env.get('NOSE_PROFILE_STATS_ERASE'), dest='stats_erase', help='Erase previously-collected profiling statistics before run. Without this option, new profiling stats will be merged with the prior contents of the output file.')
+
+    def begin(self):
+        """Instantiate profiler
+        """
+        self.prof = cProfile.Profile()
+
+    def configure(self, options, conf):
+        """Configure plugin.
+        """
+        super(cProfiler, self).configure(options, conf)
+        if options.profile_stats_file:
+            self.pfile_name = options.profile_stats_file
+        else:
+            self.pfile_name = 'stats.dat'
+        self.fileno = None
+        if options.stats_erase:
+            self._erase_stats_file()
+        return
+
+    def prepareTest(self, test):
+        """Wrap entire test run in :func:`prof.runcall`.
+        """
+        log.debug('preparing test %s' % test)
+
+        def run_and_profile(result, prof=self.prof, test=test):
+            prof.runcall(test, result)
+            stats = pstats.Stats(prof)
+            if os.path.exists(self.pfile_name):
+                log.debug('accumulating current stats in existing file %s' % self.pfile_name)
+                stats.add(self.pfile_name)
+            stats.dump_stats(self.pfile_name)
+
+        return run_and_profile
+
+    def finalize(self, result):
+        pass
+
+    def _erase_stats_file(self):
+        if os.path.exists(self.pfile_name):
+            os.unlink(self.pfile_name)
+
+
+if __name__ == '__main__':
+    nose.main(addplugins=[cProfiler()])

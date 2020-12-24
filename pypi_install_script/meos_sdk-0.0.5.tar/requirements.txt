@@ -1,0 +1,7 @@
+pytest > 2
+flask > 1
+click >= 5.1
+jinja2 > 2.9
+pyaml >=18.11.0
+requests==2.21.0
+uwsgi==2.0.18

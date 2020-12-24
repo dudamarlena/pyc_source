@@ -1,0 +1,57 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-i686/egg/Products/UpfrontContacts/CustomFields.py
+# Compiled at: 2010-03-10 13:47:45
+from AccessControl import ClassSecurityInfo
+from Products.CMFCore.utils import getToolByName
+from Products.Archetypes.Registry import registerField
+from Products.Archetypes.public import DisplayList, ObjectField
+from Products.ATExtensions.ateapi import RecordField, RecordsField
+from Products.ATExtensions.Extensions.utils import makeDisplayList
+from Products.validation.validators.RegexValidator import RegexValidator
+from Products.validation import validation
+validation.register(RegexValidator('isNumber', '^([+-])?[0-9 ]+$', title='XXX', description='XXX', errmsg='is not a valid number.'))
+
+def getValues(self, prop_name):
+    ptool = getToolByName(self, 'portal_properties', None)
+    if ptool and hasattr(ptool, 'upfrontcontacts_properties'):
+        return ptool.upfrontcontacts_properties.getProperty(prop_name, None)
+    else:
+        return
+    return
+
+
+def getDisplayList(self, prop_name=None):
+    return makeDisplayList(getValues(self, prop_name))
+
+
+class FixRecordFieldMixin:
+    """ RecordField does not cope with uninitialized field on an
+        instance
+    """
+    __module__ = __name__
+
+    def get(self, instance, **kwargs):
+        value = ObjectField.get(self, instance, **kwargs)
+        if value:
+            return self._encode_strings(value, instance, **kwargs)
+        else:
+            return {}
+
+
+class AddressField(FixRecordFieldMixin, RecordField):
+    """ dedicated address field"""
+    __module__ = __name__
+    _properties = RecordField._properties.copy()
+    _properties.update({'type': 'address', 'subfields': ('address', 'city', 'zip', 'state', 'country'), 'subfield_labels': {'zip': 'Postal code'}, 'subfield_vocabularies': {'country': 'CountryNames'}, 'outerJoin': '<br />'})
+    security = ClassSecurityInfo()
+    security.declarePublic('CountryNames')
+
+    def CountryNames(self, instance=None):
+        if not instance:
+            instance = self
+        return getDisplayList(instance, 'country_names')
+
+
+registerField(AddressField, title='Address', description='Used for storing address information')

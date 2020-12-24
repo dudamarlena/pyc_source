@@ -1,0 +1,74 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.9-x86_64/egg/examples/modelmix/mixwbcd.py
+# Compiled at: 2014-01-28 22:29:19
+"""
+.. index:: model map
+
+===================================
+Model map on Wisconsin Brest Cancer
+===================================
+
+Script :download:`mixwbcd.py <../../examples/modelmix/mixwbcd.py>` builds a model map on 8 kinds of models. 4 are classic classification models:
+
+* Naive Bayes
+* k-Nearest Neighbour
+* Support Vector Machine
+* Classification Tree
+
+where Classification Trees are taken from Random forest as proposed by Breinman.
+We also include 4 projections in 2-dimensional plane:
+
+* Supervised PCA
+* Radviz
+* Polyviz
+* Scatter plot
+
+Projections are wrapped into k-NN classifiers that predict on projected points. The reason behind is that good
+projections are those that separate points well (Leban et al. 2005 and 2006).
+
+Run the scripy with::
+
+  python mixwbcd.py -n 500 .
+
+This will create a model map in the current folder.
+
+"""
+import argparse, os, sys, Orange, Orange.orng.orngVizRank as vr, orangecontrib.modelmaps as mm
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Build a model map on Wisconsin Brest Cancer Dataset.')
+    parser.add_argument('output_dir', help='output directory')
+    parser.add_argument('-n', type=int, default=500, help='maximum number of models of one model type')
+    args = parser.parse_args()
+    build_map = mm.BuildModelMap('breast-cancer-wisconsin-cont', folds=10, model_limit=args.n, seed=42)
+    data = build_map.data()
+    features = mm.get_feature_subsets(data.domain, args.n, seed=42)
+    nfeatures = len(data.domain.features)
+    max_scatterplots = (nfeatures ** 2 - nfeatures) / 2
+    features_scatterplot = mm.get_feature_subsets_scatterplot(data.domain, max_scatterplots)
+    final_models = []
+
+    def add(model_builder, feature_sets):
+        models = [ model_builder(features) for features in feature_sets ]
+        representatives = build_map.select_representatives(models, mm.distance_euclidean)
+        final_models.extend(representatives)
+
+
+    add(lambda f: build_map.build_projection_model(f, vr.LINEAR_PROJECTION), features)
+    add(lambda f: build_map.build_projection_model(f, vr.RADVIZ), features)
+    add(lambda f: build_map.build_projection_model(f, vr.POLYVIZ), features)
+    add(lambda f: build_map.build_projection_model(f, vr.SCATTERPLOT), features_scatterplot)
+    learner = Orange.classification.bayes.NaiveLearner()
+    add(lambda f: build_map.build_model(f, learner), features)
+    learner = Orange.classification.knn.kNNLearner()
+    add(lambda f: build_map.build_model(f, learner), features)
+    learner = Orange.classification.svm.SVMLearner(svm_type=Orange.classification.svm.SVMLearner.C_SVC)
+    add(lambda f: build_map.build_model(f, learner), features)
+    models = build_map.build_rf_models(trees=args.n, max_depth=4, min_instances=5)
+    representatives = build_map.select_representatives(models, mm.distance_euclidean)
+    final_models.extend(representatives)
+    table = build_map.build_model_data(final_models)
+    smx = build_map.build_model_matrix(final_models, mm.distance_euclidean)
+    mm.save(os.path.join(args.output_dir, ('mix_wbcd_{}_{}').format(smx.dim, sys.platform)), smx, table, data)

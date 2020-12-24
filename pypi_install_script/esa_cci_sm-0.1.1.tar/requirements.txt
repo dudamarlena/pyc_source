@@ -1,0 +1,15 @@
+# List of dependecies for using the package
+# Add your requirements here like:
+# numpy
+# scipy>=0.9
+numpy
+pandas
+pygeobase
+pyresample
+netCDF4
+configparser
+repurpose
+pynetcf
+repurpose
+parse
+smecv_grid

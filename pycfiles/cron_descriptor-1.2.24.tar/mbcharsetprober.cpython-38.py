@@ -1,0 +1,62 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: ./vendor/chardet/mbcharsetprober.py
+# Compiled at: 2019-11-10 08:27:46
+# Size of source mod 2**32: 3413 bytes
+from .charsetprober import CharSetProber
+from .enums import ProbingState, MachineState
+
+class MultiByteCharSetProber(CharSetProber):
+    """MultiByteCharSetProber"""
+
+    def __init__(self, lang_filter=None):
+        super(MultiByteCharSetProber, self).__init__(lang_filter=lang_filter)
+        self.distribution_analyzer = None
+        self.coding_sm = None
+        self._last_char = [0, 0]
+
+    def reset(self):
+        super(MultiByteCharSetProber, self).reset()
+        if self.coding_sm:
+            self.coding_sm.reset()
+        if self.distribution_analyzer:
+            self.distribution_analyzer.reset()
+        self._last_char = [
+         0, 0]
+
+    @property
+    def charset_name(self):
+        raise NotImplementedError
+
+    @property
+    def language(self):
+        raise NotImplementedError
+
+    def feed(self, byte_str):
+        for i in range(len(byte_str)):
+            coding_state = self.coding_sm.next_state(byte_str[i])
+            if coding_state == MachineState.ERROR:
+                self.logger.debug('%s %s prober hit error at byte %s', self.charset_name, self.language, i)
+                self._state = ProbingState.NOT_ME
+                break
+            elif coding_state == MachineState.ITS_ME:
+                self._state = ProbingState.FOUND_IT
+                break
+            else:
+                if coding_state == MachineState.START:
+                    char_len = self.coding_sm.get_current_charlen()
+                    if i == 0:
+                        self._last_char[1] = byte_str[0]
+                        self.distribution_analyzer.feed(self._last_char, char_len)
+                    else:
+                        self.distribution_analyzer.feed(byte_str[i - 1:i + 1], char_len)
+                self._last_char[0] = byte_str[(-1)]
+                if self.state == ProbingState.DETECTING:
+                    if self.distribution_analyzer.got_enough_data():
+                        if self.get_confidence() > self.SHORTCUT_THRESHOLD:
+                            self._state = ProbingState.FOUND_IT
+                return self.state
+
+    def get_confidence(self):
+        return self.distribution_analyzer.get_confidence()

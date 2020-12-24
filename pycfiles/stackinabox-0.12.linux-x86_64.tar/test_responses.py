@@ -1,0 +1,62 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/bmeyer/Devel/stackInABox/.tox/twine/lib/python2.7/site-packages/stackinabox/tests/test_responses.py
+# Compiled at: 2017-05-27 01:24:11
+"""
+Stack-In-A-Box: Basic Test
+"""
+import json, logging, unittest, requests, responses, six, stackinabox.util.responses
+from stackinabox.stack import StackInABox
+from stackinabox.services.hello import HelloService
+from stackinabox.tests.utils.services import AdvancedService
+logger = logging.getLogger(__name__)
+
+def test_basic_responses():
+
+    @responses.activate
+    def run():
+        StackInABox.reset_services()
+        StackInABox.register_service(HelloService())
+        stackinabox.util.responses.responses_registration('localhost')
+        res = requests.get('http://localhost/hello/')
+        assert res.status_code == 200
+        assert res.text == 'Hello'
+
+    run()
+
+
+def test_advanced_responses():
+
+    def run():
+        responses.mock.start()
+        StackInABox.register_service(AdvancedService())
+        stackinabox.util.responses.responses_registration('localhost')
+        res = requests.get('http://localhost/advanced/')
+        assert res.status_code == 200
+        assert res.text == 'Hello'
+        res = requests.get('http://localhost/advanced/h')
+        assert res.status_code == 200
+        assert res.text == 'Good-Bye'
+        expected_result = {'bob': 'bob: Good-Bye alice', 
+           'alice': 'alice: Good-Bye bob', 
+           'joe': 'joe: Good-Bye jane'}
+        res = requests.get('http://localhost/advanced/g?bob=alice;alice=bob&joe=jane')
+        assert res.status_code == 200
+        assert res.json() == expected_result
+        res = requests.get('http://localhost/advanced/1234567890')
+        assert res.status_code == 200
+        assert res.text == 'okay'
+        res = requests.get('http://localhost/advanced/_234567890')
+        assert res.status_code == 595
+        res = requests.put('http://localhost/advanced/h')
+        assert res.status_code == 405
+        res = requests.put('http://localhost/advanced2/i')
+        assert res.status_code == 597
+        StackInABox.reset_services()
+        responses.mock.stop()
+        responses.mock.reset()
+
+    with responses.RequestsMock():
+        run()

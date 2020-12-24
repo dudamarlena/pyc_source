@@ -1,0 +1,7 @@
+
+future
+configparser
+IPy
+requests
+
+pytrafficgen==1.6.2

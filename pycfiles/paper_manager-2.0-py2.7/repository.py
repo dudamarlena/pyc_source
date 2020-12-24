@@ -1,0 +1,24 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/cer/Project/pycharm/paper_manager/paper_manager/repository.py
+# Compiled at: 2018-04-14 05:20:12
+
+
+class Repository:
+
+    def __init__(self, name, path, support_suffix=None):
+        """
+        :param name: name of the repository
+        :param path: absolute path of the repository
+        :param support_suffix: support suffix of this repository
+        """
+        self.name = name
+        self.path = path
+        if support_suffix is None:
+            self.support_suffix = [
+             'pdf']
+        else:
+            self.support_suffix = support_suffix
+        return

@@ -1,0 +1,149 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.5 (3350)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/aiopixiv/wrapper.py
+# Compiled at: 2016-11-22 16:53:12
+# Size of source mod 2**32: 6829 bytes
+__doc__ = '\nWrapper module\n\nThis module provides the API abstraction.\n'
+import json, logging, aiohttp
+from asyncio import AbstractEventLoop
+import asyncio
+
+class PixivError(Exception):
+    """PixivError"""
+    pass
+
+
+class PixivAuthFailed(PixivError):
+    """PixivAuthFailed"""
+    pass
+
+
+class BaseAPI(object):
+    """BaseAPI"""
+
+    def __init__(self, loop: AbstractEventLoop=None):
+        self.access_token = None
+        self.refresh_token = None
+        self.user = None
+        self.logger = logging.getLogger('aiopixiv')
+        self.loop = loop
+        if self.loop is None:
+            self.loop = asyncio.get_event_loop()
+        self.sess = aiohttp.ClientSession(loop=self.loop)
+
+    def _authenticate(self, username: str=None,
+                      password: str=None):
+        """
+        Authenticates with the Pixiv API.
+        This will setup OAuth access.
+
+        You should not use this method directly.
+
+        :param username: The username to login with.
+        :param password: The password to login with.
+        """
+        url = 'https://oauth.secure.pixiv.net/auth/token'
+        oauth2_headers = {'App-OS': 'ios', 
+         'App-OS-Version': '9.3.3', 
+         'App-Version': '6.0.9', 
+         'User-Agent': 'PixivIOSApp/6.0.9 (iOS 9.3.3; iPhone8,1)'}
+        data = {'get_secure_url': 1, 
+         'client_id': 'bYGKuGVw91e0NMfPGp44euvGt59s', 
+         'client_secret': 'HP3RmkgAmEGro0gn1x9ioawQE8WMfvLXDz3ZqxpK'}
+        if username is not None and password is not None:
+            self.logger.info('Logging into Pixiv with password auth')
+            data['grant_type'] = 'password'
+            data['username'] = username
+            data['password'] = password
+            self._BaseAPI__cached_login_info = {'username': username, 'password': password}
+        else:
+            self.logger.info('Refreshing OAuth token')
+            data['grant_type'] = 'refresh_token'
+            data['refresh_token'] = self.refresh_token
+        async with self.sess.post(url, headers=oauth2_headers, data=data) as r:
+            body = await r.text()
+            if r.status not in (200, 301, 302):
+                d = await r.json()
+                try:
+                    if d['errors']['system']['code'] == 1508:
+                        await self._authenticate(**self._BaseAPI__cached_login_info)
+                        return
+                except KeyError:
+                    pass
+
+                raise PixivAuthFailed(await r.text())
+            data = json.loads(body)
+            self.access_token = data['response']['access_token']
+            self.user = data['response']['user']
+            self.logger.info('Logged in as {}'.format(self.user['id']))
+            self.refresh_token = data['response']['refresh_token']
+
+    def __del__(self):
+        self.sess.close()
+
+    def login(self, username: str, password: str):
+        """
+        Logs your account into Pixiv.
+
+        This call is required at least once for API v5.
+
+        :param username: Your account's username.
+        :param password: Your account's password.
+        """
+        await self._authenticate(username, password)
+
+    def make_request(self, method: str, url: str, params: dict=None,
+                     data: dict=None, headers: dict=None, hit_400=False):
+        """
+        Makes an authenticated request to pixiv.
+        This will automatically retry if it hits a 400 by attempting to re-authorize with the refresh-token.
+
+        This is an internal method, and should not be used by client code.
+
+        :param method: The method to use.
+        :param url: The URL to request.
+        :param params: The parameters of the request.
+        :param data: The body of the request.
+        :param headers: The headers of the request.
+        :param hit_400: Used in case a 400 UNAUTHORIZED was passed and we need to re-authorize.
+        :return: A :class:`dict` containing the body, if appropriate.
+        """
+        if headers is None:
+            headers = {}
+        headers['Referer'] = 'http://spapi.pixiv.net/'
+        headers['Authorization'] = 'Bearer %s' % self.access_token
+        self.logger.info('{} {}'.format(method, url))
+        req = await self.sess.request(method, url, params=params, data=data, headers=headers)
+        code = req.status
+        try:
+            d = json.loads(await req.text(encoding='utf-8'))
+            if d.get('errors', {}).get('system', {}).get('message', '') == 'The access token provided is invalid.':
+                if hit_400:
+                    raise PixivError(d)
+                await self._authenticate()
+                return await self.make_request(method, url, params, data, headers, True)
+            if code != 200:
+                raise PixivError(await req.text())
+            else:
+                return d
+        finally:
+            req.close()
+
+    def download_pixiv_image(self, image_url: str) -> bytes:
+        """
+        Downloads an image from Pixiv.
+
+        Pixiv disables hotlinking or downloading the images directly without a Referer [sic] header with the correct
+        location. This method automatically provides it.
+
+        :param image_url: The image URL to get.
+        :return: The bytes of the image.
+        """
+        headers = {'Referer': 'http://spapi.pixiv.net/', 
+         'User-Agent': 'PixivIOSApp/6.0.9 (iOS 9.3.3; iPhone8,1)'}
+        async with self.sess.get(image_url, headers=headers) as r:
+            assert isinstance(r, aiohttp.ClientResponse)
+            if r.status != 200:
+                raise PixivError('Failed to download image {}'.format(image_url))
+            return await r.read()

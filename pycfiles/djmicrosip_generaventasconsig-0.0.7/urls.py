@@ -1,0 +1,14 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: C:\GitHub\django-microsip-base\django_microsip_base\django_microsip_base\apps\plugins\djmicrosip_generaventasconsig\djmicrosip_generaventasconsig\urls.py
+# Compiled at: 2015-02-14 13:11:26
+from django.conf.urls import patterns, url
+from .views import index, PrepararAplicacion, preferencias, generar_ventas, GenerarVentasSeleccionadas
+urlpatterns = patterns('', (
+ '^$', index), (
+ 'herramientas/preparar_aplicacion/$', PrepararAplicacion), (
+ 'preferencias/$', preferencias), (
+ 'generar_ventas/$', generar_ventas), (
+ 'generar_venta_de_facturas/$', GenerarVentasSeleccionadas))

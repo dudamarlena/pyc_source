@@ -1,0 +1,9 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\remix\admin.py
+# Compiled at: 2009-07-31 16:05:32
+from models import *
+from django.contrib import admin
+admin.site.register(Label)

@@ -1,0 +1,33 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3351)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/stas/workspace/partners/flask_restframework/flask_restframework/exceptions.py
+# Compiled at: 2017-11-03 05:35:30
+# Size of source mod 2**32: 498 bytes
+__author__ = 'stas'
+
+class BaseException(Exception):
+    status = 500
+    name = 'Server Error'
+
+
+class ValidationError(BaseException):
+    status = 400
+    name = 'Validation Error'
+
+    def __init__(self, data):
+        """
+        :param data: Can be string or dict in format {field: "Message"}
+        """
+        self.data = data
+
+
+class AuthorizationError(BaseException):
+    status = 401
+    name = 'Not authorized'
+
+
+class NotFound(BaseException):
+    status = 404
+    name = 'Not Found'

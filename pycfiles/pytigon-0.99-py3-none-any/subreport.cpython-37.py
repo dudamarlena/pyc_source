@@ -1,0 +1,48 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/sch/prj/pytigon/pytigon/prj/_schdata/schreports/templatetags/subreport.py
+# Compiled at: 2020-04-19 16:01:42
+# Size of source mod 2**32: 1444 bytes
+from base64 import b64encode
+import io, re, itertools, html
+from django import template
+import django.utils.translation as _
+from django.template.loader import get_template
+from django.template import Context, Template, RequestContext
+from django.conf import settings
+from django.utils.safestring import mark_safe
+from django.forms.widgets import CheckboxSelectMultiple
+from django.template.base import token_kwargs, TemplateSyntaxError
+from django.template.base import Node
+from pytigon_lib.schhtml.parser import Parser
+from pytigon_lib.schtools.wiki import wiki_from_str
+from pytigon_lib.schdjangoext.tools import make_href
+register = template.Library()
+
+def inclusion_tag(file_name):
+
+    def dec(func):
+
+        def func2(context, *argi, **argv):
+            ret = func(context, *argi, **argv)
+            t = get_template(file_name)
+            return t.render(ret, context.request)
+
+        return register.simple_tag(takes_context=True, name=(getattr(func, '_decorated_function', func).__name__))(func2)
+
+    return dec
+
+
+@inclusion_tag('schreports/subreport.html')
+def subrep(context, name, type):
+    rep = context['rep']
+    rep_def = context['rep_def']
+    url = make_href('/schreports/edit_subrep/%d/%s/%s/' % (rep.id, name, type))
+    return {'href': url}
+
+
+@inclusion_tag('schreports/check.html')
+def check(context, is_checked, title=''):
+    return {'is_checked':is_checked,  'title':title}

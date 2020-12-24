@@ -1,0 +1,16 @@
+-e git+https://github.com/enovance/pysflib.git#egg=pysflib
+pecan
+gerritlib
+python-ldap
+requests>=2.2.1
+passlib
+basicauth
+sqlalchemy
+nose
+mock
+urllib3
+pycrypto
+htpasswd
+pygerrit
+python-redmine
+sphinx

@@ -1,0 +1,121 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/ramusus/workspace/manufacture/env/src/django-vkontakte-api/vkontakte_api/tests.py
+# Compiled at: 2016-03-14 10:30:45
+from django.db import models, IntegrityError
+from django.test import TestCase
+from django.conf import settings
+import mock
+from .api import api_call, VkontakteApi
+from .decorators import opt_generator
+from .models import VkontakteIDModel, VkontaktePKModel, VkontakteManager
+from .parser import VkontakteParser
+TOKEN = '33af136bd445c28075f429fdb2fb9387db8fdd2d2d118c1653a4d6507f76460fce35a08b94e745eac1807'
+TOKEN_USER_ID = 201164356
+
+class User(VkontaktePKModel):
+    """
+    Test model should be on top level, otherwise table will not be created
+    """
+    resolve_screen_name_types = [
+     'user']
+    screen_name = models.CharField('Короткое имя группы', max_length=50, unique=True)
+    slug_prefix = 'id'
+    remote = VkontakteManager(remote_pk=('remote_id', ), version=5.27, methods={'get': 'users.get', 
+       'friends': ('friends.get', 5.02)})
+
+
+class UserID(VkontakteIDModel):
+    screen_name = models.CharField('Короткое имя группы', max_length=50, unique=True)
+
+
+class VkontakteApiTestCase(TestCase):
+    _settings = None
+    token = TOKEN
+    token_user_id = TOKEN_USER_ID
+
+    def setUp(self):
+        context = getattr(settings, 'SOCIAL_API_CALL_CONTEXT', {})
+        self._settings = dict(context)
+        context.update({'vkontakte': {'token': self.token}})
+
+    def tearDown(self):
+        setattr(settings, 'SOCIAL_API_CALL_CONTEXT', self._settings)
+
+
+class VkontakteApiTest(VkontakteApiTestCase):
+
+    def test_api_instance_singleton(self):
+        self.assertEqual(id(VkontakteApi()), id(VkontakteApi()))
+
+    @mock.patch('vkontakte_api.models.api_call', side_effect=lambda *a, **kw: {'items': []})
+    def test_api_call_versions(self, method):
+        User.remote.api_call('get', v=5.01)
+        self.assertEqual(method.call_args_list[0][0][0], 'users.get')
+        self.assertEqual(method.call_args_list[0][1]['v'], 5.01)
+        User.remote.api_call('get')
+        self.assertEqual(method.call_args_list[1][0][0], 'users.get')
+        self.assertEqual(method.call_args_list[1][1]['v'], 5.27)
+        User.remote.api_call('friends')
+        self.assertEqual(method.call_args_list[2][0][0], 'friends.get')
+        self.assertEqual(method.call_args_list[2][1]['v'], 5.02)
+        User.remote.api_call('friends', v=5.03)
+        self.assertEqual(method.call_args_list[3][0][0], 'friends.get')
+        self.assertEqual(method.call_args_list[3][1]['v'], 5.03)
+
+    def test_save_user_integrity_error(self):
+        user = UserID.objects.create(remote_id=1, screen_name='111')
+        user_new = UserID.objects.create(remote_id=1, screen_name='222')
+        self.assertEqual(user_new.id, user.id)
+        user_new = UserID(remote_id=1, screen_name='333')
+        user_new.save()
+        self.assertEqual(user_new.id, user.id)
+        try:
+            user_new = UserID(screen_name='333')
+            user_new.save()
+            self.fail("IntegrityError didn't raised")
+        except IntegrityError:
+            pass
+
+        try:
+            user_new = UserID(remote_id=2, screen_name='333')
+            user_new.save()
+            self.fail("IntegrityError didn't raised")
+        except IntegrityError:
+            pass
+
+    def test_parse_page(self):
+        parser = VkontakteParser()
+        parser.content = '<!><!><!><!><!><div>%s</div>' % '1<!-- ->->2<!-- -<>->3<!-- -->4'
+        self.assertEqual(parser.html, '<div>1234</div>')
+
+    def test_resolvescreenname(self):
+        response = api_call('resolveScreenName', screen_name='durov')
+        self.assertEqual(response, {'object_id': 1, 'type': 'user'})
+
+    def test_get_by_url(self):
+        instance = User.remote.get_by_url('https://vk.com/id1/')
+        self.assertEqual(instance.screen_name, 'id1')
+
+    def test_get_by_slug(self):
+        instance = User.remote.get_by_slug('durov')
+        self.assertEqual(instance.remote_id, 1)
+
+    def test_generator_decorator(self):
+
+        class GeneratorMethodClass(object):
+
+            @opt_generator
+            def some_method(self, total, *args, **kwargs):
+                for count in range(total):
+                    yield (
+                     count, total)
+
+        instance = GeneratorMethodClass()
+        self.assertTrue(isinstance(instance.some_method(10), list))
+        i = 0
+        for count, total in instance.some_method(10, as_generator=True):
+            self.assertEqual((count, total), (i, 10))
+            i += 1

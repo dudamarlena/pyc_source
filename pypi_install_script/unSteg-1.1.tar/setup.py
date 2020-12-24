@@ -1,0 +1,32 @@
+from distutils.core import setup
+setup(
+  name='unSteg',
+  packages=['unSteg'],
+  package_data={"unSteg": ["resources/*.png", "*.png", "unSteg/resources/*.png"],
+                '': ["*.png", "resources/*.png", "unSteg/resources/*.png"]},
+  version='1.1',
+  license='MIT',
+  description='Project for finding hidden files and fixing file headers.',
+  author='Kevin',
+  author_email='email@domain.com',
+  url='https://github.com/Kevin4562',
+  download_url='https://github.com/Kevin4562/unSteg/archive/v1.1.zip',
+  keywords=['File Headers', 'Magic Numbers', 'steganography'],
+  install_requires=[
+          'Pillow',
+          'PyQT5',
+          'mutagen',
+          'pdfrw',
+          'pyexcel-xlsx',
+          'mail-parser',
+          'python-docx',
+          'pefile',
+  ],
+  classifiers=[
+    'Development Status :: 3 - Alpha',
+    'Intended Audience :: Developers',
+    'Topic :: Software Development :: Build Tools',
+    'License :: OSI Approved :: MIT License',
+    'Programming Language :: Python :: 3.7',
+  ],
+)

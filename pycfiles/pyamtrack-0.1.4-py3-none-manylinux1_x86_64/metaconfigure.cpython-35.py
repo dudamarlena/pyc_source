@@ -1,0 +1,55 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.5 (3351)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/pyams_viewlet/metaconfigure.py
+# Compiled at: 2020-02-18 20:07:12
+# Size of source mod 2**32: 3715 bytes
+__doc__ = 'PyAMS_viewlet.metaconfigure module\n\nThis module provides ZCML directives handlers.\n'
+from pyramid.exceptions import ConfigurationError
+from pyramid.interfaces import IRequest, IView
+from zope.component import zcml
+from zope.component.interface import provideInterface
+from zope.interface import Interface, classImplements
+from pyams_viewlet.interfaces import IViewlet, IViewletManager
+from pyams_viewlet.manager import ViewletManager, ViewletManagerFactory
+__docformat__ = 'restructuredtext'
+
+def ViewletManagerDirective(_context, name, context=Interface, layer=IRequest, view=IView, provides=IViewletManager, class_=None, permission=None):
+    """Viewlet manager ZCML directive"""
+    if class_ is None:
+        class_ = ViewletManager
+    cdict = {'permission': permission}
+    new_class = ViewletManagerFactory(name, provides, bases=(class_,), cdict=cdict)
+    _handle_for(_context, context)
+    zcml.interface(_context, view)
+    _context.action(discriminator=('viewletManager', context, layer, view, name), callable=zcml.handler, args=(
+     'registerAdapter', new_class,
+     (
+      context, layer, view),
+     provides, name, _context.info))
+
+
+def ViewletDirective(_context, name, class_, context=Interface, layer=IRequest, view=IView, manager=IViewletManager, attribute='render', permission=None, **kwargs):
+    """Viewlet ZCML directive"""
+    if attribute != 'render':
+        if not hasattr(class_, attribute):
+            raise ConfigurationError("The provided class doesn't have the specified attribute")
+        cdict = {'__name__': name, 
+         '__page_attribute__': attribute, 
+         'permission': permission}
+        cdict.update(kwargs)
+        new_class = type(class_.__name__, (class_,), cdict)
+        classImplements(new_class, IViewlet)
+        _handle_for(_context, context)
+        zcml.interface(_context, view)
+        _context.action(discriminator=('viewlet', context, layer, view, manager, name), callable=zcml.handler, args=(
+         'registerAdapter', new_class,
+         (
+          context, layer, view, manager),
+         IViewlet, name, _context.info))
+
+
+def _handle_for(_context, for_):
+    if for_ is not None:
+        _context.action(discriminator=None, callable=provideInterface, args=(
+         '', for_))

@@ -1,0 +1,12 @@
+farm==0.4.3
+fastapi
+uvicorn
+gunicorn
+pandas
+psycopg2-binary
+sklearn
+elasticsearch
+elastic-apm
+tox
+coverage
+# optional: sentence-transformers

@@ -1,0 +1,8 @@
+pyyaml
+traits
+pandas
+xlrd
+openpyxl
+pytables
+docopt
+nose

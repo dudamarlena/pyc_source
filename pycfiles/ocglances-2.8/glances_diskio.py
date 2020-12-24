@@ -1,0 +1,139 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/fraoustin/Téléchargements/ocglances/tmp/ocglances/plugins/glances_diskio.py
+# Compiled at: 2017-02-11 10:25:25
+"""Disk I/O plugin."""
+import operator
+from ocglances.timer import getTimeSinceLastUpdate
+from ocglances.plugins.glances_plugin import GlancesPlugin
+import ocglances.psutil as psutil
+items_history_list = [
+ {'name': 'read_bytes', 'description': 'Bytes read per second', 
+    'color': '#00FF00', 
+    'y_unit': 'B/s'},
+ {'name': 'write_bytes', 'description': 'Bytes write per second', 
+    'color': '#FF0000', 
+    'y_unit': 'B/s'}]
+
+class Plugin(GlancesPlugin):
+    """Glances disks I/O plugin.
+
+    stats is a list
+    """
+
+    def __init__(self, args=None):
+        """Init the plugin."""
+        super(Plugin, self).__init__(args=args, items_history_list=items_history_list)
+        self.display_curse = True
+        self.reset()
+
+    def get_key(self):
+        """Return the key of the list."""
+        return 'disk_name'
+
+    def reset(self):
+        """Reset/init the stats."""
+        self.stats = []
+
+    @GlancesPlugin._check_decorator
+    @GlancesPlugin._log_result_decorator
+    def update(self):
+        """Update disk I/O stats using the input method."""
+        self.reset()
+        if self.input_method == 'local':
+            try:
+                diskiocounters = psutil.disk_io_counters(perdisk=True)
+            except Exception:
+                return self.stats
+
+            if not hasattr(self, 'diskio_old'):
+                try:
+                    self.diskio_old = diskiocounters
+                except (IOError, UnboundLocalError):
+                    pass
+
+            else:
+                time_since_update = getTimeSinceLastUpdate('disk')
+                diskio_new = diskiocounters
+                for disk in diskio_new:
+                    if self.args is not None and not self.args.diskio_show_ramfs and disk.startswith('ram'):
+                        continue
+                    if self.is_hide(disk):
+                        continue
+                    try:
+                        read_count = diskio_new[disk].read_count - self.diskio_old[disk].read_count
+                        write_count = diskio_new[disk].write_count - self.diskio_old[disk].write_count
+                        read_bytes = diskio_new[disk].read_bytes - self.diskio_old[disk].read_bytes
+                        write_bytes = diskio_new[disk].write_bytes - self.diskio_old[disk].write_bytes
+                        diskstat = {'time_since_update': time_since_update, 
+                           'disk_name': disk, 
+                           'read_count': read_count, 
+                           'write_count': write_count, 
+                           'read_bytes': read_bytes, 
+                           'write_bytes': write_bytes}
+                        if self.has_alias(disk) is not None:
+                            diskstat['alias'] = self.has_alias(disk)
+                    except KeyError:
+                        continue
+                    else:
+                        diskstat['key'] = self.get_key()
+                        self.stats.append(diskstat)
+
+                self.diskio_old = diskio_new
+        elif self.input_method == 'snmp':
+            pass
+        return self.stats
+
+    def update_views(self):
+        """Update stats views."""
+        super(Plugin, self).update_views()
+        for i in self.stats:
+            disk_real_name = i['disk_name']
+            self.views[i[self.get_key()]]['read_bytes']['decoration'] = self.get_alert(int(i['read_bytes'] // i['time_since_update']), header=disk_real_name + '_rx')
+            self.views[i[self.get_key()]]['write_bytes']['decoration'] = self.get_alert(int(i['write_bytes'] // i['time_since_update']), header=disk_real_name + '_tx')
+
+    def msg_curse(self, args=None):
+        """Return the dict to display in the curse interface."""
+        ret = []
+        if not self.stats or self.is_disable():
+            return ret
+        msg = ('{:9}').format('DISK I/O')
+        ret.append(self.curse_add_line(msg, 'TITLE'))
+        if args.diskio_iops:
+            msg = ('{:>7}').format('IOR/s')
+            ret.append(self.curse_add_line(msg))
+            msg = ('{:>7}').format('IOW/s')
+            ret.append(self.curse_add_line(msg))
+        else:
+            msg = ('{:>7}').format('R/s')
+            ret.append(self.curse_add_line(msg))
+            msg = ('{:>7}').format('W/s')
+            ret.append(self.curse_add_line(msg))
+        for i in sorted(self.stats, key=operator.itemgetter(self.get_key())):
+            disk_real_name = i['disk_name']
+            disk_name = self.has_alias(i['disk_name'])
+            if disk_name is None:
+                disk_name = disk_real_name
+            ret.append(self.curse_new_line())
+            if len(disk_name) > 9:
+                disk_name = '_' + disk_name[-8:]
+            msg = ('{:9}').format(disk_name)
+            ret.append(self.curse_add_line(msg))
+            if args.diskio_iops:
+                txps = self.auto_unit(int(i['read_count'] // i['time_since_update']))
+                rxps = self.auto_unit(int(i['write_count'] // i['time_since_update']))
+                msg = ('{:>7}').format(txps)
+                ret.append(self.curse_add_line(msg, self.get_views(item=i[self.get_key()], key='read_count', option='decoration')))
+                msg = ('{:>7}').format(rxps)
+                ret.append(self.curse_add_line(msg, self.get_views(item=i[self.get_key()], key='write_count', option='decoration')))
+            else:
+                txps = self.auto_unit(int(i['read_bytes'] // i['time_since_update']))
+                rxps = self.auto_unit(int(i['write_bytes'] // i['time_since_update']))
+                msg = ('{:>7}').format(txps)
+                ret.append(self.curse_add_line(msg, self.get_views(item=i[self.get_key()], key='read_bytes', option='decoration')))
+                msg = ('{:>7}').format(rxps)
+                ret.append(self.curse_add_line(msg, self.get_views(item=i[self.get_key()], key='write_bytes', option='decoration')))
+
+        return ret

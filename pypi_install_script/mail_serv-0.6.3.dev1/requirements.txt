@@ -1,0 +1,2 @@
+
+pyinstrument >= 3.0

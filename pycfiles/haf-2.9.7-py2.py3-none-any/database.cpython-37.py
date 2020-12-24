@@ -1,0 +1,287 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: J:\workspace\python\haf\haf\common\database.py
+# Compiled at: 2020-03-21 04:56:32
+# Size of source mod 2**32: 12833 bytes
+"""
+file name: database.py
+description : database tool for haf, include MySQL,SQLServer,Redis
+others :
+all these tools need the arg : SQLConfig
+    usage:
+        sql_config = SQLConfig()
+        sql_config.constructor(inputs)
+    note:
+        inputs is a dict type, include host, port, username, password, dtabase, protocol, id,  sql_name key
+"""
+from haf.common.log import Log
+logger = Log.getLogger(__name__)
+
+class SQLConfig(object):
+    __doc__ = '\n    SQLConfig, the sql tool config\n    '
+
+    def __init__(self):
+        self.host = None
+        self.port = None
+        self.username = None
+        self.password = None
+        self.database = None
+        self.protocol = None
+        self.id = None
+        self.sqlname = None
+
+    def constructor(self, inputs: dict={}):
+        """
+        using dict type to init the SQLConfig
+        :param inputs
+        :return None
+        """
+        self.host = str(inputs.get('host'))
+        self.port = inputs.get('port')
+        self.username = str(inputs.get('username'))
+        self.password = str(inputs.get('password'))
+        self.database = str(inputs.get('database'))
+        self.protocol = str(inputs.get('protocol'))
+        self.id = inputs.get('id')
+        self.sqlname = str(inputs.get('sql_name'))
+
+    def deserialize(self):
+        """
+        deserialize to an dict type
+        :return: {} of SQLConfig
+        """
+        return {'host':self.host, 
+         'port':self.port, 
+         'username':self.username, 
+         'password':self.password, 
+         'database':self.database, 
+         'protocol':self.protocol, 
+         'id':self.id, 
+         'sql_name':self.sqlname}
+
+
+class MysqlTool(object):
+    __doc__ = '\n    MysqlTool\n    '
+
+    def __init__(self):
+        pass
+
+    def connect_execute(self, sqlconfig: SQLConfig, sqlscript: list, **kwargs) -> tuple:
+        """
+        connect and execute
+
+        :param sqlconfig SQLConfig
+        :param sqlscript the script of sql, can be string or list
+        :param kwargs, include key of testcase, commit of sqlscript, run_background
+        :return return the result of sql execute
+        """
+        import pymysql
+        key = kwargs.get('key', 'database$%common$%')
+        commit = kwargs.get('commit', False)
+        run_background = kwargs.get('run_background', False)
+        logger.debug(sqlconfig.deserialize() if sqlconfig else None, __name__)
+        logger.debug(sqlscript, __name__)
+        sqlconfig = sqlconfig
+        self.connect_msql = None
+        try:
+            if 'dictcursor' in kwargs.keys():
+                if kwargs.get('dictcursor') is True:
+                    self.connect_msql = pymysql.connect(host=(sqlconfig.host), port=(sqlconfig.port), user=(sqlconfig.username), passwd=(sqlconfig.password),
+                      db=(sqlconfig.database),
+                      cursorclass=(pymysql.cursors.DictCursor))
+                else:
+                    self.connect_msql = pymysql.connect(host=(sqlconfig.host), port=(sqlconfig.port), user=(sqlconfig.username), passwd=(sqlconfig.password),
+                      db=(sqlconfig.database))
+                cursor_m = self.connect_msql.cursor()
+                data = []
+                if isinstance(sqlscript, list):
+                    for ss in sqlscript:
+                        if ss != None and ss != 'None' and len(ss) > 5:
+                            if not run_background:
+                                logger.info(f"{key} start {sqlconfig.host} execute {ss}", __name__)
+                            cursor_m.execute(ss)
+                            data.append(cursor_m.fetchall())
+                            if not run_background:
+                                logger.info(f"{key} result {str(data)}", __name__)
+                            if isinstance(ss, tuple) and len(ss) > 2:
+                                if not run_background:
+                                    logger.info(f"{key} tuple start {sqlconfig.host} execute {ss}", __name__)
+                                cursor_m.execute(ss[0], ss[1])
+                                data.append(cursor_m.fetchall())
+                                run_background or logger.info(f"{key} result {str(data)}", __name__)
+
+            elif isinstance(sqlscript, str):
+                if sqlscript != None and sqlscript != 'None' and 'None' not in sqlscript and len(sqlscript) > 5:
+                    if not run_background:
+                        logger.info(f"{key} start {sqlconfig.host} execute {sqlscript}", __name__)
+                    cursor_m.execute(sqlscript)
+                    data.append(cursor_m.fetchall())
+                    if not run_background:
+                        logger.info(f"{key} result {str(data)}", __name__)
+            elif isinstance(sqlscript, tuple):
+                if not run_background:
+                    logger.info(f"{key} start {sqlconfig.host} execute {sqlscript}", __name__)
+                (cursor_m.execute)(*sqlscript)
+                data.append(cursor_m.fetchall())
+                if not run_background:
+                    logger.info(f"{key} result {str(data)}", __name__)
+            if commit:
+                self.connect_msql.commit()
+            logger.debug(data, __name__)
+            self.close()
+            return data
+        except Exception as e:
+            try:
+                logger.error(str(e), __name__)
+                self.close()
+                return []
+            finally:
+                e = None
+                del e
+
+    def close(self):
+        try:
+            import pymysql
+            if self.connect_msql is not None:
+                self.connect_msql.close()
+        except Exception as e:
+            try:
+                pass
+            finally:
+                e = None
+                del e
+
+
+class SqlServerTool(object):
+    __doc__ = '\n    SqlServerTool\n    '
+
+    def __init__(self):
+        pass
+
+    def connect_execute(self, sqlconfig: SQLConfig, sqlscript: list, **kwargs):
+        """
+        connect and execute
+
+        :param sqlconfig SQLConfig
+        :param sqlscript the script of sql, can be string or list
+        :param kwargs, include key of testcase, commit of sqlscript, run_background
+        :return return the result of sql execute
+        """
+        import pymssql
+        key = kwargs.get('key', 'database$%common$%')
+        commit = kwargs.get('commit', False)
+        run_background = kwargs.get('run_background', False)
+        logger.debug(sqlconfig.deserialize() if sqlconfig else None, __name__)
+        logger.debug(sqlscript, __name__)
+        sqlconfig = sqlconfig
+        self.connect_msql = None
+        try:
+            if 'dictcursor' in kwargs.keys():
+                if kwargs.get('dictcursor') is True:
+                    self.connect_msql = pymssql.connect(host=(sqlconfig.host), port=(sqlconfig.port), user=(sqlconfig.username), password=(sqlconfig.password),
+                      database=(sqlconfig.database))
+                    cursor_m = self.connect_msql.cursor(as_dict=True)
+                else:
+                    self.connect_msql = pymssql.connect(host=(sqlconfig.host), port=(sqlconfig.port), user=(sqlconfig.username), password=(sqlconfig.password),
+                      database=(sqlconfig.database))
+                    cursor_m = self.connect_msql.cursor()
+                data = []
+                if isinstance(sqlscript, list):
+                    for ss in sqlscript:
+                        if ss != None and ss != 'None' and len(ss) > 5:
+                            if not run_background:
+                                logger.info(f"{key} start {sqlconfig.host} execute {ss}", __name__)
+                            cursor_m.execute(ss)
+                            data.append(cursor_m.fetchall())
+                            if not run_background:
+                                logger.info(f"{key} result {str(data)}", __name__)
+                            if isinstance(ss, tuple) and len(ss) > 2:
+                                if not run_background:
+                                    logger.info(f"{key} tuple start {sqlconfig.host} execute {ss}", __name__)
+                                cursor_m.execute(ss[0], ss[1])
+                                data.append(cursor_m.fetchall())
+                                run_background or logger.info(f"{key} result {str(data)}", __name__)
+
+            elif isinstance(sqlscript, str):
+                if sqlscript != None and sqlscript != 'None' and 'None' not in sqlscript and len(sqlscript) > 5:
+                    if not run_background:
+                        logger.info(f"{key} start {sqlconfig.host} execute {sqlscript}", __name__)
+                    cursor_m.execute(sqlscript)
+                    data.append(cursor_m.fetchall())
+                    if not run_background:
+                        logger.info(f"{key} result {str(data)}", __name__)
+            elif isinstance(sqlscript, tuple):
+                if not run_background:
+                    logger.info(f"{key} start {sqlconfig.host} execute {sqlscript}", __name__)
+                (cursor_m.execute)(*sqlscript)
+                data.append(cursor_m.fetchall())
+                if not run_background:
+                    logger.info(f"{key} result {str(data)}", __name__)
+            if commit:
+                self.connect_msql.commit()
+            logger.debug(data, __name__)
+            return data
+        except Exception as e:
+            try:
+                logger.error(str(e), __name__)
+                if self.connect_msql.open:
+                    self.connect_msql.close()
+                return []
+            finally:
+                e = None
+                del e
+
+    def close(self):
+        if self.connect_msql is not None:
+            self.connect_msql.close()
+
+
+class RedisTool(object):
+    __doc__ = '\n    Redis\n    '
+
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return 'RedisTool'
+
+    def connect_execute(self, sqlconfig: SQLConfig, sqlscript: list, **kwargs):
+        """
+        connect and execute
+
+        :param sqlconfig SQLConfig
+        :param sqlscript the script of sql, can be string or list
+        :param kwargs, include key of testcase, commit of sqlscript, run_background
+        :return return the result of sql execute
+        """
+        import redis
+        key = kwargs.get('key', 'database$%common$%')
+        commit = kwargs.get('commit', False)
+        run_background = kwargs.get('run_background', False)
+        sqlconfig = sqlconfig
+        self.connect_redis = None
+        try:
+            self.connect_redis = redis.Redis(host=(sqlconfig.host), port=(sqlconfig.port), db=(sqlconfig.database))
+            logger.info(f"{key} start {sqlconfig.host} : [{self.connect_redis.type(sqlscript)}] execute {sqlscript}", __name__)
+            if 'zset' in str(self.connect_redis.type(sqlscript)):
+                start = kwargs['start']
+                end = kwargs['end']
+                if 'rev' in kwargs:
+                    return self.connect_redis.zrevrange(sqlscript, start, end)
+                return self.connect_redis.zrange(sqlscript, start, end)
+            else:
+                if 'hash' in str(self.connect_redis.type(sqlscript)):
+                    return self.connect_redis.hget(sqlscript)
+                return self.connect_redis.get(sqlscript)
+        except Exception as e:
+            try:
+                logger.error(f"{key} {e}")
+            finally:
+                e = None
+                del e
+
+    def close(self):
+        if self.connect_redis is not None:
+            self.connect_redis.close()

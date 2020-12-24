@@ -1,0 +1,2 @@
+guess-language-spirit==0.5.2
+language-check==0.8

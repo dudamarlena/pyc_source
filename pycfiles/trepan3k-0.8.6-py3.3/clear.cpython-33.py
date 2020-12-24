@@ -1,0 +1,52 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.3 (3230)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/trepan/processor/command/clear.py
+# Compiled at: 2018-02-01 07:53:21
+# Size of source mod 2**32: 2615 bytes
+import os, inspect
+from trepan.processor.command import base_cmd as Mbase_cmd
+from trepan.processor import complete as Mcomplete
+
+class ClearCommand(Mbase_cmd.DebuggerCommand):
+    __doc__ = '**clear** [*linenumber*]\n\nClear some breakpoints by line number.\n\nSee also:\n---------\n`delete`\n\n'
+    category = 'breakpoints'
+    min_args = 0
+    max_args = None
+    name = os.path.basename(__file__).split('.')[0]
+    need_stack = True
+    short_help = 'Delete some breakpoints on a line'
+    complete = Mcomplete.complete_bpnumber
+
+    def run(self, args):
+        proc = self.proc
+        curframe = proc.curframe
+        filename = proc.list_filename
+        if len(args) <= 1:
+            lineno = inspect.getlineno(curframe)
+        else:
+            lineno = proc.get_an_int(args[1], "The 'clear' command argument when given should be a line number. Got %s", min_value=1)
+        if lineno is None:
+            return
+        else:
+            linenos = self.core.bpmgr.delete_breakpoints_by_lineno(filename, lineno)
+            if len(linenos) == 0:
+                self.errmsg('No breakpoint at line %d' % lineno)
+            else:
+                if len(linenos) == 1:
+                    self.msg('Deleted breakpoint %d' % linenos[0])
+                elif len(linenos) > 1:
+                    self.msg('Deleted breakpoints %s' % ' '.join([str(i) for i in linenos]))
+            return
+
+
+if __name__ == '__main__':
+    from trepan import debugger as Mdebugger
+    from trepan.processor import cmdproc as Mcmdproc
+    d = Mdebugger.Trepan()
+    cp = d.core.processor
+    cp.curframe = inspect.currentframe()
+    cp.stack, cp.curindex = Mcmdproc.get_stack(cp.curframe, None, None, cp)
+    command = ClearCommand(d.core.processor)
+    command.run(['clear'])

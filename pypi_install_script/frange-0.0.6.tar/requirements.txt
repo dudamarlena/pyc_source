@@ -1,0 +1,10 @@
+#
+####### requirements.txt for DataHandling #######
+#
+###### Requirements without Version Specifiers ######
+numpy
+pytest
+pytest-cov
+numpydoc
+sphinx_rtd_theme
+#

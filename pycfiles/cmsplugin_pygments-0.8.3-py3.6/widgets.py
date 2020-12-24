@@ -1,0 +1,42 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.macosx-10.8-x86_64/egg/cmsplugin_phlog/forms/widgets.py
+# Compiled at: 2013-06-26 16:38:22
+import os.path
+from django.conf import settings
+from django.forms.widgets import Widget
+from django.template.context import RequestContext
+from django.template.loader import render_to_string
+from django.utils.encoding import force_unicode
+from django.utils.safestring import mark_safe
+from cms.plugin_base import CMSPluginBase
+from cms.plugin_pool import plugin_pool
+_base_js = list(os.path.join(settings.CMS_MEDIA_URL, path) for path in ('js/libs/jquery.ui.core.js',
+                                                                        'js/libs/jquery.ui.dialog.js',
+                                                                        'js/libs/jquery.ui.sortable.js'))
+_base_css = list(os.path.join(settings.CMS_MEDIA_URL, path) for path in ('css/jquery/cupertino/jquery-ui.css', ))
+CMS_PLUGIN_PHLOG_MEDIA_URL = getattr(settings, 'CMS_PLUGIN_PHLOG_MEDIA_URL', os.path.join(settings.STATIC_URL, 'phlog'))
+
+class PluginsWidget(Widget):
+
+    class Media:
+        css = {'all': _base_css + [CMS_PLUGIN_PHLOG_MEDIA_URL.rstrip('/') + '/css/plugins_widget.css']}
+        js = _base_js + [CMS_PLUGIN_PHLOG_MEDIA_URL.rstrip('/') + '/js/plugins_widget.js']
+
+    def __init__(self, request=None, **kwargs):
+        super(PluginsWidget, self).__init__(**kwargs)
+        if request is None:
+            self.request = request
+        else:
+            self.request = ''
+        return
+
+    def render(self, name, value, attrs=None):
+        if value:
+            context = {'plugin_list': value.cmsplugin_set.filter(parent=value).order_by('position'), 'installed_plugins': plugin_pool.get_all_plugins(value.placeholder.slot), 
+               'placeholder': value.placeholder, 
+               'plugin': value}
+        else:
+            context = {'add': True}
+        return mark_safe(render_to_string('admin/phlog/widgets/plugins.html', context, RequestContext(self.request)))

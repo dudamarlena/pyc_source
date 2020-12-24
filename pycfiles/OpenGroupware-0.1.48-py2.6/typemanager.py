@@ -1,0 +1,242 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/coils/core/typemanager.py
+# Compiled at: 2012-10-12 07:02:39
+import sys, time, logging
+from datetime import datetime
+from coils.foundation import ObjectInfo, Appointment, ProjectAssignment, Participant, CompanyAssignment, Contact, Enterprise, Team, Project, Task, Team, Collection, CollectionAssignment, Route, Document, Process, Folder
+COILS_TYPEMANAGER_CACHE = {}
+
+class TypeManager:
+    __slots__ = ('_log', '_orm', '_ctx')
+
+    def __init__(self, ctx):
+        self._ctx = ctx
+        self._log = logging.getLogger('typemanager')
+        self._orm = self._ctx.db_session()
+
+    def check_cache(self, object_id):
+        try:
+            if COILS_TYPEMANAGER_CACHE.has_key(object_id):
+                return COILS_TYPEMANAGER_CACHE[object_id][0]
+        except TypeError, e:
+            self._log.error(('objectId was {0} = {1}').format(type(object_id), object_id))
+            self._log.exception(e)
+        except Exception, e:
+            self._log.exception(e)
+
+        return
+
+    def purge_cache(self, object_id):
+        if COILS_TYPEMANAGER_CACHE.has_key(object_id):
+            del COILS_TYPEMANAGER_CACHE[object_id]
+
+    def set_cache(self, object_id, kind):
+        COILS_TYPEMANAGER_CACHE[object_id] = []
+        COILS_TYPEMANAGER_CACHE[object_id].append(kind)
+        COILS_TYPEMANAGER_CACHE[object_id].append(datetime.now())
+        return kind
+
+    @staticmethod
+    def translate_kind_to_legacy(kind):
+        return ObjectInfo.translate_kind_to_legacy(kind)
+
+    @staticmethod
+    def translate_kind_from_legacy(kind):
+        return ObjectInfo.translate_kind_from_legacy(kind)
+
+    def get_direntry(self, object_id):
+
+        class DirEntry(object):
+            __slots__ = ('object_id', 'kind', 'display_name', 'file_name', 'size',
+                         'owner', 'version')
+
+            def __init__(self, object_id, kind, display_name, file_name, size, owner, version):
+                self.object_id = object_id
+                self.kind = kind
+                self.display_name = display_name
+                self.file_name = file_name
+                self.size = size
+                self.owner = owner
+                self.version = owner
+
+        query = self._orm.query(ObjectInfo).filter(ObjectInfo.object_id == object_id)
+        data = query.all()
+        if data:
+            data = data[0]
+            dentry = DirEntry(data.object_id, data.kind, data.display_name, None, 0, None, None)
+        else:
+            if self._ctx.amq_available:
+                self._ctx.send(None, ('coils.administrator/repair_objinfo:{0}').format(object_id), None)
+            entity = self.get_entity(object_id)
+            if entity:
+                version = entity.version if hasattr(entity, 'version') else 0
+                display_name = entity.get_display_name() if hasattr(entity, 'get_display_name') else str(entity.object_id)
+                file_name = entity.get_file_name() if hasattr(entity, 'get_file_name') else ('{0}.ics').format(object_id)
+                file_size = 0
+                owner_id = entity.owner_id if hasattr(entity, 'owner_id') else None
+                version = entity.version if hasattr(entity, 'version') else 0
+                return DirEntry(enity.object_id, entity.__entityName__, display_name, file_name, file_size, owner_id, version)
+        return
+
+    def get_type(self, object_id, repair_enabled=True):
+        kind = self.check_cache(object_id)
+        if kind is None:
+            query = self._orm.query(ObjectInfo).filter(ObjectInfo.object_id == object_id)
+            data = query.all()
+            if len(data) == 0:
+                kind = self.deep_search_for_type(object_id)
+                self._log.debug(('Deep search for objectId#{0} discovered type {1}').format(object_id, kind))
+                if kind != 'Unknown' and self._ctx.amq_available:
+                    if repair_enabled:
+                        self._log.debug(('Requesting repair of ObjectInfo for objectId#{0}').format(object_id))
+                        self._ctx.send(None, ('coils.administrator/repair_objinfo:{0}').format(object_id), None)
+                    else:
+                        self._log.debug(('Repair of ObjectInfo is disabled [objectId#{0}]; loop prevention?').format(object_id))
+            elif len(data) > 0:
+                kind = str(data[0].kind)
+        if kind is None:
+            return 'Unknown'
+        else:
+            self.set_cache(object_id, kind)
+            return TypeManager.translate_kind_from_legacy(kind)
+
+    def get_entity(self, object_id, repair_enabled=True):
+        kind = self.get_type(object_id, repair_enabled=repair_enabled)
+        if kind:
+            if kind == 'Unknown':
+                return
+            try:
+                entity = self._ctx.run_command(('{0}::get').format(kind.lower()), id=object_id)
+            except:
+                return
+            else:
+                return entity
+        return
+
+    def get_entities(self, object_ids, limit=0):
+        entities = []
+        for (kind, ids) in self._ctx.type_manager.group_ids_by_type(object_ids).items():
+            try:
+                result = self._ctx.run_command(('{0}::get').format(kind.lower()), ids=ids)
+            except Exception, e:
+                self._log.warn(('attempt to use get_entities on unsupported object type "{0}"?').format(kind))
+                self._log.exception(e)
+            else:
+                entities.extend(result)
+                if limit and len(entities) > limit:
+                    break
+
+        return entities
+
+    def get_display_name(self, object_id):
+        data = query = self._orm.query(ObjectInfo).filter(ObjectInfo.object_id == object_id).all()
+        if data:
+            if data[0].display_name:
+                return data[0].display_name
+            entity = self.get_entity(object_id)
+            if entity:
+                if hasattr(entity, 'get_display_name'):
+                    return entity.get_display_name()[0:127]
+            return str(object_id)
+
+    def filter_ids_by_type(self, object_ids, entity_name):
+        groups = self.group_ids_by_type(object_ids)
+        if entity_name in groups:
+            return groups[entity_name]
+        return []
+
+    def group_ids_by_type(self, object_ids):
+        result = {}
+        for object_id in object_ids:
+            entity_name = self.get_type(object_id)
+            if result.has_key(entity_name):
+                result[entity_name].append(object_id)
+            else:
+                result[entity_name] = [
+                 object_id]
+
+        return result
+
+    def group_by_type(self, **params):
+        if params.has_key('objects'):
+            return self._group_objects(params['objects'])
+        if params.has_key('ids'):
+            return self._group_ids(params['ids'])
+
+    def _group_objects(self, entities):
+        start = time.time()
+        result = {}
+        for entity in entities:
+            if entity is None:
+                self._log.error('Encountered None entity while grouping objects')
+            else:
+                entity_name = entity.__entityName__
+                if result.has_key(entity_name):
+                    result[entity_name].append(entity)
+                else:
+                    result[entity_name] = [
+                     entity]
+
+        end = time.time()
+        self._log.debug('duration of grouping was %0.3fs' % (end - start))
+        return result
+
+    def _group_ids(self, object_ids):
+        result = {}
+        for object_id in object_ids:
+            entity_name = self.get_type(object_id)
+            if result.has_key(entity_name):
+                result[entity_name].append(object_id)
+            else:
+                result[entity_name] = [
+                 object_id]
+
+        return result
+
+    def deep_search_for_type(self, object_id):
+        self._log.warn('Performing deep search for type of objectId#%s', object_id)
+        query = self._orm.query(Appointment).filter(Appointment.object_id == object_id)
+        if len(query.all()) > 0:
+            return 'Date'
+        else:
+            query = self._orm.query(Contact).filter(Contact.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Person'
+            query = self._orm.query(Folder).filter(Folder.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Folder'
+            query = self._orm.query(Enterprise).filter(Enterprise.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Enterprise'
+            query = self._orm.query(Participant).filter(Participant.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'DateCompanyAssignment'
+            query = self._orm.query(Project).filter(Project.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Project'
+            query = self._orm.query(Team).filter(Team.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Team'
+            query = self._orm.query(Task).filter(Task.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Job'
+            query = self._orm.query(Document).filter(Document.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Document'
+            query = self._orm.query(Process).filter(Process.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Process'
+            query = self._orm.query(Route).filter(Route.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Route'
+            query = self._orm.query(Collection).filter(Collection.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'Collection'
+            query = self._orm.query(CollectionAssignment).filter(CollectionAssignment.object_id == object_id)
+            if len(query.all()) > 0:
+                return 'collectionAssignment'
+            self._log.warn('Deep search failed to find type for objectId#%s', object_id)
+            return

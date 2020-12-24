@@ -1,0 +1,21 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/kss/plugin/jsmath/demo/zopeconfig.py
+# Compiled at: 2008-07-03 06:29:53
+from kss.demo.interfaces import IKSSDemoResource, IKSSSeleniumTestResource
+from kss.demo.resource import KSSDemo, KSSSeleniumTestDirectory
+from zope.interface import implements
+
+class IResource(IKSSDemoResource, IKSSSeleniumTestResource):
+    __module__ = __name__
+
+
+class KSSDemos(object):
+    __module__ = __name__
+    implements(IResource)
+    demos = (
+     KSSDemo('jsmath', '', 'kss_jsmath_demo.html', 'jsMath'),)
+    selenium_tests = (
+     KSSSeleniumTestDirectory('selenium_tests'),)

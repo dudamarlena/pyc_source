@@ -1,0 +1,86 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/canoe/watch.py
+# Compiled at: 2013-03-20 10:50:18
+import os, sys, time, threading
+from data import Buffer
+
+class WatchedFile(object):
+
+    def __init__(self, fname, bufn=0):
+        self.filename = fname
+        self.fd = open(fname, 'r')
+        self.st = os.stat(fname)
+        self.buf = Buffer(bufn)
+        self.ends_nl = False
+
+    def _reopen(self):
+        self.fd.close()
+        self.fd = open(fname, 'r')
+
+    def _chunk(self, chk, cb=None):
+        lines = chk.split('\n')
+        l = len(lines)
+        if l > 0:
+            last_line = None
+            for i in xrange(l):
+                if i == 0 and not self.ends_nl:
+                    last_line = self.buf.alter(lambda x: (x or '') + lines[0])
+                elif i == l - 1:
+                    last_line = lines[(-1)]
+                    if last_line.endswith('\n'):
+                        self.ends_nl = True
+                else:
+                    last_line = lines[i]
+                self.buf.push(last_line)
+                if cb:
+                    cb(last_line, self.buf)
+
+        return
+
+    def watch(self, cb=None):
+        self.fd.seek(0, 2)
+        lastTell = -1
+        while True:
+            a = self.fd.read()
+            if self.filename:
+                tell = self.fd.tell()
+            else:
+                tell += len(a)
+            if tell > lastTell:
+                self._chunk(a, cb)
+            lastTell = tell
+            if self.filename:
+                st = os.stat(self.filename)
+                if st.st_dev != self.st.st_dev or st.st_ino != self.st.st_ino or st.st_nlink != self.st.st_nlink:
+                    self.fd.close()
+                    self._reopen()
+                    lastTell = -1
+                time.sleep(0.1)
+
+
+def start_watch(conf):
+    """Given a config object which may define multiple canoes, run
+    all of them, however that means.
+    """
+
+    def mk_cball(canoes):
+
+        def cb(line, buffer):
+            for c in canoes:
+                c.send(line, buffer)
+
+        return cb
+
+    ts = []
+    for fname, canoes in conf.watching:
+        wf = WatchedFile(fname, 1024)
+        cb = mk_cball(canoes)
+        tid = threading.Thread(target=wf.watch, args=(cb,))
+        ts.append(tid)
+        tid.start()
+
+    for t in ts:
+        t.join()

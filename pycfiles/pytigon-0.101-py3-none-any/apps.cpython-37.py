@@ -1,0 +1,11 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/sch/prj/setup/pytigon/pytigon/prj/_schall/apps.py
+# Compiled at: 2020-05-02 15:32:44
+# Size of source mod 2**32: 52 bytes
+APPS = []
+APPS_EXT = []
+PUBLIC = False
+MAIN_PRJ = False

@@ -1,0 +1,10 @@
+# List required packages in this file, one per line.
+numpy
+pandas
+SimpleITK
+pyradiomics
+seaborn
+matplotlib
+sklearn
+scipy
+opencv-python

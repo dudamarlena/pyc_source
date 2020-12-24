@@ -1,0 +1,98 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/luoxi/Project/yunify/qingcloud-cli/qingcloud/cli/misc/utils.py
+# Compiled at: 2017-03-01 04:17:47
+import os, json, time
+from datetime import datetime
+from .yaml_tool import yaml_load
+
+def explode_array(list_str, separator=','):
+    """
+    Explode list string into array
+    """
+    if not list_str:
+        return []
+    return [ item.strip() for item in list_str.split(separator) if item.strip() != '' ]
+
+
+def send_request(action, directive, mgmt_handler):
+    request = directive
+    request['action'] = action
+    response = mgmt_handler.handle(action, directive)
+    prints(request, response)
+    return response
+
+
+def load_conf(conf_file):
+    require_params = [
+     'qy_access_key_id',
+     'qy_secret_access_key',
+     'zone']
+    if conf_file == '':
+        print 'config file should be specified'
+        return
+    else:
+        if conf_file.startswith('~'):
+            conf_file = os.path.expanduser(conf_file)
+        if not os.path.isfile(conf_file):
+            print 'config file [%s] not exists' % conf_file
+            return
+        with open(conf_file, 'r') as (fd):
+            conf = yaml_load(fd)
+            if conf is None:
+                print 'config file [%s] format error' % conf_file
+                return
+            for param in require_params:
+                if param not in conf:
+                    print '[%s] should be specified in conf_file' % param
+                    return
+
+        return conf
+
+
+def json_dumps(data, indent=0, ensure_ascii=False):
+    return json.dumps(data, indent=indent, ensure_ascii=ensure_ascii)
+
+
+def prints(req, rep):
+    """ print request and reply """
+    if isinstance(req, str):
+        req = json.loads(req)
+    if isinstance(rep, str):
+        rep = json.loads(rep)
+    content = json_dumps(rep, indent=2, ensure_ascii=False)
+    if str(type(content)) == "<type 'unicode'>":
+        print content.encode('utf-8')
+    else:
+        print content
+
+
+def prints_body(resp):
+    if resp.getheader('content-type').startswith('application/json'):
+        body = json.loads(resp.read())
+        print json_dumps(body, indent=2)
+    else:
+        print resp.read()
+
+
+ISO8601 = '%Y-%m-%dT%H:%M:%SZ'
+
+def get_expire_time():
+    curr_ts = time.time()
+    adjust = 1200
+    expire_ts = curr_ts + adjust
+    return time.strftime(ISO8601, time.gmtime(expire_ts))
+
+
+def convert_to_utctime(time_str):
+    try:
+        _format = '%Y-%m-%d %H:%M:%S'
+        dt = datetime.strptime(time_str, _format)
+        gmt = time.gmtime(time.mktime(dt.timetuple()))
+        return time.strftime(ISO8601, gmt)
+    except:
+        return
+
+    return

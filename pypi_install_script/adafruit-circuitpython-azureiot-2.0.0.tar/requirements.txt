@@ -1,0 +1,5 @@
+Adafruit-Blinka
+Adafruit-CircuitPython-miniMQTT
+CircuitPython-HMAC
+CircuitPython-Base64
+CircuitPython-Parse

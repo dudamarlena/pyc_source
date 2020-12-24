@@ -1,0 +1,65 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/concurrent_tree_crawler/common/threads/test/token_bucket_test.py
+# Compiled at: 2011-09-28 13:50:09
+import unittest, time, threading
+from concurrent_tree_crawler.common.threads.token_bucket import StandardTokenBucket, TokenBucketFiller
+
+class TokenBucketTestCase(unittest.TestCase):
+
+    def test_get(self):
+        bucket = StandardTokenBucket(1000)
+        filler = TokenBucketFiller(bucket, 2, 3)
+        ths = []
+        threads_no = 2
+        for i in xrange(threads_no):
+            ths.append(_Incrementor(bucket))
+            ths[i].start()
+
+        filler.start()
+        time.sleep(3)
+        for i in xrange(threads_no):
+            ths[i].order_stop()
+
+        for i in xrange(threads_no):
+            ths[i].join()
+
+        filler.stop()
+        results = []
+        sum = 0
+        for i in xrange(threads_no):
+            results.append(ths[i].get_result())
+            sum += results[i]
+
+        self.assertEqual(8, sum)
+
+
+class _Incrementor(threading.Thread):
+
+    def __init__(self, bucket):
+        threading.Thread.__init__(self)
+        self.__bucket = bucket
+        self.__stop_lock = threading.Lock()
+        self.__stop = False
+        self.__value = 0
+        self.setDaemon(True)
+
+    def run(self):
+        while not self.__should_stop():
+            self.__bucket.get_token()
+            self.__value += 1
+
+    def get_result(self):
+        return self.__value
+
+    def order_stop(self):
+        self.__stop_lock.acquire()
+        self.__stop = True
+        self.__stop_lock.release()
+
+    def __should_stop(self):
+        self.__stop_lock.acquire()
+        should_stop = self.__stop
+        self.__stop_lock.release()
+        return should_stop

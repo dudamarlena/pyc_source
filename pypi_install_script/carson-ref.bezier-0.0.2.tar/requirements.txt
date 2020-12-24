@@ -1,0 +1,13 @@
+# pip install -r requirements.txt
+
+numpy
+
+#PIL
+Pillow
+
+# matplotlib.use('webagg')
+matplotlib
+tornado
+
+
+PyYAML

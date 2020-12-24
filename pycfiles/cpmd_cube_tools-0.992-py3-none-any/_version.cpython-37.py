@@ -1,0 +1,8 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /mnt/c/Users/lv_we/data/codes/tools_lib/cpmd_cube_tools/release/cpmd_cube_tools/_version.py
+# Compiled at: 2020-04-25 20:20:15
+# Size of source mod 2**32: 1063 bytes
+__doc__ = '\n-----------\nCPMD_Cube_Tools\n-----------\n\nAuthor: Wade LYU\nemail: lyuwade@gmail.com\n\nA python library and tool to read in and manipulate Gaussian and CPMD cube files. This code allows you to:\n    Read and write Gaussian/CPMD cube files\n    Perform VDD charge analysis\n\nAcknowledgment: This code is partially developed based on the Cube-Toolz @ https://github.com/funkymunkycool/Cube-Toolz/blob/master/cube_tools.py\n\nVersion      Date              Coder          Changes\n=======   ==========        ===========       =======\n0.6x       05/08/2019        Wade Lyu          Corrected the coordinates of cube file by external geometry information, and formated cube output\n0.7x       02/10/2019        Wade Lyu          Implemention of Voronoi deformation density (VDD) method for charge analysis\n0.8x       23/04/2020        Wade Lyu          Cleaned-up and Reformated the core of the package\n0.99       25/04/2020        Wade Lyu          Added more detailed examples for users\n0.991      26/04/2020        Wade Lyu          Fixed some typos\n'
+version = 0.991

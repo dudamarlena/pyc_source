@@ -1,0 +1,79 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/sebastian/git/skymill/cumulus/cumulus/cumulus_ds/__init__.py
+# Compiled at: 2014-04-17 04:13:37
+__doc__ = ' Cumulus Deployment Suite\n\nAPACHE LICENSE 2.0\nCopyright 2013-2014 Skymill Solutions\n\nLicensed under the Apache License, Version 2.0 (the "License");\nyou may not use this file except in compliance with the License.\nYou may obtain a copy of the License at\n\n   http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an "AS IS" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.\n'
+import logging
+from cumulus_ds import bundle_manager
+from cumulus_ds import deployment_manager
+from cumulus_ds.config import CONFIG as config
+LOGGING_CONFIG = {'version': 1, 
+   'disable_existing_loggers': False, 
+   'formatters': {'standard': {'format': '%(asctime)s - cumulus - %(levelname)s - %(message)s'}, 
+                  'boto': {'format': '%(asctime)s - boto - %(levelname)s - %(message)s'}}, 
+   'handlers': {'default': {'level': 'INFO', 
+                            'class': 'logging.StreamHandler', 
+                            'formatter': 'standard'}, 
+                'boto': {'level': 'DEBUG', 
+                         'class': 'logging.StreamHandler', 
+                         'formatter': 'boto'}}, 
+   'loggers': {'': {'handlers': [
+                               'default'], 
+                    'level': 'INFO', 
+                    'propagate': True}, 
+               'boto': {'handlers': [
+                                   'boto'], 
+                        'level': logging.CRITICAL, 
+                        'propagate': False}, 
+               'cumulus_ds.bundle_manager': {'handlers': [
+                                                        'default'], 
+                                             'level': 'DEBUG', 
+                                             'propagate': False}, 
+               'cumulus_ds.config_handler': {'handlers': [
+                                                        'default'], 
+                                             'level': 'DEBUG', 
+                                             'propagate': False}, 
+               'cumulus_ds.connection_handler': {'handlers': [
+                                                            'default'], 
+                                                 'level': 'DEBUG', 
+                                                 'propagate': False}, 
+               'cumulus_ds.deployment_manager': {'handlers': [
+                                                            'default'], 
+                                                 'level': 'DEBUG', 
+                                                 'propagate': False}, 
+               'cumulus_ds.helpers.stack': {'handlers': [
+                                                       'default'], 
+                                            'level': 'DEBUG', 
+                                            'propagate': False}}}
+LOGGING_CONFIG['handlers']['default']['level'] = config.get_log_level()
+logging.config.dictConfig(LOGGING_CONFIG)
+LOGGER = logging.getLogger(__name__)
+
+def main():
+    """ Main function """
+    try:
+        if config.args.bundle:
+            bundle_manager.build_bundles()
+        if config.args.undeploy:
+            deployment_manager.undeploy(force=config.args.force)
+        if config.args.deploy:
+            bundle_manager.build_bundles()
+            deployment_manager.deploy()
+        if config.args.deploy_without_bundling:
+            deployment_manager.deploy()
+        if config.args.list:
+            deployment_manager.list_stacks()
+        if config.args.validate_templates:
+            deployment_manager.validate_templates()
+        if config.args.events:
+            deployment_manager.list_events()
+        if config.args.outputs:
+            deployment_manager.list_outputs()
+        if config.args.redeploy:
+            deployment_manager.undeploy(force=True)
+            bundle_manager.build_bundles()
+            deployment_manager.deploy()
+    except Exception as error:
+        LOGGER.error(error)
+        raise

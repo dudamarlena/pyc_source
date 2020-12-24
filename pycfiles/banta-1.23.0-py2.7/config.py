@@ -1,0 +1,85 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\banta\db\config.py
+# Compiled at: 2013-02-15 16:10:56
+"""Module for configuration on a .ini file.
+The class in this module should be instantiated before loading the rest of the app.
+Because it holds the criticial configuration for the app, the one that could be used as a safenet.
+This is important for stuff that could break the app"""
+from __future__ import absolute_import, print_function, unicode_literals
+import ConfigParser, os
+
+class Config:
+    EXPERIMENTAL = False
+    PERSISTENT_PRINTER = True
+    DEBUG = False
+    PROFILING = False
+    SERVER = b''
+    DISABLED_MODULES = []
+    WEBSERVICE_PORT = 8008
+    K_EXPERIMENTAL = b'experimental'
+    K_PERSISTENT_PRINTER = b'persistent_printer'
+    K_DEBUG = b'debug'
+    K_PROFILING = b'profiling'
+    K_DISABLED_MODULES = b'disabled_modules'
+    K_WEBSERVICE_PORT = b'webservice_port'
+    K_SERVER = b'server'
+
+    def __init__(self, cfg=b'banta.cfg'):
+        self.filename = os.path.join(os.path.abspath(b'.'), cfg)
+        self.defaults = {self.K_DEBUG: str(self.DEBUG), 
+           self.K_PROFILING: str(self.PROFILING), 
+           self.K_PERSISTENT_PRINTER: str(self.PERSISTENT_PRINTER), 
+           self.K_EXPERIMENTAL: str(self.EXPERIMENTAL), 
+           self.K_DISABLED_MODULES: (b',').join(self.DISABLED_MODULES), 
+           self.K_WEBSERVICE_PORT: str(self.WEBSERVICE_PORT), 
+           self.K_SERVER: self.SERVER}
+        self.config = ConfigParser.SafeConfigParser(self.defaults)
+        self.config.readfp(open(self.filename, b'a+'))
+        self.load()
+
+    def load(self):
+        sect = b'DEFAULT'
+        self.PROFILING = self.config.getboolean(sect, self.K_PROFILING)
+        self.DEBUG = self.config.getboolean(sect, self.K_DEBUG)
+        self.PERSISTENT_PRINTER = self.config.getboolean(sect, self.K_PERSISTENT_PRINTER)
+        self.EXPERIMENTAL = self.config.getboolean(sect, self.K_EXPERIMENTAL)
+        d_modules = self.config.get(sect, self.K_DISABLED_MODULES)
+        self.DISABLED_MODULES = [ m.strip() for m in d_modules.split(b',')
+                                ]
+        self.WEBSERVICE_PORT = int(self.config.get(sect, self.K_WEBSERVICE_PORT))
+        self.SERVER = self.config.get(sect, self.K_SERVER)
+
+    def get(self, section, key):
+        return self.config.get(section, key)
+
+    def set(self, key, value, section=None):
+        if self.config:
+            if section:
+                if not self.config.has_section(section):
+                    self.config.add_section(section)
+            else:
+                section = b'DEFAULT'
+            self.config.set(section, key, str(value))
+            return True
+        else:
+            return False
+
+    def write(self):
+        """This method writes back the configuration.
+                Is better to call this method explicitly instead of putting this code in __del__
+                This file only holds critical configuration that might crash banta,
+                so , if the software crashes is better not to write that configuration..
+
+                """
+        self.set(self.K_PROFILING, self.PROFILING)
+        self.set(self.K_DEBUG, self.DEBUG)
+        self.set(self.K_EXPERIMENTAL, self.EXPERIMENTAL)
+        self.set(self.K_PERSISTENT_PRINTER, self.PERSISTENT_PRINTER)
+        self.set(self.K_DISABLED_MODULES, (b',').join(self.DISABLED_MODULES))
+        self.set(self.K_WEBSERVICE_PORT, str(self.WEBSERVICE_PORT))
+        self.set(self.K_SERVER, self.SERVER)
+        if self.config:
+            self.config.write(open(self.filename, b'w'))

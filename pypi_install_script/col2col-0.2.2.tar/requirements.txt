@@ -1,0 +1,6 @@
+pandas
+xlrd
+xlwt
+wheel
+pip
+openpyxl

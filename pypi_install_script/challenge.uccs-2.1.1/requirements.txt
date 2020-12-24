@@ -1,0 +1,14 @@
+zc.buildout
+numpy
+scipy
+matplotlib
+bob.extension
+bob.core
+bob.blitz
+bob.core
+bob.io.base
+bob.io.image
+bob.ip.base
+bob.ip.color
+bob.ip.facedetect
+bob.measure

@@ -1,0 +1,170 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.12-x86_64/egg/dicom_tools/pyqtgraph/graphicsItems/HistogramLUTItem.py
+# Compiled at: 2018-05-21 04:28:19
+# Size of source mod 2**32: 7857 bytes
+"""
+GraphicsWidget displaying an image histogram along with gradient editor. Can be used to adjust the appearance of images.
+"""
+from ..Qt import QtGui, QtCore
+from .. import functions as fn
+from .GraphicsWidget import GraphicsWidget
+from .ViewBox import *
+from .GradientEditorItem import *
+from .LinearRegionItem import *
+from .PlotDataItem import *
+from .AxisItem import *
+from .GridItem import *
+from ..Point import Point
+from .. import functions as fn
+import numpy as np
+from .. import debug
+import weakref
+__all__ = [
+ 'HistogramLUTItem']
+
+class HistogramLUTItem(GraphicsWidget):
+    __doc__ = '\n    This is a graphicsWidget which provides controls for adjusting the display of an image.\n    Includes:\n\n    - Image histogram \n    - Movable region over histogram to select black/white levels\n    - Gradient editor to define color lookup table for single-channel images\n    '
+    sigLookupTableChanged = QtCore.Signal(object)
+    sigLevelsChanged = QtCore.Signal(object)
+    sigLevelChangeFinished = QtCore.Signal(object)
+
+    def __init__(self, image=None, fillHistogram=True):
+        """
+        If *image* (ImageItem) is provided, then the control will be automatically linked to the image and changes to the control will be immediately reflected in the image's appearance.
+        By default, the histogram is rendered with a fill. For performance, set *fillHistogram* = False.
+        """
+        GraphicsWidget.__init__(self)
+        self.lut = None
+        self.imageItem = lambda : None
+        self.layout = QtGui.QGraphicsGridLayout()
+        self.setLayout(self.layout)
+        self.layout.setContentsMargins(1, 1, 1, 1)
+        self.layout.setSpacing(0)
+        self.vb = ViewBox(parent=self)
+        self.vb.setMaximumWidth(152)
+        self.vb.setMinimumWidth(45)
+        self.vb.setMouseEnabled(x=False, y=True)
+        self.gradient = GradientEditorItem()
+        self.gradient.setOrientation('right')
+        self.gradient.loadPreset('grey')
+        self.region = LinearRegionItem([0, 1], LinearRegionItem.Horizontal)
+        self.region.setZValue(1000)
+        self.vb.addItem(self.region)
+        self.axis = AxisItem('left', linkView=(self.vb), maxTickLength=(-10), parent=self)
+        self.layout.addItem(self.axis, 0, 0)
+        self.layout.addItem(self.vb, 0, 1)
+        self.layout.addItem(self.gradient, 0, 2)
+        self.range = None
+        self.gradient.setFlag(self.gradient.ItemStacksBehindParent)
+        self.vb.setFlag(self.gradient.ItemStacksBehindParent)
+        self.gradient.sigGradientChanged.connect(self.gradientChanged)
+        self.region.sigRegionChanged.connect(self.regionChanging)
+        self.region.sigRegionChangeFinished.connect(self.regionChanged)
+        self.vb.sigRangeChanged.connect(self.viewRangeChanged)
+        self.plot = PlotDataItem()
+        self.plot.rotate(90)
+        self.fillHistogram(fillHistogram)
+        self.vb.addItem(self.plot)
+        self.autoHistogramRange()
+        if image is not None:
+            self.setImageItem(image)
+
+    def fillHistogram(self, fill=True, level=0.0, color=(100, 100, 200)):
+        if fill:
+            self.plot.setFillLevel(level)
+            self.plot.setFillBrush(color)
+        else:
+            self.plot.setFillLevel(None)
+
+    def paint(self, p, *args):
+        pen = self.region.lines[0].pen
+        rgn = self.getLevels()
+        p1 = self.vb.mapFromViewToItem(self, Point(self.vb.viewRect().center().x(), rgn[0]))
+        p2 = self.vb.mapFromViewToItem(self, Point(self.vb.viewRect().center().x(), rgn[1]))
+        gradRect = self.gradient.mapRectToParent(self.gradient.gradRect.rect())
+        for pen in [fn.mkPen('k', width=3), pen]:
+            p.setPen(pen)
+            p.drawLine(p1, gradRect.bottomLeft())
+            p.drawLine(p2, gradRect.topLeft())
+            p.drawLine(gradRect.topLeft(), gradRect.topRight())
+            p.drawLine(gradRect.bottomLeft(), gradRect.bottomRight())
+
+    def setHistogramRange(self, mn, mx, padding=0.1):
+        """Set the Y range on the histogram plot. This disables auto-scaling."""
+        self.vb.enableAutoRange(self.vb.YAxis, False)
+        self.vb.setYRange(mn, mx, padding)
+
+    def autoHistogramRange(self):
+        """Enable auto-scaling on the histogram plot."""
+        self.vb.enableAutoRange(self.vb.XYAxes)
+
+    def setImageItem(self, img):
+        """Set an ImageItem to have its levels and LUT automatically controlled
+        by this HistogramLUTItem.
+        """
+        self.imageItem = weakref.ref(img)
+        img.sigImageChanged.connect(self.imageChanged)
+        img.setLookupTable(self.getLookupTable)
+        self.regionChanged()
+        self.imageChanged(autoLevel=True)
+
+    def viewRangeChanged(self):
+        self.update()
+
+    def gradientChanged(self):
+        if self.imageItem() is not None:
+            if self.gradient.isLookupTrivial():
+                self.imageItem().setLookupTable(None)
+            else:
+                self.imageItem().setLookupTable(self.getLookupTable)
+        self.lut = None
+        self.sigLookupTableChanged.emit(self)
+
+    def getLookupTable(self, img=None, n=None, alpha=None):
+        """Return a lookup table from the color gradient defined by this 
+        HistogramLUTItem.
+        """
+        if n is None:
+            if img.dtype == np.uint8:
+                n = 256
+            else:
+                n = 512
+        if self.lut is None:
+            self.lut = self.gradient.getLookupTable(n, alpha=alpha)
+        return self.lut
+
+    def regionChanged(self):
+        self.sigLevelChangeFinished.emit(self)
+
+    def regionChanging(self):
+        if self.imageItem() is not None:
+            self.imageItem().setLevels(self.region.getRegion())
+        self.sigLevelsChanged.emit(self)
+        self.update()
+
+    def imageChanged(self, autoLevel=False, autoRange=False):
+        profiler = debug.Profiler()
+        h = self.imageItem().getHistogram()
+        profiler('get histogram')
+        if h[0] is None:
+            return
+        (self.plot.setData)(*h)
+        profiler('set plot')
+        if autoLevel:
+            mn = h[0][0]
+            mx = h[0][(-1)]
+            self.region.setRegion([mn, mx])
+            profiler('set region')
+
+    def getLevels(self):
+        """Return the min and max levels.
+        """
+        return self.region.getRegion()
+
+    def setLevels(self, mn, mx):
+        """Set the min and max levels.
+        """
+        self.region.setRegion([mn, mx])

@@ -1,0 +1,61 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.9-x86_64/egg/tests/db/resultset_test.py
+# Compiled at: 2019-08-25 22:19:11
+# Size of source mod 2**32: 1477 bytes
+from unittest import TestCase
+from firestore import Collection, String
+from firestore.db.connection import ResultSet
+from tests import online
+
+class QueryDocument(Collection):
+    __collection__ = 'testaroos'
+    name = String(required=True)
+
+
+@online
+class ResultSetTest(TestCase):
+
+    def setUp(self):
+        self.rs = ResultSet()
+        self.rss = ResultSet([34])
+        self.qd = QueryDocument(name='yimu')
+
+    def tearDown(self):
+        pass
+
+    def test_empty_result_set_false(self):
+        self.assertFalse(self.rs)
+
+    def test_result_set_equal(self):
+        self.qd.name = 'ayimu'
+        doc_one = self.qd.save()
+        self.qd.name = 'AYIMMMUSSS'
+        doc_two = self.qd.save()
+        self.assertEqual(doc_one, doc_two)
+        doc_two.delete()
+
+    def test_find_document(self):
+        self.qd.name = 'ayimu'
+        self.qd.save()
+        res = QueryDocument.find(('name', '==', 'ayimu'), limit=3)
+        self.assertIsInstance(res, ResultSet)
+        self.assertEqual(len(res), 3)
+        self.qd.delete()
+
+    def test_non_empty_result_set_true(self):
+        self.assertTrue(self.rss)
+
+    def test_result_set_next(self):
+        let = 0
+        out = None
+        while self.rss:
+            out = self.rss.next()
+            if let > 3:
+                break
+            let += 1
+
+        self.assertEqual(out, 34)
+        self.assertEqual(let, 1)

@@ -1,0 +1,53 @@
+# uncompyle6 version 3.6.7
+# PyPy Python bytecode 2.7 (62218)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.macosx-10.12-x86_64/egg/pykmer/exceptions.py
+# Compiled at: 2016-10-15 19:59:53
+
+
+class BadCookie(Exception):
+
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        return 'bad cookie'
+
+
+class BadMetaData(Exception):
+
+    def __init__(self, itm):
+        self.itm = itm
+
+    def __str__(self):
+        return 'bad metadata: %s' % repr(self.itm)
+
+
+class MetaDataMissing(Exception):
+
+    def __init__(self, nm):
+        self.nm = nm
+
+    def __str__(self):
+        return 'missing metadata: %s' % repr(self.nm)
+
+
+class MetaDataIncompatible(Exception):
+
+    def __init__(self, nm, v0, v1):
+        self.nm = nm
+        self.v0 = v0
+        self.v1 = v1
+
+    def __str__(self):
+        return 'incompatible metadata: %s - %s / %s' % (self.nm, self.v0, self.v1)
+
+
+class MismatchedK(Exception):
+
+    def __init__(self, k1, k2):
+        self.k1 = k1
+        self.k2 = k2
+
+    def __str__(self):
+        return 'incompatible values of K: %d & %d' % (self.k1, self.k2)

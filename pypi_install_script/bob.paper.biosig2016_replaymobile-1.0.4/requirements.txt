@@ -1,0 +1,15 @@
+setuptools
+bob.blitz
+bob.core
+bob.io.base
+bob.io.video
+bob.ip.color
+bob.measure
+bob.math
+bob.ip.base
+bob.learn.linear
+bob.learn.libsvm
+bob.db.base
+bob.db.replaymobile
+tabulate
+numpy

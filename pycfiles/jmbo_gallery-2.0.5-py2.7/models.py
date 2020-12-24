@@ -1,0 +1,130 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/gallery/models.py
+# Compiled at: 2016-04-04 04:34:03
+import os, re
+from tempfile import mkdtemp
+import requests
+from PIL import Image, ImageDraw
+from django.core.urlresolvers import reverse
+from django.db import models
+from django.core.files import File
+from ckeditor.fields import RichTextField
+from photologue.models import Image
+from jmbo.models import ModelBase
+from south.modelsinspector import add_introspection_rules
+from preferences import preferences
+from preferences.models import Preferences
+
+class Gallery(ModelBase):
+    content = RichTextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Gallery'
+        verbose_name_plural = 'Galleries'
+
+    def item_count(self):
+        return GalleryItem.permitted.filter(gallery=self).count()
+
+    def __unicode__(self):
+        return self.title
+
+    def get_items(self):
+        return GalleryItem.permitted.filter(gallery=self).order_by('created')
+
+
+class GalleryItem(ModelBase):
+    gallery = models.ForeignKey('gallery.Gallery')
+
+
+class GalleryImage(GalleryItem):
+
+    class Meta:
+        verbose_name = 'Gallery image'
+        verbose_name_plural = 'Gallery images'
+
+
+class VideoEmbed(GalleryItem):
+    embed = models.TextField(help_text='Embedding markup as supplied by Youtube.')
+
+    class Meta:
+        verbose_name = 'Video embed'
+        verbose_name_plural = 'Video embeds'
+
+    @property
+    def youtube_id(self):
+        """Extract and return Youtube video id"""
+        m = re.search('/embed/([A-Za-z0-9\\-=_]*)', self.embed)
+        if m:
+            return m.group(1)
+        return ''
+
+    def save(self, *args, **kwargs):
+        """Automatically set image"""
+        if not self.image:
+            url = 'http://img.youtube.com/vi/%s/0.jpg' % self.youtube_id
+            response = None
+            try:
+                response = requests.get(url)
+            except requests.exceptions.RequestException:
+                pass
+
+            if response is not None:
+                filename = self.youtube_id + '.jpg'
+                filepath = os.path.join(mkdtemp(), filename)
+                fp = open(filepath, 'wb')
+                try:
+                    fp.write(response.content)
+                finally:
+                    fp.close()
+
+                image = None
+                try:
+                    image = Image.open(filepath)
+                except IOError:
+                    os.remove(filepath)
+
+                if image is not None:
+                    try:
+                        video_play_image = preferences.GalleryPreferences.video_play_image
+                        if video_play_image:
+                            overlay = Image.open(video_play_image)
+                            w1, h1 = image.size
+                            w2, h2 = overlay.size
+                            if w2 > w1 or h2 > h1:
+                                ratio1 = w1 / float(h1)
+                                ratio2 = w2 / float(h2)
+                                if ratio1 > ratio2:
+                                    resize_fract = h1 / float(h2)
+                                else:
+                                    resize_fract = w1 / float(w2)
+                                overlay.resize(w2 * resize_fract, h2 * resize_fract, Image.ANTIALIAS)
+                            image.paste(overlay, (
+                             int((w1 - w2) / 2.0), int((h1 - h2) / 2.0)), mask=overlay)
+                            image.save(filepath)
+                        image = File(open(filepath, 'rb'))
+                        image.name = filename
+                        self.image = image
+                    finally:
+                        os.remove(filepath)
+
+        super(VideoEmbed, self).save(*args, **kwargs)
+        return
+
+
+class VideoFile(GalleryItem):
+    file = models.FileField(upload_to='content/videofile')
+
+    class Meta:
+        verbose_name = 'Video file'
+        verbose_name_plural = 'Video files'
+
+
+class GalleryPreferences(Preferences):
+    __module__ = 'preferences.models'
+    video_play_image = models.ImageField(upload_to='preferences', help_text='The play button image that is overlaid on a video image')
+
+
+add_introspection_rules([], ['^ckeditor\\.fields\\.RichTextField'])

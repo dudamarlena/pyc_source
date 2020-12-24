@@ -1,0 +1,9 @@
+black
+coverage
+flake8
+isort
+mypy
+pylint
+pyparsing >=2.4.0
+z3-solver
+pydotplus

@@ -1,0 +1,11 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.13-x86_64/egg/generator/route_template.py
+# Compiled at: 2018-06-26 07:36:25
+ROUTE_TEMPLATE = "\nRoute::group(['middleware' => 'auth:api,throttle'], function () {\n{routes}\n});\n"
+CONTROLLER_TEMPLATE = '\n<?php\ndeclare(strict_types=1);\nnamespace App\\Controller;\n\nuse Illuminate\\Http\\Response;\nuse Illuminate\\Http\\Request;\nuse Illuminate\\Http\\JsonResponse;\nuse Rest\\Controller;\n{actionNamespaces}\n\nclass {className} extends Controller\n{\n\t/**\n\t * {className} constructor\n\t*/\n\tpublic function __construct()\n\t{\n\t\tparent::__construct();\n\t}\n\n{classContent}\n}\n'
+CONTROLLER_TEST_TEMPLATE = '\n<?php\ndeclare(strict_types=1);\n\nnamespace Tests\\Controllers;\n\nuse Tests\\IntegrationTest;\nuse Illuminate\\Http\\Response;\n{actionNamespaces}\n\nclass {className}Test extends IntegrationTest\n{\n{classContent}\n}\n'
+ACTION_TEMPLATE = '\n    /**\n     * {description}\n     *\n     * @author {author}\n     * @see HTTP/1.1 {method} {route}\n{parameters}\n     *\n     * @return JsonResponse\n     */\n    public function {actionName}({actionArguments})\n    {\n{comments}\n{declarations}\n        try {\n            // TODO - Your implementation here\n            \n        } catch (\\Throwable $throwable) {\n            SystemLogsHelper::catchThrowable($throwable);\n            return $this->errorResponse($throwable);\n        }\n        return $this->successResponse(Response::HTTP_OK, $output);\n    }\n'
+ACTION_TEST_TEMPLATE = "\n    /**\n     * Test {description}\n     *\n     * @given Send {method} request to {route}\n     * @expect Response is success\n     */\n    public function test{actionName}()\n    {\n        $this->withoutMiddleware();\n        {inputDeclaration}\n        $response = $this->{methodLowerCase}($this->bind('api{route}', [{parameters}]){inputVariable});\n        $response->assertStatus(Response::HTTP_OK);\n        \n        $responseJson = $response->decodeResponseJson();\n        $this->assertNotNull($responseJson['data']);\n        \n        /** @var {outputClassName} $output */\n        $output = JsonHelper::cast($responseJson['data'], {outputClassName}::class);\n        $this->assertNotNull($output);\n    }\n"

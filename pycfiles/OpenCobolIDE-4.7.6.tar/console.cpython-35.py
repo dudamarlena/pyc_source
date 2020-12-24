@@ -1,0 +1,76 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3350)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /tmp/pip-build-jqog4noo/pygments/pygments/console.py
+# Compiled at: 2016-12-29 05:31:34
+# Size of source mod 2**32: 1850 bytes
+"""
+    pygments.console
+    ~~~~~~~~~~~~~~~~
+
+    Format colored console output.
+
+    :copyright: Copyright 2006-2015 by the Pygments team, see AUTHORS.
+    :license: BSD, see LICENSE for details.
+"""
+esc = '\x1b['
+codes = {}
+codes[''] = ''
+codes['reset'] = esc + '39;49;00m'
+codes['bold'] = esc + '01m'
+codes['faint'] = esc + '02m'
+codes['standout'] = esc + '03m'
+codes['underline'] = esc + '04m'
+codes['blink'] = esc + '05m'
+codes['overline'] = esc + '06m'
+dark_colors = [
+ 'black', 'darkred', 'darkgreen', 'brown', 'darkblue',
+ 'purple', 'teal', 'lightgray']
+light_colors = ['darkgray', 'red', 'green', 'yellow', 'blue',
+ 'fuchsia', 'turquoise', 'white']
+x = 30
+for d, l in zip(dark_colors, light_colors):
+    codes[d] = esc + '%im' % x
+    codes[l] = esc + '%i;01m' % x
+    x += 1
+
+del d
+del l
+del x
+codes['darkteal'] = codes['turquoise']
+codes['darkyellow'] = codes['brown']
+codes['fuscia'] = codes['fuchsia']
+codes['white'] = codes['bold']
+
+def reset_color():
+    return codes['reset']
+
+
+def colorize(color_key, text):
+    return codes[color_key] + text + codes['reset']
+
+
+def ansiformat(attr, text):
+    """
+    Format ``text`` with a color and/or some attributes::
+
+        color       normal color
+        *color*     bold color
+        _color_     underlined color
+        +color+     blinking color
+    """
+    result = []
+    if attr[:1] == attr[-1:] == '+':
+        result.append(codes['blink'])
+        attr = attr[1:-1]
+    if attr[:1] == attr[-1:] == '*':
+        result.append(codes['bold'])
+        attr = attr[1:-1]
+    if attr[:1] == attr[-1:] == '_':
+        result.append(codes['underline'])
+        attr = attr[1:-1]
+    result.append(codes[attr])
+    result.append(text)
+    result.append(codes['reset'])
+    return ''.join(result)

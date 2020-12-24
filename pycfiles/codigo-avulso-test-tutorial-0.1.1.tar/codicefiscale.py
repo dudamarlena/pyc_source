@@ -1,0 +1,153 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/codicefiscale.py
+# Compiled at: 2016-01-10 11:28:18
+__doc__ = "\nPython library for Italian fiscal code\n\ncodicefiscale is a Python library for working with Italian fiscal code numbers\nofficially known as Italy's Codice Fiscale.\n\nCopyright (C) 2009-2016 Emanuele Rocca\n\nHomepage: https://github.com/ema/pycodicefiscale\n\nThis library is free software; you can redistribute it and/or\nmodify it under the terms of the GNU Lesser General Public\nLicense as published by the Free Software Foundation; either\nversion 2.1 of the License, or (at your option) any later version.\n\nThis library is distributed in the hope that it will be useful,\nbut WITHOUT ANY WARRANTY; without even the implied warranty of\nMERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU\nLesser General Public License for more details.\n\nYou should have received a copy of the GNU Lesser General Public\nLicense along with this library; if not, write to the Free Software\nFoundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n"
+__version__ = '0.9'
+__author__ = 'Emanuele Rocca'
+import re, string
+__VOWELS = [
+ 'A', 'E', 'I', 'O', 'U']
+__CONSONANTS = list(set(list(string.ascii_uppercase)).difference(__VOWELS))
+MONTHSCODE = [
+ 'A', 'B', 'C', 'D', 'E', 'H', 'L', 'M', 'P', 'R', 'S', 'T']
+PATTERN = '^[A-Z]{6}[0-9]{2}([A-E]|[HLMPRST])[0-9]{2}[A-Z][0-9]([A-Z]|[0-9])[0-9][A-Z]$'
+try:
+    basestring
+except NameError:
+    basestring = str
+
+def isvalid(code):
+    """``isvalid(code) -> bool``
+
+    This function checks if the given fiscal code is syntactically valid.
+
+    eg: isvalid('RCCMNL83S18D969H') -> True
+        isvalid('RCCMNL83S18D969') -> False
+    """
+    return isinstance(code, basestring) and re.match(PATTERN, code) is not None
+
+
+def __common_triplet(input_string, consonants, vowels):
+    """__common_triplet(input_string, consonants, vowels) -> string"""
+    output = consonants
+    while len(output) < 3:
+        try:
+            output += vowels.pop(0)
+        except IndexError:
+            output += 'X'
+
+    return output[:3]
+
+
+def __consonants_and_vowels(input_string):
+    """__consonants_and_vowels(input_string) -> (string, list)
+
+    Get the consonants as a string and the vowels as a list.
+    """
+    input_string = input_string.upper().replace(' ', '')
+    consonants = [ char for char in input_string if char in __CONSONANTS ]
+    vowels = [ char for char in input_string if char in __VOWELS ]
+    return (
+     ('').join(consonants), vowels)
+
+
+def __surname_triplet(input_string):
+    """__surname_triplet(input_string) -> string"""
+    consonants, vowels = __consonants_and_vowels(input_string)
+    return __common_triplet(input_string, consonants, vowels)
+
+
+def __name_triplet(input_string):
+    """__name_triplet(input_string) -> string"""
+    if input_string == '':
+        return 'XXX'
+    consonants, vowels = __consonants_and_vowels(input_string)
+    if len(consonants) > 3:
+        return '%s%s%s' % (consonants[0], consonants[2], consonants[3])
+    return __common_triplet(input_string, consonants, vowels)
+
+
+def control_code(input_string):
+    """``control_code(input_string) -> int``
+
+    Computes the control code for the given input_string string. The expected
+    input_string is the first 15 characters of a fiscal code.
+
+    eg: control_code('RCCMNL83S18D969') -> 'H'
+    """
+    assert len(input_string) == 15
+    even_controlcode = {}
+    for idx, char in enumerate(string.digits):
+        even_controlcode[char] = idx
+
+    for idx, char in enumerate(string.ascii_uppercase):
+        even_controlcode[char] = idx
+
+    values = [1, 0, 5, 7, 9, 13, 15, 17, 19, 21, 2, 4, 18, 20, 11, 3, 6, 8,
+     12, 14, 16, 10, 22, 25, 24, 23]
+    odd_controlcode = {}
+    for idx, char in enumerate(string.digits):
+        odd_controlcode[char] = values[idx]
+
+    for idx, char in enumerate(string.ascii_uppercase):
+        odd_controlcode[char] = values[idx]
+
+    code = 0
+    for idx, char in enumerate(input_string):
+        if idx % 2 == 0:
+            code += odd_controlcode[char]
+        else:
+            code += even_controlcode[char]
+
+    return string.ascii_uppercase[(code % 26)]
+
+
+def build(surname, name, birthday, sex, municipality):
+    """``build(surname, name, birthday, sex, municipality) -> string``
+
+    Computes the fiscal code for the given person data.
+
+    eg: build('Rocca', 'Emanuele', datetime.datetime(1983, 11, 18), 'M', 'D969') 
+        -> RCCMNL83S18D969H
+    """
+    output = __surname_triplet(surname) + __name_triplet(name)
+    output += str(birthday.year)[2:]
+    output += MONTHSCODE[(birthday.month - 1)]
+    output += '%02d' % (sex == 'M' and birthday.day or 40 + birthday.day)
+    output += municipality
+    output += control_code(output)
+    assert isvalid(output)
+    return output
+
+
+def get_birthday(code):
+    """``get_birthday(code) -> string``
+
+    Birthday of the person whose fiscal code is 'code', in the format DD-MM-YY. 
+
+    Unfortunately it's not possible to guess the four digit birth year, given
+    that the Italian fiscal code uses only the last two digits (1983 -> 83).
+    Therefore, this function returns a string and not a datetime object.
+
+    eg: birthday('RCCMNL83S18D969H') -> 18-11-83
+    """
+    assert isvalid(code)
+    day = int(code[9:11])
+    day = day < 32 and day or day - 40
+    month = MONTHSCODE.index(code[8]) + 1
+    year = int(code[6:8])
+    return '%02d-%02d-%02d' % (day, month, year)
+
+
+def get_sex(code):
+    """``get_sex(code) -> string``
+
+    The sex of the person whose fiscal code is 'code'.
+
+    eg: sex('RCCMNL83S18D969H') -> 'M'
+        sex('CNTCHR83T41D969D') -> 'F'
+    """
+    assert isvalid(code)
+    return int(code[9:11]) < 32 and 'M' or 'F'

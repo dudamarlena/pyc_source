@@ -1,0 +1,4 @@
+pyatom
+requests
+dateparser
+beautifulsoup4

@@ -1,0 +1,147 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win-amd64\egg\dynn\layers\convolution_layers.py
+# Compiled at: 2018-09-19 16:42:08
+# Size of source mod 2**32: 8675 bytes
+"""
+Convolution layers
+==================
+"""
+import dynet as dy
+from ..parameter_initialization import ZeroInit
+from ..activations import identity
+from .. import util, operations
+from .base_layers import ParametrizedLayer
+
+class Conv1DLayer(ParametrizedLayer):
+    __doc__ = '1D convolution along the first dimension\n\n    Args:\n        pc (:py:class:`dynet.ParameterCollection`): Parameter collection to\n            hold the parameters\n        input_dim (int): Input dimension\n        num_kernels (int): Number of kernels (essentially the output dimension)\n        kernel_width (int): Width of the kernels\n        activation (function, optional): activation function\n            (default: ``identity``)\n        dropout (float, optional):  Dropout rate (default 0)\n        nobias (bool, optional): Omit the bias (default ``False``)\n        default_zero_padded (bool, optional): Default padding behaviour. Pad\n            the input with zeros so that the output has the same length\n            (default ``True``)\n        default_stride (list, optional): Default stride along the length\n            (defaults to ``1``).\n    '
+
+    def __init__(self, pc, input_dim, num_kernels, kernel_width, activation=identity, dropout_rate=0.0, nobias=False, default_zero_padded=True, default_stride=1):
+        super(Conv1DLayer, self).__init__(pc, 'conv1d')
+        self.input_dim = input_dim
+        self.num_kernels = num_kernels
+        self.kernel_width = kernel_width
+        self.activation = activation
+        self.dropout_rate = dropout_rate
+        self.nobias = nobias
+        self.zero_padded = default_zero_padded
+        self.stride = default_stride
+        self.K_p = self.pc.add_parameters((
+         self.kernel_width, 1, self.input_dim, self.num_kernels),
+          name='K')
+        if not self.nobias:
+            self.b_p = self.pc.add_parameters((self.num_kernels),
+              name='b', init=(ZeroInit()))
+
+    def init(self, test=False, update=True):
+        """Initialize the layer before performing computation
+
+        Args:
+            test (bool, optional): If test mode is set to ``True``,
+                dropout is not applied (default: ``True``)
+            update (bool, optional): Whether to update the parameters
+                (default: ``True``)
+        """
+        self.K = self.K_p.expr(update)
+        if not self.nobias:
+            self.b = self.b_p.expr(update)
+        self.test = test
+
+    def __call__(self, x, stride=None, zero_padded=None):
+        """Forward pass
+
+        Args:
+            x (:py:class:`dynet.Expression`): Input expression with the shape
+                (length, input_dim)
+            stride (int, optional): Stride along the temporal dimension
+            zero_padded (bool, optional): Pad the image with zeros so that the
+                output has the same length (default ``True``)
+
+        Returns:
+            :py:class:`dynet.Expression`: Convolved sequence.
+        """
+        x = util.conditional_dropout(x, self.dropout_rate, self.test)
+        img = operations.unsqueeze(x, 1)
+        is_valid = not (self.zero_padded if zero_padded is None else zero_padded)
+        stride = [
+         stride or self.stride or 1, 1]
+        is_valid = not zero_padded
+        if self.nobias:
+            output_img = dy.conv2d(img,
+              (self.K), stride=stride, is_valid=is_valid)
+        else:
+            output_img = dy.conv2d_bias(img,
+              (self.K), (self.b), stride=stride, is_valid=is_valid)
+        output = operations.squeeze(output_img, 1)
+        output = self.activation(output)
+        return output
+
+
+class Conv2DLayer(ParametrizedLayer):
+    __doc__ = '2D convolution\n\n    Args:\n        pc (:py:class:`dynet.ParameterCollection`): Parameter collection to\n            hold the parameters\n        num_channels (int): Number of channels in the input image\n        num_kernels (int): Number of kernels (essentially the output dimension)\n        kernel_size (list, optional): Default kernel size. This is a list of\n            two elements, one per dimension.\n        activation (function, optional): activation function\n            (default: ``identity``)\n        dropout (float, optional):  Dropout rate (default 0)\n        nobias (bool, optional): Omit the bias (default ``False``)\n        default_zero_padded (bool, optional): Default padding behaviour. Pad\n            the image with zeros so that the output has the same width/height\n            (default ``True``)\n        default_strides (list, optional): Default stride along each dimension\n            (list of size 2, defaults to ``[1, 1]``).\n    '
+
+    def __init__(self, pc, num_channels, num_kernels, kernel_size, activation=identity, dropout_rate=0.0, nobias=False, default_zero_padded=True, default_strides=None):
+        super(Conv2DLayer, self).__init__(pc, 'conv2d')
+        self.num_channels = num_channels
+        self.num_kernels = num_kernels
+        self.kernel_size = kernel_size
+        self.activation = activation
+        self.dropout_rate = dropout_rate
+        self.nobias = nobias
+        self.zero_padded = default_zero_padded
+        self.strides = util._default_value(default_strides, [1, 1])
+        self.K_p = self.pc.add_parameters((
+         self.kernel_size[0],
+         self.kernel_size[1],
+         self.num_channels,
+         self.num_kernels),
+          name='K')
+        if not self.nobias:
+            self.b_p = self.pc.add_parameters((self.num_kernels),
+              name='b', init=(ZeroInit()))
+
+    def init(self, test=False, update=True):
+        """Initialize the layer before performing computation
+
+        Args:
+            test (bool, optional): If test mode is set to ``True``,
+                dropout is not applied (default: ``True``)
+            update (bool, optional): Whether to update the parameters
+                (default: ``True``)
+        """
+        self.K = self.K_p.expr(update)
+        if not self.nobias:
+            self.b = self.b_p.expr(update)
+        self.test = test
+
+    def __call__(self, x, strides=None, zero_padded=None):
+        """Forward pass
+
+        Args:
+            x (:py:class:`dynet.Expression`): Input image (3-d tensor) or
+                matrix.
+            zero_padded (bool, optional): Pad the image with zeros so that the
+                output has the same width/height. If this is not specified,
+                the default specified in the constructor is used.
+            strides (list, optional): Stride along width/height. If this is not
+                specified, the default specified in the constructor is used.
+
+        Returns:
+            :py:class:`dynet.Expression`: Convolved image.
+        """
+        x = util.conditional_dropout(x, self.dropout_rate, self.test)
+        is_valid = not (self.zero_padded if zero_padded is None else zero_padded)
+        strides = util._default_value(strides, [None, None])
+        strides = [
+         strides[0] or self.strides[0] or 1,
+         strides[1] or self.strides[1] or 1]
+        if self.nobias:
+            output = dy.conv2d(x,
+              (self.K), stride=strides, is_valid=is_valid)
+        else:
+            output = dy.conv2d_bias(x,
+              (self.K), (self.b), stride=strides, is_valid=is_valid)
+        output = self.activation(output)
+        return output

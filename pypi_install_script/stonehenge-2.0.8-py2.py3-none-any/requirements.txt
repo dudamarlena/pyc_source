@@ -1,0 +1,16 @@
+beautifulsoup4
+django==2.0.8
+django-debug-toolbar
+django-extensions
+djangorestframework
+django-webpack-loader
+factory-boy
+flake8
+gnureadline
+lxml
+pillow
+psycopg2-binary
+raven
+requests
+wagtail==2.2.2
+wheel

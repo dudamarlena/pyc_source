@@ -1,0 +1,151 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3351)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/pyams_utils/protocol/xmlrpc.py
+# Compiled at: 2020-02-18 19:11:13
+# Size of source mod 2**32: 7600 bytes
+"""PyAMS_utils.protocol.xmlrpc module
+
+This module provides a few set of classes and functions usable to improve XML-RPC client usage.
+
+It provides custom transports and allows storage of response cookies
+"""
+import base64, http.client, http.cookiejar, socket, urllib.request, xmlrpc.client
+try:
+    import gzip
+except ImportError:
+    gzip = None
+
+__docformat__ = 'restructuredtext'
+
+class XMLRPCCookieAuthTransport(xmlrpc.client.Transport):
+    __doc__ = 'An XML-RPC transport handling authentication via cookies'
+    _http_connection = http.client.HTTPConnection
+    verbose = False
+
+    def __init__(self, user_agent, credentials=(), cookies=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, headers=None):
+        xmlrpc.client.Transport.__init__(self)
+        self.user_agent = user_agent
+        self.credentials = credentials
+        self.cookies = cookies
+        self.timeout = timeout
+        self.headers = headers
+
+    def request(self, host, handler, request_body, verbose=False):
+        self.verbose = verbose
+        connection = self.send_request(host, handler, request_body, verbose)
+        return self.get_response(connection, host, handler)
+
+    def make_connection(self, host):
+        if self._connection and host == self._connection[0]:
+            return self._connection[1]
+        chost, self._extra_headers, _x509 = self.get_host_info(host)
+        self._connection = (host, self._http_connection(chost, timeout=self.timeout))
+        return self._connection[1]
+
+    def send_request(self, host, handler, request_body, debug):
+        connection = self.make_connection(host)
+        headers = self._extra_headers[:]
+        if debug:
+            connection.set_debuglevel(1)
+        if self.accept_gzip_encoding and gzip:
+            connection.putrequest('POST', handler, skip_accept_encoding=True)
+            headers.append(('Accept-Encoding', 'gzip'))
+        else:
+            connection.putrequest('POST', handler)
+        self.send_auth(connection)
+        self.send_content_type(connection)
+        self.send_user_agent(connection)
+        self.send_headers(connection, headers)
+        self.send_content(connection, request_body)
+        return connection
+
+    def send_auth(self, connection):
+        """Override the send_host hook to also send authentication info"""
+        if self.cookies is not None and len(self.cookies) > 0:
+            for cookie in self.cookies:
+                connection.putheader('Cookie', '%s=%s' % (cookie.name, cookie.value))
+
+        elif self.credentials:
+            creds = base64.encodebytes(('%s:%s' % self.credentials).encode()).strip().decode()
+            auth = 'Basic %s' % creds
+            connection.putheader('Authorization', auth)
+
+    @staticmethod
+    def send_content_type(connection):
+        """Send content type"""
+        connection.putheader('Content-Type', 'text/xml')
+
+    def send_user_agent(self, connection):
+        """Send user agent"""
+        connection.putheader('User-Agent', self.user_agent)
+
+    def send_headers(self, connection, headers):
+        """Send custom headers"""
+        xmlrpc.client.Transport.send_headers(self, connection, headers)
+        for key, value in (self.headers or {}).items():
+            connection.putheader(key, value)
+
+    class CookieRequest(urllib.request.Request):
+        __doc__ = 'Dummy request class used for extracting cookies'
+
+    class CookieResponseHelper:
+        __doc__ = 'Dummy response headers helper'
+
+        def __init__(self, response):
+            self.response = response
+
+        def getheaders(self, header):
+            """Get response headers"""
+            return self.response.msg.getallmatchingheaders(header)
+
+    class CookieResponse:
+        __doc__ = 'Dummy response class used to extract cookies'
+
+        def __init__(self, response):
+            self.response = response
+
+        def info(self):
+            """Get response info from cookies"""
+            return XMLRPCCookieAuthTransport.CookieResponseHelper(self.response)
+
+    def get_response(self, connection, host, handler):
+        """Get server response"""
+        response = connection.getresponse()
+        if self.cookies is not None:
+            crequest = XMLRPCCookieAuthTransport.CookieRequest('http://%s/' % host)
+            cresponse = XMLRPCCookieAuthTransport.CookieResponse(response)
+            for cookie in self.cookies.make_cookies(cresponse, crequest):
+                if cookie.name.startswith('Set-Cookie'):
+                    cookie.name = cookie.name.split(': ', 1)[1]
+                self.cookies.set_cookie(cookie)
+
+        if response.status != 200:
+            raise xmlrpc.client.ProtocolError(host + handler, response.status, response.reason, response.getheaders())
+        return self.parse_response(response)
+
+
+class SecureXMLRPCCookieAuthTransport(XMLRPCCookieAuthTransport):
+    __doc__ = 'Secure XML-RPC transport'
+    _http_connection = http.client.HTTPSConnection
+
+
+def get_client(uri, credentials=(), verbose=False, allow_none=0, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, headers=None):
+    """Get an XML-RPC client which supports basic authentication"""
+    if uri.startswith('https:'):
+        transport = SecureXMLRPCCookieAuthTransport('Python XML-RPC Client/0.1 (PyAMS secure transport)', credentials, timeout=timeout, headers=headers)
+    else:
+        transport = XMLRPCCookieAuthTransport('Python XML-RPC Client/0.1 (PyAMS basic transport)', credentials, timeout=timeout, headers=headers)
+    return xmlrpc.client.Server(uri, transport=transport, verbose=verbose, allow_none=allow_none)
+
+
+def get_client_with_cookies(uri, credentials=(), verbose=False, allow_none=0, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, headers=None, cookies=None):
+    """Get an XML-RPC client which supports authentication through cookies"""
+    if cookies is None:
+        cookies = http.cookiejar.CookieJar()
+    if uri.startswith('https:'):
+        transport = SecureXMLRPCCookieAuthTransport('Python XML-RPC Client/0.1 (PyAMS secure cookie transport)', credentials, cookies, timeout, headers)
+    else:
+        transport = XMLRPCCookieAuthTransport('Python XML-RPC Client/0.1 (PyAMS basic cookie transport)', credentials, cookies, timeout, headers)
+    return xmlrpc.client.Server(uri, transport=transport, verbose=verbose, allow_none=allow_none)

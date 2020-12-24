@@ -1,0 +1,10 @@
+setuptools
+scipy
+bob.io.image              # image IO
+bob.ip.base               # tan-triggs dct-blocks
+bob.ip.color              # color image conversion
+bob.ip.gabor              # gabor graph
+bob.learn.linear          # eigenfaces
+bob.learn.em              # ubm-gmm
+bob.measure               # computing ROC
+bob.db.atnt               # the AT&T (ORL) database of images

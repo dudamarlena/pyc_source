@@ -1,0 +1,264 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/funkload/XmlRpcBase.py
+# Compiled at: 2015-05-06 05:03:08
+"""Base class to build XML RPC daemon server.
+
+$Id$
+"""
+import sys, os
+from socket import error as SocketError
+from time import sleep
+from ConfigParser import ConfigParser, NoOptionError
+from SimpleXMLRPCServer import SimpleXMLRPCServer
+from xmlrpclib import ServerProxy
+import logging
+from optparse import OptionParser, TitledHelpFormatter
+from utils import create_daemon, get_default_logger, close_logger
+from utils import trace, get_version
+
+def is_server_running(host, port):
+    """Check if the XML/RPC server is running checking getStatus RPC."""
+    server = ServerProxy('http://%s:%s' % (host, port))
+    try:
+        server.getStatus()
+    except SocketError:
+        return False
+
+    return True
+
+
+class MySimpleXMLRPCServer(SimpleXMLRPCServer):
+    """SimpleXMLRPCServer with allow_reuse_address."""
+    allow_reuse_address = True
+
+
+class XmlRpcBaseServer:
+    """The base class for xml rpc server."""
+    usage = '%prog [options] config_file\n\nStart %prog XML/RPC daemon.\n'
+    server_name = None
+    method_names = [
+     'stopServer', 'getStatus']
+
+    def __init__(self, argv=None):
+        if self.server_name is None:
+            self.server_name = self.__class__.__name__
+        if argv is None:
+            argv = sys.argv
+        conf_path, options = self.parseArgs(argv)
+        self.default_log_path = self.server_name + '.log'
+        self.default_pid_path = self.server_name + '.pid'
+        self.server = None
+        self.quit = False
+        conf = ConfigParser()
+        conf.read(conf_path)
+        self.conf_path = conf_path
+        self.host = conf.get('server', 'host')
+        self.port = conf.getint('server', 'port')
+        try:
+            self.pid_path = conf.get('server', 'pid_path')
+        except NoOptionError:
+            self.pid_path = self.default_pid_path
+
+        try:
+            log_path = conf.get('server', 'log_path')
+        except NoOptionError:
+            log_path = self.default_log_path
+
+        if is_server_running(self.host, self.port):
+            trace('Server already running on %s:%s.' % (self.host, self.port))
+            sys.exit(0)
+        trace('Starting %s server at http://%s:%s/' % (self.server_name,
+         self.host, self.port))
+        if options.verbose:
+            level = logging.DEBUG
+        else:
+            level = logging.INFO
+        if options.debug:
+            log_to = 'file console'
+        else:
+            log_to = 'file'
+        self.logger = get_default_logger(log_to, log_path, level=level, name=self.server_name)
+        self._init_cb(conf, options)
+        if not options.debug:
+            trace(' as daemon.\n')
+            close_logger(self.server_name)
+            create_daemon()
+            self.logger = get_default_logger(log_to, log_path, level=level, name=self.server_name)
+        else:
+            trace(' in debug mode.\n')
+        self.initServer()
+        return
+
+    def _init_cb(self, conf, options):
+        """init procedure intend to be implemented by subclasses.
+
+        This method is called before to switch in daemon mode.
+        conf is a ConfigParser object."""
+        pass
+
+    def logd(self, message):
+        """Debug log."""
+        self.logger.debug(message)
+
+    def log(self, message):
+        """Log information."""
+        self.logger.info(message)
+
+    def parseArgs(self, argv):
+        """Parse programs args."""
+        parser = OptionParser(self.usage, formatter=TitledHelpFormatter(), version='FunkLoad %s' % get_version())
+        parser.add_option('-v', '--verbose', action='store_true', help='Verbose output')
+        parser.add_option('-d', '--debug', action='store_true', help='debug mode, server is run in forground')
+        options, args = parser.parse_args(argv)
+        if len(args) != 2:
+            parser.error('Missing configuration file argument')
+        return (
+         args[1], options)
+
+    def initServer(self):
+        """init the XMLR/PC Server."""
+        self.log('Init XML/RPC server %s:%s.' % (self.host, self.port))
+        server = MySimpleXMLRPCServer((self.host, self.port))
+        for method_name in self.method_names:
+            self.logd('register %s' % method_name)
+            server.register_function(getattr(self, method_name))
+
+        self.server = server
+
+    def run(self):
+        """main server loop."""
+        server = self.server
+        pid = os.getpid()
+        open(self.pid_path, 'w').write(str(pid))
+        self.log('XML/RPC server pid=%i running.' % pid)
+        while not self.quit:
+            server.handle_request()
+
+        sleep(0.5)
+        server.server_close()
+        self.log('XML/RPC server pid=%i stopped.' % pid)
+        os.remove(self.pid_path)
+
+    __call__ = run
+
+    def stopServer(self):
+        """Stop the server."""
+        self.log('stopServer request.')
+        self.quit = True
+        return 1
+
+    def getStatus(self):
+        """Return a status."""
+        self.logd('getStatus request.')
+        return '%s running pid = %s' % (self.server_name, os.getpid())
+
+
+class XmlRpcBaseController:
+    """An XML/RPC controller."""
+    usage = '%prog config_file action\n\naction can be: start|startd|stop|restart|status|test\n\nExecute action on the XML/RPC server.\n'
+    server_class = XmlRpcBaseServer
+
+    def __init__(self, argv=None):
+        if argv is None:
+            argv = sys.argv
+        conf_path, self.action, options = self.parseArgs(argv)
+        conf = ConfigParser()
+        conf.read(conf_path)
+        self.host = conf.get('server', 'host')
+        self.conf_path = conf_path
+        self.port = conf.getint('server', 'port')
+        self.url = 'http://%s:%s/' % (self.host, self.port)
+        self.quiet = options.quiet
+        self.verbose = options.verbose
+        self.server = ServerProxy(self.url)
+        return
+
+    def parseArgs(self, argv):
+        """Parse programs args."""
+        parser = OptionParser(self.usage, formatter=TitledHelpFormatter(), version='FunkLoad %s' % get_version())
+        parser.add_option('-q', '--quiet', action='store_true', help='Suppress console output')
+        parser.add_option('-v', '--verbose', action='store_true', help='Verbose mode (log-level debug)')
+        options, args = parser.parse_args(argv)
+        if len(args) != 3:
+            parser.error('Missing argument')
+        return (
+         args[1], args[2], options)
+
+    def log(self, message, force=False):
+        """Log a message."""
+        if force or not self.quiet:
+            trace(str(message))
+
+    def startServer(self, debug=False):
+        """Start an XML/RPC server."""
+        argv = [
+         'cmd', self.conf_path]
+        if debug:
+            argv.append('-dv')
+        elif self.verbose:
+            argv.append('-v')
+        daemon = self.server_class(argv)
+        daemon.run()
+
+    def __call__(self, action=None):
+        """Call the xml rpc action"""
+        server = self.server
+        if action is None:
+            action = self.action
+        is_running = is_server_running(self.host, self.port)
+        if action == 'status':
+            if is_running:
+                ret = server.getStatus()
+                self.log('%s %s.\n' % (self.url, ret))
+            else:
+                self.log('No server reachable at %s.\n' % self.url)
+            return 0
+        if action in ('stop', 'restart'):
+            if is_running:
+                ret = server.stopServer()
+                self.log('Server %s is stopped.\n' % self.url)
+                is_running = False
+            elif action == 'stop':
+                self.log('No server reachable at %s.\n' % self.url)
+            if action == 'restart':
+                self('start')
+        elif 'start' in action:
+            if is_running:
+                self.log('Server %s is already running.\n' % self.url)
+            else:
+                return self.startServer(action == 'startd')
+        else:
+            if not is_running:
+                self.log('No server reachable at %s.\n' % self.url)
+                return -1
+            if action == 'reload':
+                ret = server.reloadConf()
+                self.log('done\n')
+            else:
+                if action == 'test':
+                    return self.test()
+                raise NotImplementedError('Unknow action %s' % action)
+        return 0
+
+    def test(self):
+        """Testing the XML/RPC.
+
+        Must return an exit code, 0 for success.
+        """
+        ret = self.server.getStatus()
+        self.log('Testing getStatus: %s\n' % ret)
+        return 0
+
+
+def main():
+    """Main"""
+    ctl = XmlRpcBaseController()
+    ret = ctl()
+    sys.exit(ret)
+
+
+if __name__ == '__main__':
+    main()

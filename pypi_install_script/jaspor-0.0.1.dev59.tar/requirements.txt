@@ -1,0 +1,8 @@
+sqlalchemy
+python-gsmmodem-new
+rpi.gpio
+attrs
+beautifulsoup4
+urwid
+get_version
+pyttsx3

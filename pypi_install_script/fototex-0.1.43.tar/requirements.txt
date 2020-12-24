@@ -1,0 +1,7 @@
+gdal>=2.2.4
+h5py>=2.9.0
+tqdm>=4.31
+numpy>=1.17
+numba>=0.44
+greece-utils>=0.1.21
+scikit-learn>=0.21.3

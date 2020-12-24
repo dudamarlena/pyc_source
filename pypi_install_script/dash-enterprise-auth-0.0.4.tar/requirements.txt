@@ -1,0 +1,6 @@
+requests[security]
+retrying
+# Dev requirements
+dash
+selenium
+

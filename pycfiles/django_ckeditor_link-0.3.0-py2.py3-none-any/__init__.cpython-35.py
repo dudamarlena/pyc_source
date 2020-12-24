@@ -1,0 +1,7 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3351)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/benzkji/Development/open/django-ckeditor-link/ckeditor_link/templatetags/__init__.py
+# Compiled at: 2018-03-27 09:50:30
+pass

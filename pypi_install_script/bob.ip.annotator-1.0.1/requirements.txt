@@ -1,0 +1,6 @@
+six
+pillow
+scipy
+scikit-image
+bob.extension
+bob.io.image

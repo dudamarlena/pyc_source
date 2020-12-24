@@ -1,0 +1,61 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/Dani/Documents/Projects/Golismero_2.0/src_github/tools/sqlmap/lib/parse/html.py
+# Compiled at: 2013-12-09 06:41:17
+"""
+Copyright (c) 2006-2013 sqlmap developers (http://sqlmap.org/)
+See the file 'doc/COPYING' for copying permission
+"""
+import re
+from xml.sax.handler import ContentHandler
+from lib.core.common import checkFile
+from lib.core.common import parseXmlFile
+from lib.core.data import kb
+from lib.core.data import paths
+from lib.core.threads import getCurrentThreadData
+
+class HTMLHandler(ContentHandler):
+    """
+    This class defines methods to parse the input HTML page to
+    fingerprint the back-end database management system
+    """
+
+    def __init__(self, page):
+        ContentHandler.__init__(self)
+        self._dbms = None
+        self._page = page
+        self.dbms = None
+        return
+
+    def _markAsErrorPage(self):
+        threadData = getCurrentThreadData()
+        threadData.lastErrorPage = (threadData.lastRequestUID, self._page)
+
+    def startElement(self, name, attrs):
+        if name == 'dbms':
+            self._dbms = attrs.get('value')
+        elif name == 'error':
+            if re.search(attrs.get('regexp'), self._page, re.I):
+                self.dbms = self._dbms
+                self._markAsErrorPage()
+
+
+def htmlParser(page):
+    """
+    This function calls a class that parses the input HTML page to
+    fingerprint the back-end database management system
+    """
+    xmlfile = paths.ERRORS_XML
+    checkFile(xmlfile)
+    handler = HTMLHandler(page)
+    parseXmlFile(xmlfile, handler)
+    if handler.dbms and handler.dbms not in kb.htmlFp:
+        kb.lastParserStatus = handler.dbms
+        kb.htmlFp.append(handler.dbms)
+    else:
+        kb.lastParserStatus = None
+    if re.search('SQL (warning|error|syntax)', page, re.I):
+        handler._markAsErrorPage()
+    return handler.dbms

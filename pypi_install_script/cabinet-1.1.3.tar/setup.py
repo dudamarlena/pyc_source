@@ -1,0 +1,79 @@
+from distutils.core import setup, Extension
+import commands
+import os
+import re
+import sys
+
+if sys.version_info < (2, 3):
+      raise Error, "Python 2.3 or later is required"
+
+include_dirs = ['/usr/include', '/usr/local/include', '/opt/local/include']
+library_dirs = ['/usr/lib', '/usr/local/lib', '/opt/local/lib']
+
+if sys.platform == 'linux2':
+    os.environ['PATH'] += ":/usr/local/bin:$home/bin:.:..:../..:/opt/local/bin"
+
+    tcinc = commands.getoutput('tcucodec conf -i 2>/dev/null')
+    minc = re.search(r'-I([/\w]+)', tcinc)
+    if minc:
+        for path in minc.groups():
+            include_dirs.append(path)
+        include_dirs = sorted(set(include_dirs), key=include_dirs.index)
+
+    tclib = commands.getoutput('tcucodec conf -l 2>/dev/null')
+    mlib = re.search(r'-L([/\w]+)', tclib)
+    if mlib:
+        for path in mlib.groups():
+            library_dirs.append(path)
+        library_dirs = sorted(set(library_dirs), key=library_dirs.index)
+
+setup(name='cabinet',
+       version='1.1.3',
+       description='Tokyo Cabinet IDL compatible bindings',
+       long_description='''Tokyo Cabinet IDL compatible bindings
+
+Compatibility note: This binding targets the Tokyo Cabinet 1.4.32 and will not work with earlier Tokyo Cabinet releases that are in a number of distributions.
+
+Tokyo Cabinet website: http://tokyocabinet.sourceforge.net/
+
+Tokyo Cabinet is a library of routines for managing a database. The database is a simple data file containing records, each is a pair of a key and a value. Every key and value is serial bytes with variable length. Both binary data and character string can be used as a key and a value. There is neither concept of data tables nor data types. Records are organized in hash table, B+ tree, or fixed-length array.
+
+Tokyo Cabinet is developed as the successor of GDBM and QDBM on the following purposes. They are achieved and Tokyo Cabinet replaces conventional DBM products.
+''',
+       author='Brandon Bickford',
+       author_email='bickfordb@gmail.com',
+       license='LGPL',
+       packages=['cabinet'],
+       url='http://github.com/bickfordb/tokyo/',
+       package_dir={'': 'src'},
+       classifiers=[
+           'License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)', 
+           'Topic :: Database',
+       ],
+       ext_modules=[
+           Extension('cabinet._bdb',
+               sources=['src/cabinet/bdb.c'],
+               libraries=['tokyocabinet'],
+               include_dirs=include_dirs,
+               library_dirs=library_dirs),
+           Extension('cabinet._adb',
+               sources=['src/cabinet/adb.c'],
+               libraries=['tokyocabinet'],
+               include_dirs=include_dirs,
+               library_dirs=library_dirs),
+           Extension('cabinet._fdb',
+               sources=['src/cabinet/fdb.c'],
+               libraries=['tokyocabinet'],
+               include_dirs=include_dirs,
+               library_dirs=library_dirs),
+           Extension('cabinet._hdb',
+               sources=['src/cabinet/hdb.c'],
+               libraries=['tokyocabinet'],
+               include_dirs=include_dirs,
+               library_dirs=library_dirs),
+            Extension('cabinet._tdb',
+               sources=['src/cabinet/tdb.c'],
+               libraries=['tokyocabinet'],
+               include_dirs=include_dirs,
+               library_dirs=library_dirs)])
+

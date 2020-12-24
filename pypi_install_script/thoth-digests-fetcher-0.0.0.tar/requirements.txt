@@ -1,0 +1,5 @@
+thoth-python
+click<6.7
+thoth-analyzer
+thoth-common
+

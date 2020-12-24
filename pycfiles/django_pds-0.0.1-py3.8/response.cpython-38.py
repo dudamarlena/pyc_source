@@ -1,0 +1,34 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.9-x86_64/egg/django_pds/core/rest/response.py
+# Compiled at: 2020-05-05 13:38:45
+# Size of source mod 2**32: 1001 bytes
+
+
+def error_response(message=None, status=None):
+    return {'error_status':status or 400,  'error':'bad_request', 
+     'error_description':message or 'The request is not valid.'}
+
+
+def success_response(data=None, message=None, status=None):
+    return {'success_status':status or 200, 
+     'error':None, 
+     'success_description':message or 'request valid', 
+     'responsible':data or None}
+
+
+def error_response_read_only_fields(fields, message=None, status=None):
+    return {'error_status':status or 400, 
+     'error':'bad_request', 
+     'error_description':message or 'read only fields found in json string', 
+     'responsible':fields}
+
+
+def success_response_with_total_records(data, count, message=None, status=None):
+    return {'success_status':status or 200, 
+     'error':None, 
+     'success_description':message or 'request valid', 
+     'results':data, 
+     'total_records':count}

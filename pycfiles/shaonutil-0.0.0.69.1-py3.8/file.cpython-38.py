@@ -1,0 +1,186 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\shaonutil\file.py
+# Compiled at: 2020-05-08 06:15:03
+# Size of source mod 2**32: 4777 bytes
+"""File"""
+import pip._internal as pipmain
+from os.path import dirname, basename, isfile, join
+from io import StringIO
+import json, codecs, configparser, subprocess, platform, os, glob, shaonutil, pickle, importlib, pip, shutil
+
+def make_dir_zip(dir_name):
+    """Archieve a directory"""
+    output_filename = dir_name
+    shutil.make_archive(output_filename, 'zip', dir_name)
+    return output_filename + '.zip'
+
+
+def unzip(input_folder):
+    input_folder = os.path.abspath(input_folder)
+    filename, file_extension = os.path.splitext(input_folder)
+    shutil.unpack_archive(filename=input_folder,
+      extract_dir=filename,
+      format='zip')
+
+
+def get_module_path(module):
+    return module.__file__
+
+
+def get_all_dirs():
+    return [basename(file_) for file_ in glob.glob(join(os.getcwd(), '*')) if os.path.isdir(file_) if '..' not in file_]
+
+
+def get_all_files_dirs():
+    return [basename(file_) for file_ in glob.glob(join(os.getcwd(), '*')) if '..' not in file_]
+
+
+def package_exists(package_name):
+    """check if a python pcakage exists."""
+    spam_spec = importlib.util.find_spec(package_name)
+    found = spam_spec is not None
+    return found
+
+
+def pip_install(package_name):
+    failed = pipmain(['-m', 'install', package_name])
+    return failed
+
+
+def get_all_functions(object):
+    """shaonutil.file.get_all_functions(object/file/class)"""
+    return [func for func in dir(object) if callable(getattr(object, func))]
+
+
+def ConfigSectionMap(Config, section):
+    dict1 = {}
+    options = Config.options(section)
+    for option in options:
+        try:
+            dict1[option] = Config.get(section, option)
+            if dict1[option] == -1:
+                DebugPrint('skip: %s' % option)
+        except:
+            print('exception on %s!' % option)
+            dict1[option] = None
+
+    else:
+        return dict1
+
+
+class CaseConfigParser(configparser.SafeConfigParser):
+
+    def optionxform(self, optionstr):
+        return optionstr
+
+
+def read_configuration_ini(filename):
+    config = configparser.ConfigParser()
+    config.readfp(codecs.open(filename, 'r', 'utf8'))
+    return config
+
+
+def read_configuration_ini_string(string):
+    config = configparser.ConfigParser()
+    with StringIO(string) as (buff):
+        config.read_file(buff)
+    return config
+
+
+def read_safecase_configuration_ini(filename):
+    config = CaseConfigParser()
+    config.readfp(codecs.open(filename, 'r', 'utf8'))
+    return config
+
+
+def write_configuration_ini(configs_par, filename, f_mode='w'):
+    with open(filename, f_mode) as (configfile):
+        configs_par.write(configfile)
+
+
+def read_json(filename):
+    """Read JSON file and return dictionary"""
+    with codecs.open(filename, 'r', encoding='utf-8') as (fp):
+        data = json.load(fp)
+    return data
+
+
+def write_json(obj, filename):
+    """Write JSON file"""
+    with codecs.open(filename, 'w', encoding='utf-8') as (fp):
+        json.dump(obj, fp, indent=1)
+
+
+def read_file(filename, remove_ill_char=True):
+    """Read File and return lines as list"""
+    if os.path.exists(filename):
+        with codecs.open(filename, 'r', encoding='utf-8') as (file_reader):
+            lines = file_reader.readlines()
+        ill_chars = ['\r', '\n']
+        _ = []
+        for line in lines:
+            if remove_ill_char:
+                for ic in ill_chars:
+                    line = line.replace(ic, '')
+
+            else:
+                _.append(line)
+        else:
+            filtered_lines = _
+            return filtered_lines
+
+    return False
+
+
+def write_file(filename, strs, mode='w'):
+    """Write File from string"""
+    with codecs.open(filename, mode, encoding='utf-8') as (file_appender):
+        file_appender.writelines(strs)
+
+
+def read_pickle(filename):
+    with open(filename, 'rb') as (fp):
+        unpickler = pickle.Unpickler(fp)
+        b = unpickler.load(fp)
+    return b
+
+
+def write_pickle(filename, obj_):
+    with open(filename, 'wb') as (fp):
+        pickle.dump(obj_, fp)
+
+
+def open_file_with_default_app(filepath):
+    if platform.system() == 'Darwin':
+        subprocess.call(('open', filepath))
+    else:
+        if platform.system() == 'Windows':
+            os.startfile(filepath)
+        else:
+            if platform.system() == 'Windows':
+                subprocess.call(('xdg-open', filepath))
+            else:
+                subprocess.call(('xdg-open', filepath))
+
+
+def get_last_file_of_dir(filename):
+    list_of_files = glob.glob(filename)
+    latest_file = max(list_of_files, key=(os.path.getctime))
+    return latest_file
+
+
+def remove_duplicateLines_from_file(filename):
+    lines = shaonutil.file.read_file(filename)
+    lines_seen = set()
+    for line in lines:
+        if line not in lines_seen:
+            lines_seen.add(line)
+        strs = '\n'.join(lines_seen)
+        shaonutil.file.write_file(filename, strs)
+
+
+if __name__ == '__main__':
+    pass

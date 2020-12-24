@@ -1,0 +1,192 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /tmp/pip-install-n_sfyb/Django/django/utils/decorators.py
+# Compiled at: 2019-02-14 00:35:17
+"""Functions that help with dynamically creating decorators for views."""
+try:
+    from contextlib import ContextDecorator
+except ImportError:
+    ContextDecorator = None
+
+from functools import WRAPPER_ASSIGNMENTS, update_wrapper, wraps
+from django.utils import six
+
+class classonlymethod(classmethod):
+
+    def __get__(self, instance, cls=None):
+        if instance is not None:
+            raise AttributeError('This method is available only on the class, not on instances.')
+        return super(classonlymethod, self).__get__(instance, cls)
+
+
+def method_decorator(decorator, name=''):
+    """
+    Converts a function decorator into a method decorator
+    """
+
+    def _dec(obj):
+        is_class = isinstance(obj, type)
+        if is_class:
+            if name and hasattr(obj, name):
+                func = getattr(obj, name)
+                if not callable(func):
+                    raise TypeError(("Cannot decorate '{0}' as it isn't a callable attribute of {1} ({2})").format(name, obj, func))
+            else:
+                raise ValueError(("The keyword argument `name` must be the name of a method of the decorated class: {0}. Got '{1}' instead").format(obj, name))
+        else:
+            func = obj
+
+        def decorate(function):
+            """
+            Apply a list/tuple of decorators if decorator is one. Decorator
+            functions are applied so that the call order is the same as the
+            order in which they appear in the iterable.
+            """
+            if hasattr(decorator, '__iter__'):
+                for dec in decorator[::-1]:
+                    function = dec(function)
+
+                return function
+            return decorator(function)
+
+        def _wrapper(self, *args, **kwargs):
+
+            @decorate
+            def bound_func(*args2, **kwargs2):
+                return func.__get__(self, type(self))(*args2, **kwargs2)
+
+            return bound_func(*args, **kwargs)
+
+        @decorate
+        def dummy(*args, **kwargs):
+            pass
+
+        update_wrapper(_wrapper, dummy)
+        update_wrapper(_wrapper, func)
+        if is_class:
+            setattr(obj, name, _wrapper)
+            return obj
+        return _wrapper
+
+    if not hasattr(decorator, '__iter__'):
+        update_wrapper(_dec, decorator, assigned=available_attrs(decorator))
+    if hasattr(decorator, '__name__'):
+        _dec.__name__ = 'method_decorator(%s)' % decorator.__name__
+    else:
+        _dec.__name__ = 'method_decorator(%s)' % decorator.__class__.__name__
+    return _dec
+
+
+def decorator_from_middleware_with_args(middleware_class):
+    """
+    Like decorator_from_middleware, but returns a function
+    that accepts the arguments to be passed to the middleware_class.
+    Use like::
+
+         cache_page = decorator_from_middleware_with_args(CacheMiddleware)
+         # ...
+
+         @cache_page(3600)
+         def my_view(request):
+             # ...
+    """
+    return make_middleware_decorator(middleware_class)
+
+
+def decorator_from_middleware(middleware_class):
+    """
+    Given a middleware class (not an instance), returns a view decorator. This
+    lets you use middleware functionality on a per-view basis. The middleware
+    is created with no params passed.
+    """
+    return make_middleware_decorator(middleware_class)()
+
+
+def available_attrs(fn):
+    """
+    Return the list of functools-wrappable attributes on a callable.
+    This is required as a workaround for http://bugs.python.org/issue3445
+    under Python 2.
+    """
+    if six.PY3:
+        return WRAPPER_ASSIGNMENTS
+    else:
+        return tuple(a for a in WRAPPER_ASSIGNMENTS if hasattr(fn, a))
+
+
+def make_middleware_decorator(middleware_class):
+
+    def _make_decorator(*m_args, **m_kwargs):
+        middleware = middleware_class(*m_args, **m_kwargs)
+
+        def _decorator(view_func):
+
+            @wraps(view_func, assigned=available_attrs(view_func))
+            def _wrapped_view(request, *args, **kwargs):
+                if hasattr(middleware, 'process_request'):
+                    result = middleware.process_request(request)
+                    if result is not None:
+                        return result
+                if hasattr(middleware, 'process_view'):
+                    result = middleware.process_view(request, view_func, args, kwargs)
+                    if result is not None:
+                        return result
+                try:
+                    response = view_func(request, *args, **kwargs)
+                except Exception as e:
+                    if hasattr(middleware, 'process_exception'):
+                        result = middleware.process_exception(request, e)
+                        if result is not None:
+                            return result
+                    raise
+
+                if hasattr(response, 'render') and callable(response.render):
+                    if hasattr(middleware, 'process_template_response'):
+                        response = middleware.process_template_response(request, response)
+                    if hasattr(middleware, 'process_response'):
+
+                        def callback(response):
+                            return middleware.process_response(request, response)
+
+                        response.add_post_render_callback(callback)
+                elif hasattr(middleware, 'process_response'):
+                    return middleware.process_response(request, response)
+                return response
+
+            return _wrapped_view
+
+        return _decorator
+
+    return _make_decorator
+
+
+if ContextDecorator is None:
+
+    class ContextDecorator(object):
+        """
+        A base class that enables a context manager to also be used as a decorator.
+        """
+
+        def __call__(self, func):
+
+            @wraps(func, assigned=available_attrs(func))
+            def inner(*args, **kwargs):
+                with self:
+                    return func(*args, **kwargs)
+
+            return inner
+
+
+class classproperty(object):
+
+    def __init__(self, method=None):
+        self.fget = method
+
+    def __get__(self, instance, cls=None):
+        return self.fget(cls)
+
+    def getter(self, method):
+        self.fget = method
+        return self

@@ -1,0 +1,5 @@
+django>=1.8.0
+wheel==0.24.0
+
+# Additional requirements go here
+django-settings-context-processor==0.2

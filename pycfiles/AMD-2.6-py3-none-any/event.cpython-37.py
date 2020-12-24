@@ -1,0 +1,196 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /home/phil/repos/python-amcrest/src/amcrest/event.py
+# Compiled at: 2020-03-19 18:28:44
+# Size of source mod 2**32: 7709 bytes
+import logging, re
+from requests import RequestException
+from urllib3.exceptions import HTTPError
+from .exceptions import CommError
+_LOGGER = logging.getLogger(__name__)
+_START_STOP = re.compile('Code=([^;]+);action=(Start|Stop)', flags=(re.S))
+
+def _event_lines(ret):
+    line = ''
+    for char in ret.iter_content(decode_unicode=True):
+        line = line + char
+        if line.endswith('\r\n'):
+            yield line.strip()
+            line = ''
+
+
+class Event(object):
+
+    def event_handler_config(self, handlername):
+        ret = self.command('configManager.cgi?action=getConfig&name={0}'.format(handlername))
+        return ret.content.decode('utf-8')
+
+    @property
+    def alarm_config(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=Alarm')
+        return ret.content.decode('utf-8')
+
+    @property
+    def alarm_out_config(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=AlarmOut')
+        return ret.content.decode('utf-8')
+
+    @property
+    def alarm_input_channels(self):
+        ret = self.command('alarm.cgi?action=getInSlots')
+        return ret.content.decode('utf-8')
+
+    @property
+    def alarm_output_channels(self):
+        ret = self.command('alarm.cgi?action=getOutSlots')
+        return ret.content.decode('utf-8')
+
+    @property
+    def alarm_states_input_channels(self):
+        ret = self.command('alarm.cgi?action=getInState')
+        return ret.content.decode('utf-8')
+
+    @property
+    def alarm_states_output_channels(self):
+        ret = self.command('alarm.cgi?action=getOutState')
+        return ret.content.decode('utf-8')
+
+    @property
+    def video_blind_detect_config(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=BlindDetect')
+        return ret.content.decode('utf-8')
+
+    @property
+    def video_loss_detect_config(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=LossDetect')
+        return ret.content.decode('utf-8')
+
+    @property
+    def event_login_failure(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=LoginFailureAlarm')
+        return ret.content.decode('utf-8')
+
+    @property
+    def event_storage_not_exist(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=StorageNotExist')
+        return ret.content.decode('utf-8')
+
+    @property
+    def event_storage_access_failure(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=StorageFailure')
+        return ret.content.decode('utf-8')
+
+    @property
+    def event_storage_low_space(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=StorageLowSpace')
+        return ret.content.decode('utf-8')
+
+    @property
+    def event_net_abort(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=NetAbort')
+        return ret.content.decode('utf-8')
+
+    @property
+    def event_ip_conflict(self):
+        ret = self.command('configManager.cgi?action=getConfig&name=IPConflict')
+        return ret.content.decode('utf-8')
+
+    def event_channels_happened(self, eventcode):
+        """
+        Params:
+
+        VideoMotion: motion detection event
+        VideoLoss: video loss detection event
+        VideoBlind: video blind detection event
+        AlarmLocal: alarm detection event
+        StorageNotExist: storage not exist event
+        StorageFailure: storage failure event
+        StorageLowSpace: storage low space event
+        AlarmOutput: alarm output event
+        """
+        ret = self.command('eventManager.cgi?action=getEventIndexes&code={0}'.format(eventcode))
+        return ret.content.decode('utf-8')
+
+    @property
+    def is_motion_detected(self):
+        event = self.event_channels_happened('VideoMotion')
+        if 'channels' not in event:
+            return False
+        return True
+
+    @property
+    def is_alarm_triggered(self):
+        event = self.event_channels_happened('AlarmLocal')
+        return bool('channels' in event)
+
+    @property
+    def event_management(self):
+        ret = self.command('eventManager.cgi?action=getCaps')
+        return ret.content.decode('utf-8')
+
+    def event_stream(self, eventcodes, retries=None, timeout_cmd=None):
+        """
+        Return a stream of event info lines.
+
+        eventcodes: One or more event codes separated by commas with no spaces
+
+        VideoMotion: motion detection event
+        VideoLoss: video loss detection event
+        VideoBlind: video blind detection event
+        AlarmLocal: alarm detection event
+        StorageNotExist: storage not exist event
+        StorageFailure: storage failure event
+        StorageLowSpace: storage low space event
+        AlarmOutput: alarm output event
+        """
+        urllib3_logger = logging.getLogger('urllib3.connectionpool')
+        if not any((isinstance(x, NoHeaderErrorFilter) for x in urllib3_logger.filters)):
+            urllib3_logger.addFilter(NoHeaderErrorFilter())
+        if timeout_cmd is None:
+            try:
+                timeout_cmd = (
+                 self._timeout_default[0], None)
+            except TypeError:
+                timeout_cmd = (
+                 self._timeout_default, None)
+
+        ret = self.command(('eventManager.cgi?action=attach&codes=[{0}]'.format(eventcodes)),
+          retries=retries,
+          timeout_cmd=timeout_cmd,
+          stream=True)
+        if ret.encoding is None:
+            ret.encoding = 'utf-8'
+        try:
+            try:
+                for line in _event_lines(ret):
+                    if line.lower().startswith('content-length:'):
+                        chunk_size = int(line.split(':')[1])
+                        yield next(ret.iter_content(chunk_size=chunk_size, decode_unicode=True))
+
+            except (RequestException, HTTPError) as error:
+                try:
+                    _LOGGER.debug('%s Error during event streaming: %r', self, error)
+                    raise CommError(error)
+                finally:
+                    error = None
+                    del error
+
+        finally:
+            ret.close()
+
+    def event_actions(self, eventcodes, retries=None, timeout_cmd=None):
+        """Return a stream of event (code, start) tuples."""
+        for event_info in self.event_stream(eventcodes, retries, timeout_cmd):
+            _LOGGER.debug('%s event info: %r', self, event_info)
+            for code, action in _START_STOP.findall(event_info):
+                yield (
+                 code, action == 'Start')
+
+
+class NoHeaderErrorFilter(logging.Filter):
+    """NoHeaderErrorFilter"""
+
+    def filter(self, record):
+        """Filter out Header Parsing Errors."""
+        return 'Failed to parse headers' not in record.getMessage()

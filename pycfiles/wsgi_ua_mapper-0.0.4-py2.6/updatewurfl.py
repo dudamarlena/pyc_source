@@ -1,0 +1,53 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/ua_mapper/updatewurfl.py
+# Compiled at: 2011-08-30 06:48:01
+import os, sys
+from optparse import OptionParser
+from urllib import urlopen
+from ua_mapper.wurfl2python import WurflPythonWriter, DeviceSerializer
+OUTPUT_PATH = os.path.abspath(os.path.dirname(__file__))
+WURFL_ARCHIVE_PATH = os.path.join(OUTPUT_PATH, 'wurfl.zip')
+WURFL_XML_PATH = os.path.join(OUTPUT_PATH, 'wurfl.xml')
+WURFL_PY_PATH = os.path.join(OUTPUT_PATH, 'wurfl.py')
+WURFL_DOWNLOAD_URL = 'http://downloads.sourceforge.net/project/wurfl/WURFL/latest/wurfl-latest.zip'
+
+class Updater(object):
+    help = 'Updates Wurfl devices database.'
+
+    def write_archive(self, filename, data):
+        f = open(WURFL_ARCHIVE_PATH, 'w')
+        f.write(data)
+        f.close()
+
+    def fetch_latest_wurfl(self):
+        print 'Downloading Wurfl...'
+        data = urlopen(WURFL_DOWNLOAD_URL).read()
+        self.write_archive(WURFL_ARCHIVE_PATH, data)
+        os.system('unzip -o %s -d %s' % (WURFL_ARCHIVE_PATH, OUTPUT_PATH))
+        return True
+
+    def wurfl_to_python(self):
+        print 'Compiling device list...'
+        op = OptionParser()
+        op.add_option('-l', '--logfile', dest='logfile', default=sys.stderr, help='where to write log messages')
+        if '-f' in sys.argv:
+            sys.argv.remove('-f')
+        if '--force' in sys.argv:
+            sys.argv.remove('--force')
+        (options, args) = op.parse_args()
+        options = options.__dict__
+        options.update({'outfile': WURFL_PY_PATH})
+        wurfl = WurflPythonWriter(WURFL_XML_PATH, device_handler=DeviceSerializer, options=options)
+        wurfl.process()
+
+    def handle(self, *args, **options):
+        self.fetch_latest_wurfl()
+        self.wurfl_to_python()
+        from ua_mapper.wurfl import devices
+        print 'Done.'
+
+
+Updater().handle()

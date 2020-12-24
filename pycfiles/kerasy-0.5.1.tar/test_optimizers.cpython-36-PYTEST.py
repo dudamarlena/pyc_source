@@ -1,0 +1,81 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/iwasakishuto/Github/portfolio/Kerasy/tests/test_optimizers.py
+# Compiled at: 2020-05-09 23:34:36
+# Size of source mod 2**32: 1925 bytes
+import builtins as @py_builtins, _pytest.assertion.rewrite as @pytest_ar
+from kerasy.models import Sequential
+from kerasy.layers import Input, Dense
+from kerasy import optimizers
+from kerasy import metrics
+from kerasy.utils import generate_test_data
+from kerasy.utils import CategoricalEncoder
+num_classes = 2
+metric = metrics.get('categorical_accuracy')
+
+def get_test_data():
+    (x_train, y_train), _ = generate_test_data(num_train=1000, num_test=200,
+      input_shape=(10, ),
+      classification=True,
+      num_classes=num_classes)
+    encoder = CategoricalEncoder()
+    y_train = encoder.to_onehot(y_train, num_classes)
+    return (x_train, y_train)
+
+
+def _test_optimizer(optimizer, target=0.75):
+    x_train, y_train = get_test_data()
+    model = Sequential()
+    model.add(Input(input_shape=(x_train.shape[1],)))
+    model.add(Dense(10, activation='relu'))
+    model.add(Dense((y_train.shape[1]), activation='softmax'))
+    model.compile(loss='categorical_crossentropy',
+      optimizer=optimizer,
+      metrics=[
+     metric])
+    model.fit(x_train, y_train, epochs=3, batch_size=16, verbose=(-1))
+    y_pred = model.predict(x_train)
+    score = metric.loss(y_pred, y_train)
+    @py_assert1 = score >= target
+    if not @py_assert1:
+        @py_format3 = @pytest_ar._call_reprcompare(('>=', ), (@py_assert1,), ('%(py0)s >= %(py2)s', ), (score, target)) % {'py0':@pytest_ar._saferepr(score) if 'score' in @py_builtins.locals() or @pytest_ar._should_repr_global_name(score) else 'score',  'py2':@pytest_ar._saferepr(target) if 'target' in @py_builtins.locals() or @pytest_ar._should_repr_global_name(target) else 'target'}
+        @py_format5 = 'assert %(py4)s' % {'py4': @py_format3}
+        raise AssertionError(@pytest_ar._format_explanation(@py_format5))
+    @py_assert1 = None
+
+
+def test_sgd():
+    sgd = optimizers.SGD(lr=0.01, momentum=0.9, nesterov=True)
+    _test_optimizer(sgd)
+
+
+def test_rmsprop():
+    rmsprop = optimizers.RMSprop()
+    _test_optimizer(rmsprop)
+
+
+def test_adgrad():
+    adgrad = optimizers.Adagrad()
+    _test_optimizer(adgrad)
+
+
+def test_adadelta():
+    adadelta = optimizers.Adadelta()
+    _test_optimizer(adadelta)
+
+
+def test_adam():
+    adam = optimizers.Adam()
+    _test_optimizer(adam)
+
+
+def test_adamax():
+    adamax = optimizers.Adamax()
+    _test_optimizer(adamax)
+
+
+def test_nadam():
+    nadam = optimizers.Nadam()
+    _test_optimizer(nadam)

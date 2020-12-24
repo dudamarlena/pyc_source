@@ -1,0 +1,5 @@
+matplotlib
+numpy
+numpy-quaternion
+sortedcontainers
+gym

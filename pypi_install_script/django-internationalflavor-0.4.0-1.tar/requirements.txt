@@ -1,0 +1,7 @@
+invoke==1.4.1
+coverage==5.1
+flake8==3.7.9
+django-discover-runner==1.0
+pytz
+
+suds-jurko==0.6

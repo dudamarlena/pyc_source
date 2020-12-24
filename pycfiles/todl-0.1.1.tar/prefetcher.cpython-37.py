@@ -1,0 +1,48 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/svpino/dev/tensorflow-object-detection-sagemaker/todl/tensorflow-object-detection/research/object_detection/core/prefetcher.py
+# Compiled at: 2020-04-05 19:50:57
+# Size of source mod 2**32: 2526 bytes
+"""Provides functions to prefetch tensors to feed into models."""
+import tensorflow as tf
+
+def prefetch(tensor_dict, capacity):
+    """Creates a prefetch queue for tensors.
+
+  Creates a FIFO queue to asynchronously enqueue tensor_dicts and returns a
+  dequeue op that evaluates to a tensor_dict. This function is useful in
+  prefetching preprocessed tensors so that the data is readily available for
+  consumers.
+
+  Example input pipeline when you don't need batching:
+  ----------------------------------------------------
+  key, string_tensor = slim.parallel_reader.parallel_read(...)
+  tensor_dict = decoder.decode(string_tensor)
+  tensor_dict = preprocessor.preprocess(tensor_dict, ...)
+  prefetch_queue = prefetcher.prefetch(tensor_dict, capacity=20)
+  tensor_dict = prefetch_queue.dequeue()
+  outputs = Model(tensor_dict)
+  ...
+  ----------------------------------------------------
+
+  For input pipelines with batching, refer to core/batcher.py
+
+  Args:
+    tensor_dict: a dictionary of tensors to prefetch.
+    capacity: the size of the prefetch queue.
+
+  Returns:
+    a FIFO prefetcher queue
+  """
+    names = list(tensor_dict.keys())
+    dtypes = [t.dtype for t in tensor_dict.values()]
+    shapes = [t.get_shape() for t in tensor_dict.values()]
+    prefetch_queue = tf.PaddingFIFOQueue(capacity, dtypes=dtypes, shapes=shapes,
+      names=names,
+      name='prefetch_queue')
+    enqueue_op = prefetch_queue.enqueue(tensor_dict)
+    tf.train.queue_runner.add_queue_runner(tf.train.queue_runner.QueueRunner(prefetch_queue, [enqueue_op]))
+    tf.summary.scalar('queue/%s/fraction_of_%d_full' % (prefetch_queue.name, capacity), tf.cast((prefetch_queue.size()), dtype=(tf.float32)) * (1.0 / capacity))
+    return prefetch_queue

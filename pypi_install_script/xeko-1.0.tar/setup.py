@@ -1,0 +1,2 @@
+from distutils.core import setup
+setup(name="xeko",version ="1.0",py_modules=["xeko.account_api","xeko.client","xeko.consts","xeko.ett_api","xeko.exceptions","xeko.futures_api","xeko.lever_api","xeko.spot_api","xeko.swap_api","xeko.utils","xeko.websocket"],author="neo",description="Self-made OKApi on PyPI by3-8-2019")

@@ -1,0 +1,105 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/sao/src/github/django-json-api/django-rest-framework-json-api/rest_framework_json_api/parsers.py
+# Compiled at: 2019-10-02 06:38:51
+# Size of source mod 2**32: 6151 bytes
+"""
+Parsers
+"""
+from rest_framework import parsers
+from rest_framework.exceptions import ParseError
+from . import exceptions, renderers, serializers, utils
+from .settings import json_api_settings
+
+class JSONParser(parsers.JSONParser):
+    __doc__ = '\n    Similar to `JSONRenderer`, the `JSONParser` you may override the following methods if you\n    need highly custom parsing control.\n\n    A JSON API client will send a payload that looks like this:\n\n    .. code:: json\n\n\n        {\n            "data": {\n                "type": "identities",\n                "id": 1,\n                "attributes": {\n                    "first_name": "John",\n                    "last_name": "Coltrane"\n                }\n            }\n        }\n\n    We extract the attributes so that DRF serializers can work as normal.\n    '
+    media_type = 'application/vnd.api+json'
+    renderer_class = renderers.JSONRenderer
+
+    @staticmethod
+    def parse_attributes(data):
+        attributes = data.get('attributes')
+        uses_format_translation = json_api_settings.FORMAT_FIELD_NAMES
+        if not attributes:
+            return dict()
+        if uses_format_translation:
+            return utils.format_field_names(attributes, 'underscore')
+        return attributes
+
+    @staticmethod
+    def parse_relationships(data):
+        uses_format_translation = json_api_settings.FORMAT_FIELD_NAMES
+        relationships = data.get('relationships')
+        if not relationships:
+            relationships = dict()
+        else:
+            if uses_format_translation:
+                relationships = utils.format_field_names(relationships, 'underscore')
+            else:
+                parsed_relationships = dict()
+                for field_name, field_data in relationships.items():
+                    field_data = field_data.get('data')
+                    if isinstance(field_data, dict) or field_data is None:
+                        parsed_relationships[field_name] = field_data
+
+            if isinstance(field_data, list):
+                parsed_relationships[field_name] = list((relation for relation in field_data))
+            return parsed_relationships
+
+    @staticmethod
+    def parse_metadata(result):
+        """
+        Returns a dictionary which will be merged into parsed data of the request. By default,
+        it reads the `meta` content in the request body and returns it in a dictionary with
+        a `_meta` top level key.
+        """
+        metadata = result.get('meta')
+        if metadata:
+            return {'_meta': metadata}
+        return {}
+
+    def parse(self, stream, media_type=None, parser_context=None):
+        """
+        Parses the incoming bytestream as JSON and returns the resulting data
+        """
+        result = super(JSONParser, self).parse(stream,
+          media_type=media_type, parser_context=parser_context)
+        if not isinstance(result, dict) or 'data' not in result:
+            raise ParseError('Received document does not contain primary data')
+        data = result.get('data')
+        view = parser_context['view']
+        from rest_framework_json_api.views import RelationshipView
+        if isinstance(view, RelationshipView):
+            if isinstance(data, list):
+                for resource_identifier_object in data:
+                    if resource_identifier_object.get('id'):
+                        raise resource_identifier_object.get('type') or ParseError('Received data contains one or more malformed JSONAPI Resource Identifier Object(s)')
+
+            else:
+                raise data.get('id') and data.get('type') or ParseError('Received data is not a valid JSONAPI Resource Identifier Object')
+            return data
+        request = parser_context.get('request')
+        if request.method in ('PUT', 'POST', 'PATCH'):
+            resource_name = utils.get_resource_name(parser_context,
+              expand_polymorphic_types=True)
+            if isinstance(resource_name, str):
+                if data.get('type') != resource_name:
+                    raise exceptions.Conflict("The resource object's type ({data_type}) is not the type that constitute the collection represented by the endpoint ({resource_type}).".format(data_type=(data.get('type')),
+                      resource_type=resource_name))
+            elif data.get('type') not in resource_name:
+                raise exceptions.Conflict("The resource object's type ({data_type}) is not the type that constitute the collection represented by the endpoint (one of [{resource_types}]).".format(data_type=(data.get('type')),
+                  resource_types=(', '.join(resource_name))))
+        if not data.get('id'):
+            if request.method in ('PATCH', 'PUT'):
+                raise ParseError("The resource identifier object must contain an 'id' member")
+        serializer_class = getattr(view, 'serializer_class', None)
+        parsed_data = {'id': data.get('id')} if 'id' in data else {}
+        if serializer_class is not None:
+            if issubclass(serializer_class, serializers.PolymorphicModelSerializer):
+                parsed_data['type'] = data.get('type')
+        parsed_data.update(self.parse_attributes(data))
+        parsed_data.update(self.parse_relationships(data))
+        parsed_data.update(self.parse_metadata(result))
+        return parsed_data

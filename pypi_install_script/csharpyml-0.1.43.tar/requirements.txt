@@ -1,0 +1,10 @@
+coverage
+jyquickhelper
+Pillow
+pycparser
+pylint
+pyquickhelper>=1.8
+scikit-learn
+scipy
+sphinx_rtd_theme
+wheel

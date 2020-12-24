@@ -1,0 +1,8 @@
+aiobotocore
+structlog
+colorama
+dictdiffer
+deepdiff
+pytest
+uvloop
+slacker

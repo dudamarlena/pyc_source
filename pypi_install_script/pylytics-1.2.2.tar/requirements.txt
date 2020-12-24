@@ -1,0 +1,5 @@
+mysql-connector>=2.1.3
+pytz
+iso8601
+raven
+Jinja2==2.7.2

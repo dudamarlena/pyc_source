@@ -1,0 +1,41 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/alfanous/dynamic_resources/arabicnames_dyn.py
+# Compiled at: 2015-06-30 07:26:33
+ara2eng_names = {'جزء': 'juz', 'رقم_السجدة': 'sajda_id', 
+   'صفحة': 'page', 
+   'ربع': 'rub', 
+   'ر_س': 's_r', 
+   'رقم_السورة': 'sura_id', 
+   'نوع_السورة_إنجليزي': 'sura_type', 
+   'آية_': 'aya_', 
+   'ك_آ': 'a_w', 
+   'فرع': 'topic', 
+   'آية': 'aya', 
+   'رقم_الآية': 'aya_id', 
+   'ك_س': 's_w', 
+   'نوع_السجدة': 'sajda_type', 
+   'رقم': 'gid', 
+   'نصف': 'nisf', 
+   'حزب': 'hizb', 
+   'سجدة': 'sajda', 
+   'ترتيب_السورة': 'sura_order', 
+   'نوع_السورة': 'sura_type_arabic', 
+   'عثماني_': 'uth_', 
+   'صفحة_هندي': 'page_IN', 
+   'عثماني ': 'uth', 
+   'ركوع': 'ruku', 
+   'آ_س': 's_a', 
+   'موضوع': 'subject', 
+   'ج_س': 's_g', 
+   'سورة_إنجليزي': 'sura_english', 
+   'فصل': 'chapter', 
+   'سورة_تهجئة': 'sura', 
+   'ح_آ': 'a_l', 
+   'سورة': 'sura_arabic', 
+   'ج_آ': 'a_g', 
+   'باب': 'subtopic', 
+   'ح_س': 's_l', 
+   'منزل': 'manzil'}

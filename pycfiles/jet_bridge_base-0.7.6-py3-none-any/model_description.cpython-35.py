@@ -1,0 +1,71 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3351)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/f1nal/Dropbox/python/jet-bridge/src/packages/jet_bridge_base/jet_bridge_base/views/model_description.py
+# Compiled at: 2020-03-04 16:40:12
+# Size of source mod 2**32: 4909 bytes
+from sqlalchemy import inspect
+from sqlalchemy.orm.base import ONETOMANY
+from jet_bridge_base.db import get_mapped_base
+from jet_bridge_base.models import data_types
+from jet_bridge_base.permissions import HasProjectPermissions
+from jet_bridge_base.responses.json import JSONResponse
+from jet_bridge_base.serializers.model_description import ModelDescriptionSerializer
+from jet_bridge_base.utils.common import merge
+from jet_bridge_base.utils.db_types import map_data_type
+from jet_bridge_base.views.base.api import APIView
+
+class ModelDescriptionView(APIView):
+    serializer_class = ModelDescriptionSerializer
+    permission_classes = (HasProjectPermissions,)
+
+    def get_queryset(self):
+        non_editable = [
+         'id']
+        hidden = ['__jet__token']
+        MappedBase = get_mapped_base(self.request)
+
+        def map_column(column):
+            params = {}
+            try:
+                data_type = map_data_type(column.type)
+            except:
+                data_type = 'NullType'
+
+            if column.foreign_keys:
+                foreign_key = next(iter(column.foreign_keys))
+                data_type = data_types.FOREIGN_KEY
+                params['related_model'] = {'model': foreign_key.column.table.name}
+            result = {'name': column.name, 
+             'db_column': column.name, 
+             'field': data_type, 
+             'filterable': True, 
+             'null': column.nullable, 
+             'editable': column.name not in non_editable, 
+             'params': params}
+            if column.default is not None:
+                result['default_type'] = 'value'
+                result['default_value'] = column.default
+            return result
+
+        def map_table(cls):
+            mapper = inspect(cls)
+            name = mapper.selectable.name
+            from jet_bridge_base.configuration import configuration
+            additional = configuration.get_model_description(name)
+            result = {'model': name, 
+             'db_table': name, 
+             'fields': list(map(map_column, mapper.columns)), 
+             'hidden': name in hidden or name in configuration.get_hidden_model_description(), 
+             'primary_key_field': mapper.primary_key[0].name}
+            if additional:
+                result = merge(result, additional)
+            return result
+
+        return list(map(map_table, MappedBase.classes))
+
+    def get(self, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.serializer_class(instance=queryset, many=True)
+        return JSONResponse(serializer.representation_data)

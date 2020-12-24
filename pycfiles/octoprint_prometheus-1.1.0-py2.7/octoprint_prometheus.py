@@ -1,0 +1,73 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-armv7l/egg/octoprint_prometheus/octoprint_prometheus.py
+# Compiled at: 2019-02-22 22:13:45
+from __future__ import absolute_import
+import os
+from prometheus_client import Gauge, start_http_server
+import octoprint.plugin
+print 'XXX'
+
+class PrometheusPlugin(octoprint.plugin.StartupPlugin, octoprint.plugin.SettingsPlugin, octoprint.plugin.TemplatePlugin, octoprint.plugin.ProgressPlugin, octoprint.plugin.EventHandlerPlugin):
+
+    def __init__(self, *args, **kwargs):
+        super(PrometheusPlugin, self).__init__(*args, **kwargs)
+        os.system('date >> /tmp/iran2')
+        self._logger.info('Prometheus plugin class init')
+        self.gauges = {}
+
+    def on_after_startup(self):
+        self._logger.info('Starting Prometheus! (port: %s)' % self._settings.get(['prometheus_port']))
+        start_http_server(self._settings.get(['prometheus_port']))
+
+    def get_settings_defaults(self):
+        return dict(prometheus_port=8000)
+
+    def get_template_configs(self):
+        return [
+         dict(type='settings', custom_bindings=False)]
+
+    def get_gauge(self, name):
+        if name not in self.gauges:
+            self.gauges[name] = Gauge(name, name)
+        return self.gauges[name]
+
+    def on_print_progress(self, storage, path, progress):
+        gauge = self.get_gauge('progress')
+        gauge.set(progress)
+
+    def on_event(self, event, payload):
+        if event == 'ZChange':
+            gauge = self.get_gauge('zchange')
+            gauge.set(payload['new'])
+        if event == 'PositionUpdate':
+            for k, v in payload.items():
+                if k in ('x', 'y', 'z', 'e'):
+                    k = 'position_' + k
+                    gauge = self.get_gauge(k)
+                    gauge.set(v)
+
+    def temperatures_handler(self, comm, parsed_temps):
+        for k, v in parsed_temps.items():
+            mapname = {'B': 'temperature_bed', 'T0': 'temperature_tool0', 
+               'T1': 'temperature_tool1', 
+               'T2': 'temperature_tool2', 
+               'T3': 'temperature_tool3'}
+            k_actual = mapname.get(k, k) + '_actual'
+            gauge = self.get_gauge(k_actual)
+            gauge.set(v[0])
+            k_target = mapname.get(k, k) + '_target'
+            gauge = self.get_gauge(k_target)
+            gauge.set(v[1])
+
+        return parsed_temps
+
+
+def __plugin_load__():
+    global __plugin_hooks__
+    global __plugin_implementation__
+    plugin = PrometheusPlugin()
+    __plugin_implementation__ = plugin
+    __plugin_hooks__ = {'octoprint.comm.protocol.temperatures.received': plugin.temperatures_handler}

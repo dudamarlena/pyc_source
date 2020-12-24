@@ -1,0 +1,7 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python2.7/site-packages/dbmanagr/driver/postgresql/version/v92.py
+# Compiled at: 2015-10-11 07:17:06
+STAT_ACTIVITY = "select\n        sa.datname database_name,\n        sa.pid pid,\n        sa.usename username,\n        coalesce(sa.client_addr || ':' || sa.client_port, '') as client,\n        sa.xact_start transaction_start,\n        sa.query_start query_start,\n        sa.state state,\n        regexp_replace(sa.query, '\\s+', ' ', 'g') query,\n        sa.waiting blocked,\n        case\n            when sa.waiting then string_agg(l.virtualxid, ',')\n            else ''\n        end blocked_by,\n        now() - sa.xact_start as transaction_duration,\n        now() - sa.query_start as query_duration\n    from pg_stat_activity sa\n        left join pg_locks l on l.pid = sa.pid\n    where\n        '{database}' in (sa.datname, '')\n        and (\n            sa.state in ({states})\n            or array[{states}] = array['']\n        )\n        and (sa.state != 'disabled' or {disabled})\n        and '{username}' in (sa.usename, '')\n        and (\n            sa.pid in ({pids})\n            or array[{pids}] = array[-1]\n        )\n        and (\n            '{pattern}' = ''\n            or sa.query like '%{pattern}%'\n        )\n    group by 1, 2, 3, 4, 5, 6, 7, 8, 9\n    order by sa.datname\n"

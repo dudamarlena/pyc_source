@@ -1,0 +1,2 @@
+sprockets<2
+sprockets.clients.postgresql>=1.0.0

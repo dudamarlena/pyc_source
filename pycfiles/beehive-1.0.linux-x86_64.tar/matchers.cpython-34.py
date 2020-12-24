@@ -1,0 +1,201 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/lib/python3.4/site-packages/beehive/matchers.py
+# Compiled at: 2014-10-30 09:03:06
+# Size of source mod 2**32: 6853 bytes
+from __future__ import with_statement
+import re, parse
+from beehive import model
+
+class Matcher(object):
+    __doc__ = 'Pull parameters out of step names.\n\n    .. attribute:: string\n\n       The match pattern attached to the step function.\n\n    .. attribute:: func\n\n       The step function the pattern is being attached to.\n    '
+    schema = "@%s('%s')"
+
+    def __init__(self, func, string, step_type=None):
+        self.func = func
+        self.string = string
+        self.step_type = step_type
+        self._location = None
+
+    @property
+    def location(self):
+        if self._location is None:
+            self._location = model.Match.make_location(self.func)
+        return self._location
+
+    def describe(self, schema=None):
+        """Provide a textual description of the step function/matcher object.
+
+        :param schema:  Text schema to use.
+        :return: Textual description of this step definition (matcher).
+        """
+        step_type = self.step_type or 'step'
+        if not schema:
+            schema = self.schema
+        return schema % (step_type, self.string)
+
+    def check_match(self, step):
+        """Match me against the "step" name supplied.
+
+        Return None if I don't match otherwise return a list of matches as
+        :class:`beehive.model.Argument` instances.
+
+        The return value from this function will be converted into a
+        :class:`beehive.model.Match` instance by *beehive*.
+        """
+        raise NotImplementedError
+
+    def match(self, step):
+        result = self.check_match(step)
+        if result is None:
+            return
+        return model.Match(self.func, result)
+
+    def __repr__(self):
+        return '<%s: %r>' % (self.__class__.__name__, self.string)
+
+
+class ParseMatcher(Matcher):
+    custom_types = {}
+
+    def __init__(self, func, string, step_type=None):
+        super(ParseMatcher, self).__init__(func, string, step_type)
+        self.parser = parse.compile(self.string, self.custom_types)
+
+    def check_match(self, step):
+        result = self.parser.parse(step)
+        if not result:
+            return
+        args = []
+        for index, value in enumerate(result.fixed):
+            start, end = result.spans[index]
+            args.append(model.Argument(start, end, step[start:end], value))
+
+        for name, value in result.named.items():
+            start, end = result.spans[name]
+            args.append(model.Argument(start, end, step[start:end], value, name))
+
+        args.sort(key=lambda x: x.start)
+        return args
+
+
+def register_type(**kw):
+    r"""Registers a custom type that will be available to "parse"
+    for type conversion during step matching.
+
+    Converters should be supplied as ``name=callable`` arguments (or as dict).
+
+    A type converter should follow :pypi:`parse` module rules.
+    In general, a type converter is a function that converts text (as string)
+    into a value-type (type converted value).
+
+    EXAMPLE:
+
+    .. code-block:: python
+
+        from beehive import register_type, given
+        import parse
+
+        # -- TYPE CONVERTER: For a simple, positive integer number.
+        @parse.with_pattern(r"\d+")
+        def parse_number(text):
+            return int(text)
+
+        # -- REGISTER TYPE-CONVERTER: With beehive
+        register_type(Number=parse_number)
+
+        # -- STEP DEFINITIONS: Use type converter.
+        @given('{amount:Number} vehicles')
+        def step_impl(context, amount):
+            assert isinstance(amount, int)
+    """
+    ParseMatcher.custom_types.update(kw)
+
+
+class RegexMatcher(Matcher):
+
+    def __init__(self, func, string, step_type=None):
+        super(RegexMatcher, self).__init__(func, string, step_type)
+        self.regex = re.compile(self.string)
+
+    def check_match(self, step):
+        m = self.regex.match(step)
+        if not m:
+            return
+        groupindex = dict((y, x) for x, y in self.regex.groupindex.items())
+        args = []
+        for index, group in enumerate(m.groups()):
+            index += 1
+            name = groupindex.get(index, None)
+            args.append(model.Argument(m.start(index), m.end(index), group, group, name))
+
+        return args
+
+
+matcher_mapping = {'parse': ParseMatcher, 
+ 're': RegexMatcher}
+current_matcher = ParseMatcher
+
+def use_step_matcher(name):
+    """Change the parameter matcher used in parsing step text.
+
+    The change is immediate and may be performed between step definitions in
+    your step implementation modules - allowing adjacent steps to use different
+    matchers if necessary.
+
+    There are several parsers available in *beehive* (by default):
+
+    **parse** (the default, based on: :pypi:`parse`)
+        Provides a simple parser that replaces regular expressions for
+        step parameters with a readable syntax like ``{param:Type}``.
+        The syntax is inspired by the Python builtin ``string.format()``
+        function.
+        Step parameters must use the named fields syntax of :pypi:`parse`
+        in step definitions. The named fields are extracted,
+        optionally type converted and then used as step function arguments.
+
+        Supports type conversions by using type converters
+        (see :func:`~beehive.register_type()`).
+
+    **cfparse** (extends: :pypi:`parse`, requires: :pypi:`parse_type`)
+        Provides an extended parser with "Cardinality Field" (CF) support.
+        Automatically creates missing type converters for related cardinality
+        as long as a type converter for cardinality=1 is provided.
+        Supports parse expressions like:
+
+            * ``{values:Type+}`` (cardinality=1..N, many)
+            * ``{values:Type*}`` (cardinality=0..N, many0)
+            * ``{value:Type?}``  (cardinality=0..1, optional)
+
+        Supports type conversions (as above).
+
+    **re**
+        This uses full regular expressions to parse the clause text. You will
+        need to use named groups "(?P<name>...)" to define the variables pulled
+        from the text and passed to your ``step()`` function.
+
+        Type conversion is **not supported**.
+        A step function writer may implement type conversion
+        inside the step function (implementation).
+
+    You may `define your own matcher`_.
+
+    .. _`define your own matcher`: api.html#step-parameters
+    """
+    global current_matcher
+    current_matcher = matcher_mapping[name]
+
+
+def step_matcher(name):
+    """
+    DEPRECATED, use :func:`use_step_matcher()` instead.
+    """
+    import warnings
+    warnings.warn("Use 'use_step_matcher()' instead", PendingDeprecationWarning, stacklevel=2)
+    use_step_matcher(name)
+
+
+def get_matcher(func, string):
+    return current_matcher(func, string)

@@ -1,0 +1,3 @@
+coala>=0.8.0.dev20160805210056
+prompt_toolkit==1.*
+pygments==2.*

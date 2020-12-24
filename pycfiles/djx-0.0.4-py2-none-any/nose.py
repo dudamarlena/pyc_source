@@ -1,0 +1,58 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /tmp/pip-install-zr3xXj/pytest/_pytest/nose.py
+# Compiled at: 2019-02-14 00:35:47
+""" run test suites written for nose. """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+import sys, six
+from _pytest import python
+from _pytest import runner
+from _pytest import unittest
+from _pytest.config import hookimpl
+
+def get_skip_exceptions():
+    skip_classes = set()
+    for module_name in ('unittest', 'unittest2', 'nose'):
+        mod = sys.modules.get(module_name)
+        if hasattr(mod, 'SkipTest'):
+            skip_classes.add(mod.SkipTest)
+
+    return tuple(skip_classes)
+
+
+def pytest_runtest_makereport(item, call):
+    if call.excinfo and call.excinfo.errisinstance(get_skip_exceptions()):
+        call2 = runner.CallInfo.from_call(lambda : runner.skip(six.text_type(call.excinfo.value)), call.when)
+        call.excinfo = call2.excinfo
+
+
+@hookimpl(trylast=True)
+def pytest_runtest_setup(item):
+    if is_potential_nosetest(item):
+        if not call_optional(item.obj, 'setup'):
+            call_optional(item.parent.obj, 'setup')
+        item.session._setupstate.addfinalizer(lambda : teardown_nose(item), item)
+
+
+def teardown_nose(item):
+    if is_potential_nosetest(item):
+        if not call_optional(item.obj, 'teardown'):
+            call_optional(item.parent.obj, 'teardown')
+
+
+def is_potential_nosetest(item):
+    return isinstance(item, python.Function) and not isinstance(item, unittest.TestCaseFunction)
+
+
+def call_optional(obj, name):
+    method = getattr(obj, name, None)
+    isfixture = hasattr(method, '_pytestfixturefunction')
+    if method is not None and not isfixture and callable(method):
+        method()
+        return True
+    else:
+        return

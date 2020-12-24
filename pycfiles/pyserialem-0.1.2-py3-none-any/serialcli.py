@@ -1,0 +1,223 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: ./build/lib.linux-x86_64-2.7/serial/serialcli.py
+# Compiled at: 2015-09-18 20:09:26
+import clr, System, System.IO.Ports
+from serial.serialutil import *
+sab = System.Array[System.Byte]
+
+def as_byte_array(string):
+    return sab([ ord(x) for x in string ])
+
+
+class Serial(SerialBase):
+    """Serial port implementation for .NET/Mono."""
+    BAUDRATES = (50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600,
+                 19200, 38400, 57600, 115200)
+
+    def open(self):
+        """        Open port with current settings. This may throw a SerialException
+        if the port cannot be opened.
+        """
+        if self._port is None:
+            raise SerialException('Port must be configured before it can be used.')
+        if self.is_open:
+            raise SerialException('Port is already open.')
+        try:
+            self._port_handle = System.IO.Ports.SerialPort(self.portstr)
+        except Exception as msg:
+            self._port_handle = None
+            raise SerialException('could not open port %s: %s' % (self.portstr, msg))
+
+        self._reconfigurePort()
+        self._port_handle.Open()
+        self.is_open = True
+        if not self._dsrdtr:
+            self._update_dtr_state()
+        if not self._rtscts:
+            self._update_rts_state()
+        self.reset_input_buffer()
+        return
+
+    def _reconfigurePort(self):
+        """Set communication parameters on opened port."""
+        if not self._port_handle:
+            raise SerialException('Can only operate on a valid port handle')
+        if self._timeout is None:
+            self._port_handle.ReadTimeout = System.IO.Ports.SerialPort.InfiniteTimeout
+        else:
+            self._port_handle.ReadTimeout = int(self._timeout * 1000)
+        if self._write_timeout is None:
+            self._port_handle.WriteTimeout = System.IO.Ports.SerialPort.InfiniteTimeout
+        else:
+            self._port_handle.WriteTimeout = int(self._write_timeout * 1000)
+        try:
+            self._port_handle.BaudRate = self._baudrate
+        except IOError as e:
+            raise ValueError(str(e))
+
+        if self._bytesize == FIVEBITS:
+            self._port_handle.DataBits = 5
+        elif self._bytesize == SIXBITS:
+            self._port_handle.DataBits = 6
+        elif self._bytesize == SEVENBITS:
+            self._port_handle.DataBits = 7
+        elif self._bytesize == EIGHTBITS:
+            self._port_handle.DataBits = 8
+        else:
+            raise ValueError('Unsupported number of data bits: %r' % self._bytesize)
+        if self._parity == PARITY_NONE:
+            self._port_handle.Parity = getattr(System.IO.Ports.Parity, 'None')
+        elif self._parity == PARITY_EVEN:
+            self._port_handle.Parity = System.IO.Ports.Parity.Even
+        elif self._parity == PARITY_ODD:
+            self._port_handle.Parity = System.IO.Ports.Parity.Odd
+        elif self._parity == PARITY_MARK:
+            self._port_handle.Parity = System.IO.Ports.Parity.Mark
+        elif self._parity == PARITY_SPACE:
+            self._port_handle.Parity = System.IO.Ports.Parity.Space
+        else:
+            raise ValueError('Unsupported parity mode: %r' % self._parity)
+        if self._stopbits == STOPBITS_ONE:
+            self._port_handle.StopBits = System.IO.Ports.StopBits.One
+        elif self._stopbits == STOPBITS_ONE_POINT_FIVE:
+            self._port_handle.StopBits = System.IO.Ports.StopBits.OnePointFive
+        elif self._stopbits == STOPBITS_TWO:
+            self._port_handle.StopBits = System.IO.Ports.StopBits.Two
+        else:
+            raise ValueError('Unsupported number of stop bits: %r' % self._stopbits)
+        if self._rtscts and self._xonxoff:
+            self._port_handle.Handshake = System.IO.Ports.Handshake.RequestToSendXOnXOff
+        elif self._rtscts:
+            self._port_handle.Handshake = System.IO.Ports.Handshake.RequestToSend
+        elif self._xonxoff:
+            self._port_handle.Handshake = System.IO.Ports.Handshake.XOnXOff
+        else:
+            self._port_handle.Handshake = getattr(System.IO.Ports.Handshake, 'None')
+        return
+
+    def close(self):
+        """Close port"""
+        if self.is_open:
+            if self._port_handle:
+                try:
+                    self._port_handle.Close()
+                except System.IO.Ports.InvalidOperationException:
+                    pass
+
+                self._port_handle = None
+            self.is_open = False
+        return
+
+    @property
+    def in_waiting(self):
+        """Return the number of characters currently in the input buffer."""
+        if not self._port_handle:
+            raise portNotOpenError
+        return self._port_handle.BytesToRead
+
+    def read(self, size=1):
+        """        Read size bytes from the serial port. If a timeout is set it may
+        return less characters as requested. With no timeout it will block
+        until the requested number of bytes is read.
+        """
+        if not self._port_handle:
+            raise portNotOpenError
+        data = bytearray()
+        while size:
+            try:
+                data.append(self._port_handle.ReadByte())
+            except System.TimeoutException as e:
+                break
+            else:
+                size -= 1
+
+        return bytes(data)
+
+    def write(self, data):
+        """Output the given string over the serial port."""
+        if not self._port_handle:
+            raise portNotOpenError
+        try:
+            self._port_handle.Write(as_byte_array(data), 0, len(data))
+        except System.TimeoutException as e:
+            raise writeTimeoutError
+
+        return len(data)
+
+    def reset_input_buffer(self):
+        """Clear input buffer, discarding all that is in the buffer."""
+        if not self._port_handle:
+            raise portNotOpenError
+        self._port_handle.DiscardInBuffer()
+
+    def reset_output_buffer(self):
+        """        Clear output buffer, aborting the current output and
+        discarding all that is in the buffer.
+        """
+        if not self._port_handle:
+            raise portNotOpenError
+        self._port_handle.DiscardOutBuffer()
+
+    def _update_break_state(self):
+        """
+        Set break: Controls TXD. When active, to transmitting is possible.
+        """
+        if not self._port_handle:
+            raise portNotOpenError
+        self._port_handle.BreakState = bool(self._break_state)
+
+    def _update_rts_state(self):
+        """Set terminal status line: Request To Send"""
+        if not self._port_handle:
+            raise portNotOpenError
+        self._port_handle.RtsEnable = bool(self._rts_state)
+
+    def _update_dtr_state(self):
+        """Set terminal status line: Data Terminal Ready"""
+        if not self._port_handle:
+            raise portNotOpenError
+        self._port_handle.DtrEnable = bool(self._dtr_state)
+
+    @property
+    def cts(self):
+        """Read terminal status line: Clear To Send"""
+        if not self._port_handle:
+            raise portNotOpenError
+        return self._port_handle.CtsHolding
+
+    @property
+    def dsr(self):
+        """Read terminal status line: Data Set Ready"""
+        if not self._port_handle:
+            raise portNotOpenError
+        return self._port_handle.DsrHolding
+
+    @property
+    def ri(self):
+        """Read terminal status line: Ring Indicator"""
+        if not self._port_handle:
+            raise portNotOpenError
+        return False
+
+    @property
+    def cd(self):
+        """Read terminal status line: Carrier Detect"""
+        if not self._port_handle:
+            raise portNotOpenError
+        return self._port_handle.CDHolding
+
+
+if __name__ == '__main__':
+    import sys
+    s = Serial(0)
+    sys.stdio.write('%s\n' % s)
+    s = Serial()
+    sys.stdio.write('%s\n' % s)
+    s.baudrate = 19200
+    s.databits = 7
+    s.close()
+    s.port = 0
+    s.open()
+    sys.stdio.write('%s\n' % s)

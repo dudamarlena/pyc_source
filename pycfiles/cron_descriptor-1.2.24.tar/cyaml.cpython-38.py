@@ -1,0 +1,104 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: ./vendor/yaml/cyaml.py
+# Compiled at: 2019-03-12 19:45:05
+# Size of source mod 2**32: 3846 bytes
+__all__ = [
+ 'CBaseLoader', 'CSafeLoader', 'CFullLoader', 'CUnsafeLoader', 'CLoader',
+ 'CBaseDumper', 'CSafeDumper', 'CDumper']
+from _yaml import CParser, CEmitter
+from .constructor import *
+from .serializer import *
+from .representer import *
+from .resolver import *
+
+class CBaseLoader(CParser, BaseConstructor, BaseResolver):
+
+    def __init__(self, stream):
+        CParser.__init__(self, stream)
+        BaseConstructor.__init__(self)
+        BaseResolver.__init__(self)
+
+
+class CSafeLoader(CParser, SafeConstructor, Resolver):
+
+    def __init__(self, stream):
+        CParser.__init__(self, stream)
+        SafeConstructor.__init__(self)
+        Resolver.__init__(self)
+
+
+class CFullLoader(CParser, FullConstructor, Resolver):
+
+    def __init__(self, stream):
+        CParser.__init__(self, stream)
+        FullConstructor.__init__(self)
+        Resolver.__init__(self)
+
+
+class CUnsafeLoader(CParser, UnsafeConstructor, Resolver):
+
+    def __init__(self, stream):
+        CParser.__init__(self, stream)
+        UnsafeConstructor.__init__(self)
+        Resolver.__init__(self)
+
+
+class CLoader(CParser, Constructor, Resolver):
+
+    def __init__(self, stream):
+        CParser.__init__(self, stream)
+        Constructor.__init__(self)
+        Resolver.__init__(self)
+
+
+class CBaseDumper(CEmitter, BaseRepresenter, BaseResolver):
+
+    def __init__(self, stream, default_style=None, default_flow_style=False, canonical=None, indent=None, width=None, allow_unicode=None, line_break=None, encoding=None, explicit_start=None, explicit_end=None, version=None, tags=None, sort_keys=True):
+        CEmitter.__init__(self, stream, canonical=canonical, indent=indent,
+          width=width,
+          encoding=encoding,
+          allow_unicode=allow_unicode,
+          line_break=line_break,
+          explicit_start=explicit_start,
+          explicit_end=explicit_end,
+          version=version,
+          tags=tags)
+        Representer.__init__(self, default_style=default_style, default_flow_style=default_flow_style,
+          sort_keys=sort_keys)
+        Resolver.__init__(self)
+
+
+class CSafeDumper(CEmitter, SafeRepresenter, Resolver):
+
+    def __init__(self, stream, default_style=None, default_flow_style=False, canonical=None, indent=None, width=None, allow_unicode=None, line_break=None, encoding=None, explicit_start=None, explicit_end=None, version=None, tags=None, sort_keys=True):
+        CEmitter.__init__(self, stream, canonical=canonical, indent=indent,
+          width=width,
+          encoding=encoding,
+          allow_unicode=allow_unicode,
+          line_break=line_break,
+          explicit_start=explicit_start,
+          explicit_end=explicit_end,
+          version=version,
+          tags=tags)
+        SafeRepresenter.__init__(self, default_style=default_style, default_flow_style=default_flow_style,
+          sort_keys=sort_keys)
+        Resolver.__init__(self)
+
+
+class CDumper(CEmitter, Serializer, Representer, Resolver):
+
+    def __init__(self, stream, default_style=None, default_flow_style=False, canonical=None, indent=None, width=None, allow_unicode=None, line_break=None, encoding=None, explicit_start=None, explicit_end=None, version=None, tags=None, sort_keys=True):
+        CEmitter.__init__(self, stream, canonical=canonical, indent=indent,
+          width=width,
+          encoding=encoding,
+          allow_unicode=allow_unicode,
+          line_break=line_break,
+          explicit_start=explicit_start,
+          explicit_end=explicit_end,
+          version=version,
+          tags=tags)
+        Representer.__init__(self, default_style=default_style, default_flow_style=default_flow_style,
+          sort_keys=sort_keys)
+        Resolver.__init__(self)

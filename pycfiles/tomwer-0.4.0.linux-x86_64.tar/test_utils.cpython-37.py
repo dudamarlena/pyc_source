@@ -1,0 +1,172 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /users/payno/.local/share/virtualenvs/tomwer_venc/lib/python3.7/site-packages/tomwer/core/test/test_utils.py
+# Compiled at: 2020-03-06 02:01:31
+# Size of source mod 2**32: 9666 bytes
+__authors__ = [
+ 'H. Payno']
+__license__ = 'MIT'
+__date__ = '02/08/2017'
+import unittest, tempfile, os, shutil
+from tomwer.core import utils
+from tomwer.core.utils.scanutils import MockEDF
+from tomwer.test.utils import UtilsTest
+
+class TestGetClosestEnergy(unittest.TestCase):
+
+    def setUp(self):
+        self.topSrcFolder = tempfile.mkdtemp()
+        self.dataSetID = 'scan_3_'
+        self.dataDir = UtilsTest.getDataset(self.dataSetID)
+        self.sourceS3 = os.path.join(self.topSrcFolder, self.dataSetID)
+        shutil.copytree(src=(os.path.join(self.dataDir)), dst=(self.sourceS3))
+        self.sourceT01 = os.path.join(self.topSrcFolder, 'test01')
+        shutil.copytree(src=(UtilsTest.getDataset('test01')), dst=(self.sourceT01))
+        self.S3XMLFile = os.path.join(self.sourceS3, 'scan_3_.xml')
+        self.S3Ref0000 = os.path.join(self.sourceS3, 'ref0000_0000.edf')
+        self.S3Ref0010 = os.path.join(self.sourceS3, 'ref0000_0010.edf')
+
+    def tearDown(self):
+        shutil.rmtree(self.topSrcFolder)
+
+    def testEnergyFromEDF(self):
+        os.remove(self.S3XMLFile)
+        self.assertTrue(utils.getClosestEnergy(scan=(self.sourceS3), refFile=(self.S3Ref0000)) == 61)
+        self.assertTrue(utils.getClosestEnergy(scan=(self.sourceS3), refFile=(self.S3Ref0010)) == 61)
+
+    def testEnergyFromXML(self):
+        os.remove(self.S3Ref0000)
+        os.remove(self.S3Ref0010)
+        self.assertTrue(utils.getClosestEnergy(scan=(self.sourceS3), refFile=(self.S3Ref0000)) == 10)
+        self.assertTrue(utils.getClosestEnergy(scan=(self.sourceS3), refFile=(self.S3Ref0010)) == 10)
+
+    def testEnergyFromInfo(self):
+        self.assertTrue(utils.getClosestEnergy(scan=(self.sourceT01), refFile=None) == 19)
+
+    def testDefaultEnergy(self):
+        os.remove(self.S3XMLFile)
+        os.remove(self.S3Ref0000)
+        os.remove(self.S3Ref0010)
+        self.assertTrue(utils.getClosestEnergy(scan=(self.sourceS3), refFile=(self.S3Ref0000)) is None)
+        self.assertTrue(utils.getClosestEnergy(scan=(self.sourceS3), refFile=(self.S3Ref0010)) is None)
+
+
+class TestGetClosestSREnergy(unittest.TestCase):
+
+    def setUp(self):
+        self.topSrcFolder = tempfile.mkdtemp()
+        self.dataSetID = 'test10'
+        self.dataDir = UtilsTest.getDataset(self.dataSetID)
+        self.sourceT10 = os.path.join(self.topSrcFolder, self.dataSetID)
+        shutil.copytree(src=(os.path.join(self.dataDir)), dst=(self.sourceT10))
+        self.T10XMLFile = os.path.join(self.sourceT10, 'test10.xml')
+        self.T10InfoFile = os.path.join(self.sourceT10, 'test10.info')
+        self.T10Ref0000 = os.path.join(self.sourceT10, 'ref0000_0000.edf')
+
+    def tearDown(self):
+        shutil.rmtree(self.topSrcFolder)
+
+    def testIntenistyFromInfo(self):
+        self.assertTrue(utils.getClosestSRCurrent(scan=(self.sourceT10), refFile=None) == 101.3)
+
+    def testDefaultIntensity(self):
+        os.remove(self.T10XMLFile)
+        os.remove(self.T10InfoFile)
+        self.assertTrue(utils.getClosestSRCurrent(scan=(self.sourceT10)) is None)
+
+
+class TestMockScan(unittest.TestCase):
+    __doc__ = 'Test that mock scan are adapted to other unit test'
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.scan_id = os.path.join(self.tmpdir, 'myscan')
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir)
+
+    def testScanEvolution360(self):
+        """Test get scan evolution from a mock scan with a 360 range and no
+        extra radio"""
+        scan = MockEDF.mockScan(scanID=(self.scan_id), nRadio=5, nRecons=1, nPagRecons=1,
+          dim=10,
+          scan_range=360)
+        scan_dynamic = scan.getProjectionsUrl()
+        self.assertEqual(len(scan_dynamic), 5)
+        self.assertTrue(0 in scan_dynamic)
+        self.assertEqual(scan_dynamic[0].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0000.edf'))
+        self.assertTrue(180 in scan_dynamic)
+        self.assertEqual(scan_dynamic[180].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0002.edf'))
+        self.assertTrue(360 in scan_dynamic)
+        self.assertEqual(scan_dynamic[360].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0004.edf'))
+
+    def testScanEvolution180(self):
+        """Test get scan evolution from a mock scan with a 180 range and no
+        extra radio"""
+        scan = MockEDF.mockScan(scanID=(self.scan_id), nRadio=8, nRecons=0, nPagRecons=0,
+          dim=10,
+          scan_range=180)
+        scan_dynamic = scan.getProjectionsUrl()
+        self.assertEqual(len(scan_dynamic), 8)
+        self.assertTrue(0 in scan_dynamic)
+        self.assertEqual(scan_dynamic[0].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0000.edf'))
+        self.assertTrue(180 in scan_dynamic)
+        self.assertEqual(scan_dynamic[180].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0007.edf'))
+        self.assertFalse(360 in scan_dynamic)
+
+    def testScanEvolution360Extra4(self):
+        """Test get scan evolution from a mock scan with a 360 range and 4
+        extra radio"""
+        scan = MockEDF.mockScan(scanID=(self.scan_id), nRadio=21, nRecons=0, nPagRecons=0,
+          dim=10,
+          scan_range=360,
+          n_extra_radio=4)
+        scan_dynamic = scan.getProjectionsUrl()
+        self.assertEqual(len(scan_dynamic), 25)
+        self.assertTrue(0 in scan_dynamic)
+        self.assertEqual(scan_dynamic[0].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0000.edf'))
+        self.assertTrue(180 in scan_dynamic)
+        self.assertEqual(scan_dynamic[180].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0010.edf'))
+        self.assertTrue(360 in scan_dynamic)
+        self.assertEqual(scan_dynamic[360].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0020.edf'))
+        extra_angles = (0, 90, 180, 270)
+        for iAngle, angle in enumerate(extra_angles):
+            angle_id = str(angle) + '(1)'
+            self.assertTrue(angle_id in scan_dynamic)
+            file_name = os.path.join(self.tmpdir, 'myscan', 'myscan_%04d.edf' % (24 - iAngle))
+            self.assertEqual(scan_dynamic[angle_id].file_path(), file_name)
+
+    def testScanEvolution180Extra2(self):
+        """Test get scan evolution from a mock scan with a 360 range and 3
+        extra radios"""
+        scan = MockEDF.mockScan(scanID=(self.scan_id), nRadio=4, nRecons=2, nPagRecons=2,
+          dim=10,
+          scan_range=180,
+          n_extra_radio=2)
+        scan_dynamic = scan.getProjectionsUrl()
+        self.assertEqual(len(scan_dynamic), 6)
+        self.assertTrue(0 in scan_dynamic)
+        self.assertEqual(scan_dynamic[0].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0000.edf'))
+        self.assertTrue(180 in scan_dynamic)
+        self.assertEqual(scan_dynamic[180].file_path(), os.path.join(self.tmpdir, 'myscan', 'myscan_0003.edf'))
+        self.assertTrue(360 not in scan_dynamic)
+        extra_angles = (0, 90)
+        for iAngle, angle in enumerate(extra_angles):
+            angle_id = str(angle) + '(1)'
+            self.assertTrue(angle_id in scan_dynamic)
+            file_name = os.path.join(self.tmpdir, 'myscan', 'myscan_%04d.edf' % (5 - iAngle))
+            self.assertEqual(scan_dynamic[angle_id].file_path(), file_name)
+
+
+def suite():
+    test_suite = unittest.TestSuite()
+    for ui in (TestGetClosestEnergy, TestGetClosestSREnergy, TestMockScan):
+        test_suite.addTest(unittest.defaultTestLoader.loadTestsFromTestCase(ui))
+
+    return test_suite
+
+
+if __name__ == '__main__':
+    unittest.main(defaultTest='suite')

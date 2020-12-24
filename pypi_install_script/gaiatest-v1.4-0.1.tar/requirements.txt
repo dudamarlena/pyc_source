@@ -1,0 +1,5 @@
+marionette_client-mozilla-b2g30_v1_4
+mozdevice>=0.31
+requests
+moztest>=0.3
+yoctopuce==1.01.12553

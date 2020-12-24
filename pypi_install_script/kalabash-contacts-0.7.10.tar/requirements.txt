@@ -1,0 +1,5 @@
+kalabash>=1.10.0
+django-filter==1.1.0
+django-webpack-loader
+vobject
+https://github.com/amonak/caldav/tarball/master#egg=caldav

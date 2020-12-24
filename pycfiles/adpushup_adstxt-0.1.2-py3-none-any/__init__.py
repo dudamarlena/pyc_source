@@ -1,0 +1,8 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/romanb/projekty/adpushup-adstxt/adpushup_adstxt/__init__.py
+# Compiled at: 2018-07-11 06:48:47
+VERSION = '0.1'
+__doc__ = '\nThis library provides adpushup API for handling ads.txt management.\n\nDjango:\n\n1. add it to installed apps::\n\n    INSTALLED_APPS = (\n        ...,\n        \'adpushup_adstxt\',\n        ...,\n        )\n    \n2. add your user_id and key to YOUR settings.py::\n\n    ADPUSHUP_API_USER_ID = \'test@example.com\'\n    ADPUSHUP_API_KEY = \'1234\'\n\n3. OPTIONALLY add different WWW_DIR::\n\n    ADPUSHUP_WWW_DIR = \'/some/dir/to/put/ads.txt/in/it/\'\n    \n   by default it is Djangos ROOT_DIR + \'/www\'\n   \n4. ADD it to your urlconf::\n\n    from adpushup_adstxt.django_views import handle\n\n    \n    urlpatterns += patterns(\n        \'\',\n        url(r\'^adsTxtManagementApiByAdpushup.php\', handle)),\n\nTesting:\n\nfrom adpushup_adstxt.utils import encode_uri_component\nimport time\nimport hmac\nimport hashlib\nimport requests\n\nuser_id = \'your user id\'\nkey = your key\n\nreq_time = int(time.time())\nhash_params = "email={}&ts={}".format(\n    encode_uri_component(user_id.encode("UTF-8")), req_time)\nhash = hmac.new(key, hash_params, hashlib.sha256).hexdigest()\n\nres = requests.post(\n    \'http://localhost:8000/adsTxtManagementApiByAdpushup.php\',\n    dict(\n        data=\'test content\',\n        ts=req_time,\n        hash=hash))\n\nprint res.status_code\nprint res.content\n\n'

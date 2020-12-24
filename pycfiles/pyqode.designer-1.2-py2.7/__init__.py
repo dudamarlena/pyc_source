@@ -1,0 +1,11 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/pyqode/__init__.py
+# Compiled at: 2014-05-20 12:22:50
+"""
+pyQode is a code editor widget library for python qt applications.
+"""
+import pkg_resources
+pkg_resources.declare_namespace(__name__)

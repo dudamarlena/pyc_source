@@ -1,0 +1,42 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.10-x86_64/egg/dhcpkit/tests/ipv6/extensions/test_sntp.py
+# Compiled at: 2017-06-23 17:22:45
+# Size of source mod 2**32: 1730 bytes
+"""
+Test the SNTP options implementations
+"""
+import unittest
+from ipaddress import IPv6Address
+from dhcpkit.ipv6.extensions.sntp import SNTPServersOption
+from dhcpkit.tests.ipv6.options import test_option
+
+class SNTPServersOptionTestCase(test_option.OptionTestCase):
+
+    def setUp(self):
+        self.option_bytes = bytes.fromhex('001f002020010db800000000000000000000000120010db8000000000000000000000002')
+        self.option_object = SNTPServersOption(sntp_servers=[IPv6Address('2001:db8::1'),
+         IPv6Address('2001:db8::2')])
+        self.parse_option()
+
+    def test_validate_sntp_servers(self):
+        self.option.sntp_servers = IPv6Address('2001:db8::1')
+        with self.assertRaisesRegex(ValueError, 'must be a list'):
+            self.option.validate()
+        self.option.sntp_servers = ['2001:db8::1', '2001:db8::2']
+        with self.assertRaisesRegex(ValueError, 'IPv6 address'):
+            self.option.validate()
+
+    def test_bad_option_length(self):
+        with self.assertRaisesRegex(ValueError, 'length must be a multiple of 16'):
+            SNTPServersOption.parse(bytes.fromhex('001f000f20010db8000000000000000000000001'))
+        with self.assertRaisesRegex(ValueError, 'longer than the available buffer'):
+            SNTPServersOption.parse(bytes.fromhex('001f001120010db8000000000000000000000001'))
+        with self.assertRaisesRegex(ValueError, 'length must be a multiple of 16'):
+            SNTPServersOption.parse(bytes.fromhex('001f001120010db800000000000000000000000100'))
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,0 +1,70 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.3 (3230)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/maxk/Projects/OpenSource/arango-python/arango/db.py
+# Compiled at: 2013-11-10 14:30:06
+# Size of source mod 2**32: 2312 bytes
+import logging
+from .exceptions import DatabaseAlreadyExist, DatabaseSystemError
+from .utils import json
+__all__ = ('Cursor', )
+logger = logging.getLogger(__name__)
+
+class Database(object):
+    __doc__ = '\n    ArangoDB starting from version 1.4 work with multiple databases.\n    This is abstraction to manage multiple databases and work\n    within documents.\n    '
+    DATABASE_PATH = '/_api/database/{0}'
+    NO_DATABASE_PATH = '/_api/database'
+    ENDPOINT_PATH = '/_db/{0}'
+
+    def __init__(self, connection, name):
+        self.connection = connection
+        self.name = name
+
+    def url(self, path):
+        return '{0}{1}'.format(self.connection.url(db_prefix=False), path)
+
+    def create(self, ignore_exist=True):
+        """
+        Create new database and return instance
+        """
+        response = self.connection.client.post(self.url(self.NO_DATABASE_PATH), data=json.dumps({'name': self.name}))
+        if response.status_code == 200:
+            return self
+        if response.status_code in (400, 403, 409) and ignore_exist is False:
+            raise DatabaseAlreadyExist(self.name)
+        else:
+            return self
+        raise DatabaseSystemError(response)
+
+    @property
+    def info(self):
+        """
+        Get info about database
+        """
+        response = self.connection.get(self.DATABASE_PATH.format('current'))
+        return response.data.get('result', {})
+
+    def delete(self, ignore_exist=True):
+        """
+        Delete database
+        """
+        response = self.connection.client.delete(self.url(self.DATABASE_PATH.format(self.name)))
+        if response.status_code == 200:
+            return True
+        if ignore_exist is False:
+            raise DatabaseSystemError(response)
+        return True
+
+    @property
+    def prefix(self):
+        """
+        Property to return endpoint for this particular database
+        """
+        if self.name is None:
+            return ''
+        else:
+            return self.ENDPOINT_PATH.format(self.name)
+
+    def __repr__(self):
+        return '<ArangoDB Database: {0}>'.format(self.name)

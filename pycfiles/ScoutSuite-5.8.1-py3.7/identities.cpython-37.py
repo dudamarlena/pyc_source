@@ -1,0 +1,38 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/ScoutSuite/providers/aws/resources/ses/identities.py
+# Compiled at: 2020-04-02 05:37:10
+# Size of source mod 2**32: 1352 bytes
+from ScoutSuite.providers.aws.facade.base import AWSFacade
+from ScoutSuite.providers.aws.resources.base import AWSCompositeResources
+from ScoutSuite.providers.utils import get_non_provider_id
+from .identity_policies import IdentityPolicies
+
+class Identities(AWSCompositeResources):
+    _children = [
+     (
+      IdentityPolicies, 'policies')]
+
+    def __init__(self, facade, region):
+        super(Identities, self).__init__(facade)
+        self.region = region
+
+    async def fetch_all(self):
+        raw_identities = await self.facade.ses.get_identities(self.region)
+        for raw_identity in raw_identities:
+            id, identity = self._parse_identity(raw_identity)
+            self[id] = identity
+
+        await self._fetch_children_of_all_resources(resources=self,
+          scopes={identity_id:{'region':self.region,  'identity_name':identity['name']} for identity_id, identity in self.items()})
+
+    def _parse_identity(self, raw_identity):
+        identity_name, dkim_attributes = raw_identity
+        identity = {}
+        identity['name'] = identity_name
+        identity['DkimEnabled'] = dkim_attributes['DkimEnabled']
+        identity['DkimVerificationStatus'] = dkim_attributes['DkimVerificationStatus']
+        return (
+         get_non_provider_id(identity_name), identity)

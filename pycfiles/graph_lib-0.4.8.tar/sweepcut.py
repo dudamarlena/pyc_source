@@ -1,0 +1,87 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/mengliu/Dropbox/Research/graph_lib/graph_lib/wrappers/python/sweepcut.py
+# Compiled at: 2017-09-07 23:40:36
+from operator import itemgetter
+import numpy as np
+from numpy.ctypeslib import ndpointer
+import ctypes
+from sys import platform
+from os import path
+libloc = path.join(path.abspath(path.dirname(__file__)), '../../lib/graph_lib_test/libgraph')
+
+def wrapped_ndptr(*args, **kwargs):
+    base = ndpointer(*args, **kwargs)
+
+    def from_param(cls, obj):
+        if obj is None:
+            return obj
+        else:
+            return base.from_param(obj)
+
+    return type(base.__name__, (base,), {'from_param': classmethod(from_param)})
+
+
+def sweepcut(n, ai, aj, a, ids, num, values, flag, degrees=None):
+    float_type = ctypes.c_double
+    dt = np.dtype(ai[0])
+    itype, ctypes_itype = (np.int64, ctypes.c_int64) if dt.name == 'int64' else (np.uint32, ctypes.c_uint32)
+    dt = np.dtype(aj[0])
+    vtype, ctypes_vtype = (np.int64, ctypes.c_int64) if dt.name == 'int64' else (np.uint32, ctypes.c_uint32)
+    if platform == 'linux2':
+        extension = '.so'
+    elif platform == 'darwin':
+        extension = '.dylib'
+    elif platform == 'win32':
+        extension = '.dll'
+    else:
+        print 'Unknown system type!'
+        return (True, 0, 0)
+    lib = ctypes.cdll.LoadLibrary(libloc + extension)
+    if (
+     vtype, itype) == (np.int64, np.int64):
+        fun = lib.sweepcut_with_sorting64 if flag == 0 else lib.sweepcut_without_sorting64
+    elif (
+     vtype, itype) == (np.uint32, np.int64):
+        fun = lib.sweepcut_with_sorting32_64 if flag == 0 else lib.sweepcut_without_sorting32_64
+    else:
+        fun = lib.sweepcut_with_sorting32 if flag == 0 else lib.sweepcut_without_sorting32
+    ids = np.array(ids, dtype=vtype)
+    values = np.array(values, dtype=float_type)
+    results = np.zeros(num, dtype=vtype)
+    fun.restype = ctypes_vtype
+    min_cond = np.array([0.0], dtype=float_type)
+    if degrees is not None:
+        degrees = np.array(degrees, dtype=float_type)
+    if flag == 0:
+        fun.argtypes = [
+         ndpointer(float_type, flags='C_CONTIGUOUS'),
+         ndpointer(ctypes_vtype, flags='C_CONTIGUOUS'),
+         ndpointer(ctypes_vtype, flags='C_CONTIGUOUS'),
+         ctypes_vtype, ctypes_vtype,
+         ndpointer(ctypes_itype, flags='C_CONTIGUOUS'),
+         ndpointer(ctypes_vtype, flags='C_CONTIGUOUS'),
+         ndpointer(float_type, flags='C_CONTIGUOUS'),
+         ctypes_vtype,
+         ndpointer(float_type, flags='C_CONTIGUOUS'),
+         wrapped_ndptr(dtype=float_type, ndim=1, flags='C_CONTIGUOUS')]
+        actual_length = fun(values, ids, results, num, n, ai, aj, a, 0, min_cond, degrees)
+    else:
+        fun.argtypes = [
+         ndpointer(ctypes_vtype, flags='C_CONTIGUOUS'),
+         ndpointer(ctypes_vtype, flags='C_CONTIGUOUS'),
+         ctypes_vtype, ctypes_vtype,
+         ndpointer(ctypes_itype, flags='C_CONTIGUOUS'),
+         ndpointer(ctypes_vtype, flags='C_CONTIGUOUS'),
+         ndpointer(float_type, flags='C_CONTIGUOUS'),
+         ctypes_vtype,
+         ndpointer(float_type, flags='C_CONTIGUOUS'),
+         wrapped_ndptr(dtype=float_type, ndim=1, flags='C_CONTIGUOUS')]
+        actual_length = fun(ids, results, num, n, ai, aj, a, 0, min_cond, degrees)
+    actual_results = np.empty(actual_length, dtype=vtype)
+    actual_results[:] = [ results[i] for i in range(actual_length) ]
+    min_cond = min_cond[0]
+    return (
+     actual_length, actual_results, min_cond)

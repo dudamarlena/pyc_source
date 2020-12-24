@@ -1,0 +1,190 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/adam/Projects/crowdcomms/gb-openapi-codec/gb_openapi_codec/python-openapi-codec/openapi_codec/encode.py
+# Compiled at: 2017-08-11 00:57:49
+# Size of source mod 2**32: 6683 bytes
+import pprint, coreschema
+from collections import OrderedDict
+from coreapi.compat import urlparse
+from .utils import get_method, get_encoding, get_location, get_links_from_document
+
+def generate_swagger_object(document):
+    """
+    Generates root of the Swagger spec.
+    """
+    parsed_url = urlparse.urlparse(document.url)
+    swagger = OrderedDict()
+    swagger['swagger'] = '2.0'
+    swagger['info'] = OrderedDict()
+    swagger['info']['title'] = document.title
+    swagger['info']['description'] = document.description
+    swagger['info']['version'] = ''
+    if parsed_url.netloc:
+        swagger['host'] = parsed_url.netloc
+    if parsed_url.scheme:
+        swagger['schemes'] = [
+         parsed_url.scheme]
+    swagger['paths'] = _get_paths_object(document)
+    return swagger
+
+
+def _add_tag_prefix(item):
+    operation_id, link, tags = item
+    if tags:
+        operation_id = tags[0] + '_' + operation_id
+    return (
+     operation_id, link, tags)
+
+
+def _get_links(document):
+    """
+    Return a list of (operation_id, link, [tags])
+    """
+    links = []
+    for keys, link, tags in get_links_from_document(document):
+        tags = list(set(tags))
+        if len(keys) > 1:
+            operation_id = '_'.join(keys[1:])
+            tags.append(keys[0])
+        else:
+            operation_id = keys[0]
+        links.append((operation_id, link, tags))
+
+    operation_ids = [item[0] for item in links]
+    unique = len(set(operation_ids)) == len(links)
+    if not unique:
+        return [_add_tag_prefix(item) for item in links]
+    else:
+        return links
+
+
+def _get_paths_object(document):
+    paths = OrderedDict()
+    links = _get_links(document)
+    for operation_id, link, tags in links:
+        if link.url not in paths:
+            paths[link.url] = OrderedDict()
+        method = get_method(link)
+        operation = _get_operation(operation_id, link, tags)
+        paths[link.url].update({method: operation})
+
+    return paths
+
+
+def _get_operation(operation_id, link, tags):
+    encoding = get_encoding(link)
+    description = link.description.strip()
+    summary = description.splitlines()[0] if description else None
+    operation = {'operationId':operation_id, 
+     'responses':_get_responses(link), 
+     'parameters':_get_parameters(link, encoding)}
+    if description:
+        operation['description'] = description
+    if summary:
+        operation['summary'] = summary
+    if encoding:
+        operation['consumes'] = [
+         encoding]
+    pprint.pprint(tags)
+    if tags:
+        operation['tags'] = tags
+    return operation
+
+
+def _get_field_description(field):
+    if getattr(field, 'description', None) is not None:
+        return field.description
+    else:
+        if field.schema is None:
+            return ''
+        return field.schema.description
+
+
+def _get_field_type(field):
+    if getattr(field, 'type', None) is not None:
+        return field.type
+    else:
+        if field.schema is None:
+            return 'string'
+        return {coreschema.String: 'string', 
+         coreschema.Integer: 'integer', 
+         coreschema.Number: 'number', 
+         coreschema.Boolean: 'boolean', 
+         coreschema.Array: 'array', 
+         coreschema.Object: 'object'}.get(field.schema.__class__, 'string')
+
+
+def _get_parameters(link, encoding):
+    """
+    Generates Swagger Parameter Item object.
+    """
+    parameters = []
+    properties = {}
+    required = []
+    for field in link.fields:
+        location = get_location(link, field)
+        field_description = _get_field_description(field)
+        field_type = _get_field_type(field)
+        if location == 'form':
+            if encoding in ('multipart/form-data', 'application/x-www-form-urlencoded'):
+                parameter = {'name':field.name, 
+                 'required':field.required, 
+                 'in':'formData', 
+                 'description':field_description, 
+                 'type':field_type}
+                if field_type == 'array':
+                    parameter['items'] = {'type': 'string'}
+                parameters.append(parameter)
+            else:
+                schema_property = {'description':field_description, 
+                 'type':field_type}
+                if field_type == 'array':
+                    schema_property['items'] = {'type': 'string'}
+                properties[field.name] = schema_property
+                if field.required:
+                    required.append(field.name)
+        elif location == 'body':
+            if encoding == 'application/octet-stream':
+                schema = {'type':'string',  'format':'binary'}
+            else:
+                schema = {}
+            parameter = {'name':field.name, 
+             'required':field.required, 
+             'in':location, 
+             'description':field_description, 
+             'schema':schema}
+            parameters.append(parameter)
+        else:
+            parameter = {'name':field.name, 
+             'required':field.required, 
+             'in':location, 
+             'description':field_description, 
+             'type':field_type or 'string'}
+            if field_type == 'array':
+                parameter['items'] = {'type': 'string'}
+            parameters.append(parameter)
+
+    if properties:
+        parameter = {'name':'data',  'in':'body', 
+         'schema':{'type':'object', 
+          'properties':properties}}
+        if required:
+            parameter['schema']['required'] = required
+        parameters.append(parameter)
+    return parameters
+
+
+def _get_responses(link):
+    """
+    Returns minimally acceptable responses object based
+    on action / method type.
+    """
+    template = {'description': ''}
+    if link.action.lower() == 'post':
+        return {'201': template}
+    else:
+        if link.action.lower() == 'delete':
+            return {'204': template}
+        return {'200': template}

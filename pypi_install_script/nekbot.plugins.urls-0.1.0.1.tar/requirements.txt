@@ -1,0 +1,4 @@
+nekbot
+pafy
+newspaper
+requests

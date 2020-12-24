@@ -1,0 +1,6 @@
+boto3
+cement==2.10.12
+colorlog
+docker
+plotly
+PrettyTable

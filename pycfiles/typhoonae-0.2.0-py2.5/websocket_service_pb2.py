@@ -1,0 +1,73 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.5 (62131)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.6-i386/egg/typhoonae/websocket/websocket_service_pb2.py
+# Compiled at: 2010-12-12 04:36:57
+from google.protobuf import descriptor
+from google.protobuf import message
+from google.protobuf import reflection
+from google.protobuf import service
+from google.protobuf import service_reflection
+from google.protobuf import descriptor_pb2
+_WEBSOCKETSERVICEERROR_ERRORCODE = descriptor.EnumDescriptor(name='ErrorCode', full_name='org.typhoonae.websocket.WebSocketServiceError.ErrorCode', filename='ErrorCode', values=[
+ descriptor.EnumValueDescriptor(name='UNSPECIFIED_ERROR', index=0, number=1, options=None, type=None)], options=None)
+_WEBSOCKETMESSAGERESPONSE_STATUSCODE = descriptor.EnumDescriptor(name='StatusCode', full_name='org.typhoonae.websocket.WebSocketMessageResponse.StatusCode', filename='StatusCode', values=[
+ descriptor.EnumValueDescriptor(name='NO_ERROR', index=0, number=0, options=None, type=None),
+ descriptor.EnumValueDescriptor(name='OTHER_ERROR', index=1, number=1, options=None, type=None)], options=None)
+_WEBSOCKETSERVICEERROR = descriptor.Descriptor(name='WebSocketServiceError', full_name='org.typhoonae.websocket.WebSocketServiceError', filename='websocket_service.proto', containing_type=None, fields=[
+ descriptor.FieldDescriptor(name='message', full_name='org.typhoonae.websocket.WebSocketServiceError.message', index=0, number=1, type=9, cpp_type=9, label=1, default_value=unicode('', 'utf-8'), message_type=None, enum_type=None, containing_type=None, is_extension=False, extension_scope=None, options=None)], extensions=[], nested_types=[], enum_types=[
+ _WEBSOCKETSERVICEERROR_ERRORCODE], options=None)
+_CREATEWEBSOCKETURLREQUEST = descriptor.Descriptor(name='CreateWebSocketURLRequest', full_name='org.typhoonae.websocket.CreateWebSocketURLRequest', filename='websocket_service.proto', containing_type=None, fields=[
+ descriptor.FieldDescriptor(name='success_path', full_name='org.typhoonae.websocket.CreateWebSocketURLRequest.success_path', index=0, number=1, type=9, cpp_type=9, label=1, default_value=unicode('', 'utf-8'), message_type=None, enum_type=None, containing_type=None, is_extension=False, extension_scope=None, options=None)], extensions=[], nested_types=[], enum_types=[], options=None)
+_CREATEWEBSOCKETURLRESPONSE = descriptor.Descriptor(name='CreateWebSocketURLResponse', full_name='org.typhoonae.websocket.CreateWebSocketURLResponse', filename='websocket_service.proto', containing_type=None, fields=[
+ descriptor.FieldDescriptor(name='url', full_name='org.typhoonae.websocket.CreateWebSocketURLResponse.url', index=0, number=1, type=9, cpp_type=9, label=2, default_value=unicode('', 'utf-8'), message_type=None, enum_type=None, containing_type=None, is_extension=False, extension_scope=None, options=None)], extensions=[], nested_types=[], enum_types=[], options=None)
+_MESSAGE = descriptor.Descriptor(name='Message', full_name='org.typhoonae.websocket.Message', filename='websocket_service.proto', containing_type=None, fields=[
+ descriptor.FieldDescriptor(name='body', full_name='org.typhoonae.websocket.Message.body', index=0, number=1, type=9, cpp_type=9, label=1, default_value=unicode('', 'utf-8'), message_type=None, enum_type=None, containing_type=None, is_extension=False, extension_scope=None, options=None),
+ descriptor.FieldDescriptor(name='socket', full_name='org.typhoonae.websocket.Message.socket', index=1, number=2, type=9, cpp_type=9, label=1, default_value=unicode('', 'utf-8'), message_type=None, enum_type=None, containing_type=None, is_extension=False, extension_scope=None, options=None)], extensions=[], nested_types=[], enum_types=[], options=None)
+_WEBSOCKETMESSAGEREQUEST = descriptor.Descriptor(name='WebSocketMessageRequest', full_name='org.typhoonae.websocket.WebSocketMessageRequest', filename='websocket_service.proto', containing_type=None, fields=[
+ descriptor.FieldDescriptor(name='message', full_name='org.typhoonae.websocket.WebSocketMessageRequest.message', index=0, number=1, type=11, cpp_type=10, label=2, default_value=None, message_type=None, enum_type=None, containing_type=None, is_extension=False, extension_scope=None, options=None)], extensions=[], nested_types=[], enum_types=[], options=None)
+_WEBSOCKETMESSAGERESPONSE_STATUS = descriptor.Descriptor(name='Status', full_name='org.typhoonae.websocket.WebSocketMessageResponse.Status', filename='websocket_service.proto', containing_type=None, fields=[
+ descriptor.FieldDescriptor(name='code', full_name='org.typhoonae.websocket.WebSocketMessageResponse.Status.code', index=0, number=1, type=14, cpp_type=8, label=2, default_value=0, message_type=None, enum_type=None, containing_type=None, is_extension=False, extension_scope=None, options=None)], extensions=[], nested_types=[], enum_types=[], options=None)
+_WEBSOCKETMESSAGERESPONSE = descriptor.Descriptor(name='WebSocketMessageResponse', full_name='org.typhoonae.websocket.WebSocketMessageResponse', filename='websocket_service.proto', containing_type=None, fields=[
+ descriptor.FieldDescriptor(name='status', full_name='org.typhoonae.websocket.WebSocketMessageResponse.status', index=0, number=1, type=11, cpp_type=10, label=2, default_value=None, message_type=None, enum_type=None, containing_type=None, is_extension=False, extension_scope=None, options=None),
+ descriptor.FieldDescriptor(name='message', full_name='org.typhoonae.websocket.WebSocketMessageResponse.message', index=1, number=2, type=11, cpp_type=10, label=2, default_value=None, message_type=None, enum_type=None, containing_type=None, is_extension=False, extension_scope=None, options=None)], extensions=[], nested_types=[], enum_types=[
+ _WEBSOCKETMESSAGERESPONSE_STATUSCODE], options=None)
+_WEBSOCKETMESSAGEREQUEST.fields_by_name['message'].message_type = _MESSAGE
+_WEBSOCKETMESSAGERESPONSE_STATUS.fields_by_name['code'].enum_type = _WEBSOCKETMESSAGERESPONSE_STATUSCODE
+_WEBSOCKETMESSAGERESPONSE.fields_by_name['status'].message_type = _WEBSOCKETMESSAGERESPONSE_STATUS
+_WEBSOCKETMESSAGERESPONSE.fields_by_name['message'].message_type = _MESSAGE
+
+class WebSocketServiceError(message.Message):
+    __metaclass__ = reflection.GeneratedProtocolMessageType
+    DESCRIPTOR = _WEBSOCKETSERVICEERROR
+
+
+class CreateWebSocketURLRequest(message.Message):
+    __metaclass__ = reflection.GeneratedProtocolMessageType
+    DESCRIPTOR = _CREATEWEBSOCKETURLREQUEST
+
+
+class CreateWebSocketURLResponse(message.Message):
+    __metaclass__ = reflection.GeneratedProtocolMessageType
+    DESCRIPTOR = _CREATEWEBSOCKETURLRESPONSE
+
+
+class Message(message.Message):
+    __metaclass__ = reflection.GeneratedProtocolMessageType
+    DESCRIPTOR = _MESSAGE
+
+
+class WebSocketMessageRequest(message.Message):
+    __metaclass__ = reflection.GeneratedProtocolMessageType
+    DESCRIPTOR = _WEBSOCKETMESSAGEREQUEST
+
+
+class WebSocketMessageResponse(message.Message):
+    __metaclass__ = reflection.GeneratedProtocolMessageType
+
+    class Status(message.Message):
+        __metaclass__ = reflection.GeneratedProtocolMessageType
+        DESCRIPTOR = _WEBSOCKETMESSAGERESPONSE_STATUS
+
+    DESCRIPTOR = _WEBSOCKETMESSAGERESPONSE

@@ -1,0 +1,312 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.2 (3180)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /usr/lib/python3.2/site-packages/PyRomfsImage/PyRomfsImage.py
+# Compiled at: 2012-06-15 10:50:18
+__doc__ = '\nThis module is released with the LGPL license.\nCopyright 2011 Matteo Mattei <matteo.mattei@gmail.com>; Nicola Ponzeveroni <nicola.ponzeveroni@gilbarco.com>\n\nIt is intended to be used to access ROMFS filesystem data.\nBased on linux/romfs_fs.h\n'
+__all__ = [
+ 'RomfsNode', 'Romfs']
+import sys
+
+def __mkw(h, l):
+    return (ord(h) & 255) << 8 | ord(l) & 255
+
+
+def __mkl(h, l):
+    return (h & 65535) << 16 | l & 65535
+
+
+def __mk4(a, b, c, d):
+    return __mkl(__mkw(a, b), __mkw(c, d))
+
+
+ROMSB_WORD0 = __mk4('-', 'r', 'o', 'm')
+ROMSB_WORD1 = __mk4('1', 'f', 's', '-')
+ROMFH_SIZE = 16
+ROMFH_PAD = ROMFH_SIZE - 1
+ROMFH_MASK = ~ROMFH_PAD
+ROMFH_TYPE = 7
+ROMFH_HRD = 0
+ROMFH_DIR = 1
+ROMFH_REG = 2
+ROMFH_SYM = 3
+ROMFH_BLK = 4
+ROMFH_CHR = 5
+ROMFH_SCK = 6
+ROMFH_FIF = 7
+ROMFH_EXEC = 8
+if sys.version_info[0] < 3:
+    hexZero = '\x00'
+    slash = '/'
+    void = ''
+    currentDir = '.'
+    parentDir = '..'
+    pyVersionTwo = True
+else:
+    hexZero = '\x00'
+    slash = '/'
+    void = ''
+    currentDir = '.'
+    parentDir = '..'
+    pyVersionTwo = False
+
+class _Romfs_base:
+    """ ROMFS BASE CLASS """
+
+    def makeInteger(self, buf, start, lenght):
+        """ Assemble multibyte integer """
+        ret = 0
+        for i in range(start, start + lenght):
+            if pyVersionTwo:
+                ret = ret * 256 + ord(buf[i])
+            else:
+                ret = ret * 256 + int(buf[i])
+
+        return ret
+
+
+class _Romfs_inode(_Romfs_base):
+    """ ROMFS INODE CLASS: contains single inode data. """
+
+    def __init__(self, buf):
+        """ _Romfs_inode constructor: accept file content buffer """
+        self.next = self.makeInteger(buf, 0, 4)
+        self.spec = self.makeInteger(buf, 4, 4)
+        self.size = self.makeInteger(buf, 8, 4)
+        self.checksum = self.makeInteger(buf, 12, 4)
+        self.name = buf[16:buf.find(hexZero, 16)]
+
+    def inode_dump(self, sys_stdout_like_object):
+        """ print informations about romfs inode. Only for debug. """
+        name = self.name
+        sys_stdout_like_object.write('INODE: next=%08d spec=%08d size=%08d checksum=%08d name=%s\n' % (self.next, self.spec, self.size, self.checksum, name))
+
+
+class Romfs_super_block(_Romfs_base):
+    """ ROMFS SUPERBLOCK CLASS: contains the romfs image header data. """
+
+    def __init__(self, buf):
+        """ Romfs_super_block constructor: accept file content buffer. """
+        self.word0 = self.makeInteger(buf, 0, 4)
+        self.word1 = self.makeInteger(buf, 4, 4)
+        self.size = self.makeInteger(buf, 8, 4)
+        self.checksum = self.makeInteger(buf, 12, 4)
+        self.name = buf[16:buf.find(hexZero, 16)]
+        self.start = ROMFH_SIZE + len(self.name) + 1 + ROMFH_PAD & ROMFH_MASK
+        self.stop = self.size
+
+    def check(self):
+        """ Return True if the file is a ROMFS. False otherwise. """
+        if self.word0 == ROMSB_WORD0 and self.word1 == ROMSB_WORD1:
+            return True
+        return False
+
+    def end(self):
+        """ Return start + size of the whole romfs image. """
+        return self.start + self.size
+
+
+class RomfsNode:
+    """ ROMFSNODE CLASS: give access to single inode. """
+
+    def __init__(self):
+        """ RomfsNode constructor: no parameters supplied. """
+        self.parent = None
+        self.name = void
+        self.start = 0
+        self.length = 0
+        self.next = 0
+        self.children = []
+        self.romfs = None
+        return
+
+    def __body(self):
+        """ Return the starting point of the file content. """
+        return self.start + (ROMFH_SIZE + len(self.name) + 1 + ROMFH_PAD) & ROMFH_MASK
+
+    def dump(self, sys_stdout_like_object, level=0):
+        """ Print all files and directories on stdout. Only for debug. """
+        for i in range(0, level):
+            sys_stdout_like_object.stdout.write('    ')
+
+        sys_stdout_like_object.write(self.name + '\n')
+        for c in self.children:
+            c.dump(sys_stdout_like_object, level + 1)
+
+    def isFolder(self):
+        """ Check if the current node is a Folder or not. """
+        return self.next & ROMFH_TYPE == ROMFH_DIR
+
+    def hasAttribute(self, attr):
+        """ Check if the inode has the specified attribute flags set.
+                Use the ROMFH_* constants. """
+        attr = attr & ROMFH_TYPE
+        return self.next & attr == attr
+
+    def findAll(self, path=void):
+        """ Return a list of inode paths contained in the current inode. """
+        if not self.name == void:
+            path += slash + self.name
+        if self.isFolder():
+            ret = []
+            for c in self.children:
+                ret = ret + c.findAll(path)
+
+            return ret
+        else:
+            return [
+             path]
+
+    def hasChildren(self):
+        """ Check if an inode has some children. """
+        return len(self.children) != 0
+
+    def getContent(self):
+        """ Return a buffer (string) containing the current inode data. """
+        self.romfs.romfs.seek(self._RomfsNode__body())
+        return self.romfs.romfs.read(self.length)
+
+    def select(self, path):
+        """ Returns the inodes in the path specified.
+                The path must contain the current inode name. """
+        levels = path.split(slash)
+        return self._RomfsNode__selectl(levels, 0)
+
+    def __selectl(self, levels, index):
+        """ Recursive implementation of select. Internal use. """
+        if len(levels) == index + 1 and self.name == levels[index]:
+            return self
+        else:
+            for c in self.children:
+                if c.name == levels[(index + 1)]:
+                    return c._RomfsNode__selectl(levels, index + 1)
+
+            return
+
+    def getPath(self):
+        """ Returns this inode path. """
+        buf = self.name
+        p = self.parent
+        while p != None:
+            if not p.name == void:
+                buf = p.name + slash + buf
+            else:
+                buf = slash + buf
+            p = p.parent
+
+        return buf
+
+    def dirlist(self, path):
+        """ Return the list of the inodes directly contained in the inode identified by path. 
+                Return None if the path does not exists. """
+        node = self.select(path)
+        if node == None:
+            return
+        else:
+            return node.children
+
+    def read(self, path):
+        """ Return the content of the inodes directly contained in the inode identified by path. 
+                Return None if the path does not exists. """
+        node = self.select(path)
+        if node == None:
+            return
+        else:
+            return node.getContent()
+
+    def close(self):
+        self.romfs.close()
+
+    def getLength(self):
+        return self.length
+
+    def getName(self):
+        return self.name
+
+
+class Romfs:
+    """ ROMFS class: give access to the whole Romfs image. """
+
+    def __init__(self, filehandle=None):
+        """ Romfs class constructor: open file hanlde (optional). """
+        self.romfs = filehandle
+
+    def open(self, path):
+        """ Open a romfs file: accepts path of the Romfs. """
+        if self.romfs == None:
+            self.romfs = open(path, 'rb')
+        return
+
+    def close(self):
+        """ Close a romfs file: no parameter supply. """
+        if self.romfs != None:
+            self.romfs.close()
+            self.romfs = None
+        return
+
+    def getRoot(self):
+        """ Returns the root node of ROMfs filesystem 
+                that contains recursively all other nodes. 
+                Actual file parsing happens during this call. """
+        buf = self.romfs.read(1024)
+        b = Romfs_super_block(buf)
+        if not b.check():
+            self.close()
+            raise IOError('The file supplied is not a romfs image')
+        n = RomfsNode()
+        n.romfs = self
+        n.name = void
+        n.next = ROMFH_DIR
+        n.start = 0
+        n.length = b.size
+        n.children = self._Romfs__listnames(b.start, b.end())
+        for ch in n.children:
+            ch.parent = n
+
+        return n
+
+    def __listnames(self, start, stop):
+        """ Recursively read all inner inodes. Internal usage. """
+        children = []
+        while start != 0 and start < stop:
+            self.romfs.seek(start)
+            buff = self.romfs.read(256)
+            if len(buff) < ROMFH_SIZE + ROMFH_PAD:
+                return children
+            inode = _Romfs_inode(buff)
+            r = RomfsNode()
+            r.name = inode.name
+            r.length = inode.size
+            r.start = start
+            r.next = inode.next
+            r.romfs = self
+            header_end = start + ROMFH_SIZE + (len(inode.name) + 1 + ROMFH_PAD) & ROMFH_MASK
+            child_end = inode.next & ROMFH_MASK
+            if child_end == 0:
+                child_end = stop
+            if inode.next & ROMFH_TYPE == ROMFH_REG:
+                pass
+            else:
+                if inode.next & ROMFH_TYPE == ROMFH_DIR:
+                    self.romfs.seek(start)
+                    r.children = self._Romfs__listnames(header_end, child_end)
+                    for ch in r.children:
+                        ch.parent = r
+
+                if r.name != currentDir and r.name != parentDir:
+                    children.append(r)
+            start = r.next & ROMFH_MASK
+
+        return children
+
+
+if __name__ == '__main__':
+    import sys
+    filename = sys.argv[1]
+    r = Romfs()
+    r.open(filename)
+    n = r.getRoot()
+    for i in n.findAll():
+        print(i)
+
+    r.close()

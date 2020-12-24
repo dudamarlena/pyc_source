@@ -1,0 +1,21 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /src/c2cgeoportal/scaffolds/update/CONST_alembic/static/versions/5472fbc19f39_add_temp_password_column.py
+# Compiled at: 2019-04-23 07:29:02
+__doc__ = 'Add temp_password column\n\nRevision ID: 5472fbc19f39\nRevises: 1da396a88908\nCreate Date: 2015-04-20 14:51:30.595467\n'
+from alembic import op, context
+from sqlalchemy import Column, Unicode
+revision = '5472fbc19f39'
+down_revision = '1da396a88908'
+
+def upgrade():
+    schema = context.get_context().config.get_main_option('schema')
+    staticschema = schema + '_static'
+    op.add_column('user', Column('temp_password', Unicode), schema=staticschema)
+
+
+def downgrade():
+    schema = context.get_context().config.get_main_option('schema')
+    staticschema = schema + '_static'
+    op.drop_column('user', 'temp_password', schema=staticschema)

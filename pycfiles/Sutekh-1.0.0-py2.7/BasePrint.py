@@ -1,0 +1,236 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/sutekh/base/gui/plugins/BasePrint.py
+# Compiled at: 2019-12-11 16:37:39
+"""Plugin for simple, direct printing of the card set."""
+import gtk, pango
+from ...core.BaseTables import PhysicalCardSet
+from ...core.BaseAdapters import IAbstractCard, IPhysicalCard, IPrintingName, IExpansion
+from ..BasePluginManager import BasePlugin
+from ..SutekhDialog import do_complaint_error
+NO_EXPANSION, LONG_INDENT, SHORT_LINE = range(3)
+
+def _card_expansion_details(oCard, iMode):
+    """Get the expansion for the name"""
+    oPhysCard = IPhysicalCard(oCard)
+    if oPhysCard.printing:
+        if iMode == SHORT_LINE:
+            return IExpansion(oPhysCard.printing).shortname
+        return IPrintingName(oPhysCard.printing)
+    return ' (Unknown)'
+
+
+class BasePrint(BasePlugin):
+    """Plugin for printing the card sets.
+
+       Use gtk's Printing support to print out a simple list of the cards
+       in the card set. This has less formatting than exporting via
+       HTML, for instance, but does print directly.
+       """
+    dTableVersions = {PhysicalCardSet: (5, 6, 7)}
+    aModelsSupported = (
+     PhysicalCardSet,)
+    dOptions = {'No Expansion info': NO_EXPANSION, 
+       'Card Name\n    Expansion Name': LONG_INDENT, 
+       'Card Name [Short Expansion Name]': SHORT_LINE}
+
+    def __init__(self, *args, **kwargs):
+        super(BasePrint, self).__init__(*args, **kwargs)
+        self._iPrintExpansions = NO_EXPANSION
+        self._sFontName = 'sans 12'
+        self._oSettings = None
+        self._aPageBreaks = None
+        self._oPangoLayout = None
+        return
+
+    def get_menu_item(self):
+        """Register on the 'Actions' Menu"""
+        oPrint = gtk.MenuItem('Print Card Set')
+        oPrint.connect('activate', self.activate)
+        return ('Actions', oPrint)
+
+    def activate(self, _oWidget):
+        """In response to the menu choice, do the actual print operation."""
+        oPrintOp = gtk.PrintOperation()
+        if self._oSettings is not None:
+            oPrintOp.set_print_settings(self._oSettings)
+        oPrintOp.connect('begin-print', self.begin_print)
+        oPrintOp.connect('end-print', self.end_print)
+        oPrintOp.connect('draw-page', self.draw_page)
+        oPrintOp.set_custom_tab_label('Card Set Print Settings')
+        dCustomData = {}
+        oPrintOp.connect('create-custom-widget', self._add_print_widgets, dCustomData)
+        oPrintOp.connect('custom-widget-apply', self._get_print_widgets, dCustomData)
+        oRes = oPrintOp.run(gtk.PRINT_OPERATION_ACTION_PRINT_DIALOG, self.parent)
+        if oRes == gtk.PRINT_OPERATION_RESULT_ERROR:
+            do_complaint_error('Error printing card set:\n')
+        elif oRes == gtk.PRINT_OPERATION_RESULT_APPLY:
+            self._oSettings = oPrintOp.get_print_settings()
+        return
+
+    def begin_print(self, oPrintOp, oContext):
+        """Set up printing context.
+
+           This includes determining pagination and the number of pages.
+           """
+        oPrintOp.set_use_full_page(False)
+        oPrintOp.set_unit(gtk.UNIT_MM)
+        oPrintOp.set_n_pages(1)
+        fWidth, fHeight = oContext.get_width(), oContext.get_height()
+        oLayout = oContext.create_pango_layout()
+        oLayout.set_font_description(pango.FontDescription(self._sFontName))
+        oLayout.set_width(int(fWidth * pango.SCALE))
+        oLayout.set_markup(self.cardlist_markup())
+        iLineCount = oLayout.get_line_count()
+        fPageHeight = 0
+        aPageBreaks = []
+        for iThisLine in range(iLineCount):
+            oLine = oLayout.get_line(iThisLine)
+            _oInkRect, oLogicalRect = oLine.get_extents()
+            fLineHeight = float(oLogicalRect[3]) / pango.SCALE
+            if fPageHeight + fLineHeight > fHeight:
+                aPageBreaks.append(iThisLine)
+                fPageHeight = 0
+            fPageHeight += fLineHeight
+
+        oPrintOp.set_n_pages(len(aPageBreaks) + 1)
+        self._aPageBreaks = aPageBreaks
+        self._oPangoLayout = oLayout
+
+    def end_print(self, _oPrintOp, _oContext):
+        """Clean up resources allocated in begin_print.
+           """
+        self._aPageBreaks = None
+        self._oPangoLayout = None
+        return
+
+    def draw_page(self, _oPrintOp, oContext, iPageNum):
+        """Page drawing callback.
+           """
+        iStartPageLine, iEndPageLine = (0, 0)
+        aPageBreaks = self._aPageBreaks
+        oLayout = self._oPangoLayout
+        if iPageNum > 0:
+            iStartPageLine = aPageBreaks[(iPageNum - 1)]
+        if iPageNum < len(aPageBreaks):
+            iEndPageLine = aPageBreaks[iPageNum]
+        else:
+            iEndPageLine = oLayout.get_line_count()
+        oContext = oContext.get_cairo_context()
+        oContext.set_source_rgb(0, 0, 0)
+        oContext.set_line_width(0.1)
+        oIter = oLayout.get_iter()
+        fStartPos = 0.0
+        iLine = 0
+        while True:
+            if iLine >= iStartPageLine:
+                oLine = oIter.get_line()
+                _oInkRect, oLogicalRect = oLine.get_extents()
+                fBaseLine = float(oIter.get_baseline()) / pango.SCALE
+                if iLine == iStartPageLine:
+                    fStartPos = fBaseLine
+                fXPos = float(oLogicalRect[0]) / pango.SCALE
+                fYPos = fBaseLine - fStartPos - float(oLogicalRect[1]) / pango.SCALE
+                oContext.move_to(fXPos, fYPos)
+                oContext.layout_line_path(oLine)
+                oContext.stroke_preserve()
+                oContext.fill()
+            iLine += 1
+            if not (iLine < iEndPageLine and oIter.next_line()):
+                break
+
+    def cardlist_markup(self):
+        """Format the card set nicely for printing."""
+        oCS = self._get_card_set()
+        aMarkup = []
+        aMarkup.append('<big><b><u>%s</u></b></big>' % self._escape(oCS.name))
+        aMarkup.append('  <b>Author</b>: %s' % self._escape(oCS.author))
+        if oCS.comment:
+            aMarkup.append('  <b>Comment</b>: %s' % self._escape(oCS.comment))
+            aMarkup.append('')
+        if oCS.annotations:
+            aMarkup.append('  <b>Annotations</b>: %s' % self._escape(oCS.annotations))
+            aMarkup.append('')
+        aMarkup.append('          <s>                                          </s>')
+        aMarkup.append('')
+        oCardIter = self.model.get_card_iterator(None)
+        oGroupedIter = self.model.groupby(oCardIter, IAbstractCard)
+        for sGroup, oGroupIter in sorted(oGroupedIter, key=lambda x: x[0]):
+            if sGroup is None:
+                sGroup = '<< None >>'
+            iCnt = 0
+            dCardInfo = {}
+            dExpInfo = {}
+            for oCard in oGroupIter:
+                oAbsCard = IAbstractCard(oCard)
+                dCardInfo.setdefault(oAbsCard.name, 0)
+                dCardInfo[oAbsCard.name] += 1
+                iCnt += 1
+                if self._iPrintExpansions != NO_EXPANSION:
+                    dExpInfo.setdefault(oAbsCard.name, {})
+                    sExp = _card_expansion_details(oCard, self._iPrintExpansions)
+                    dExpInfo[oAbsCard.name].setdefault(sExp, 0)
+                    dExpInfo[oAbsCard.name][sExp] += 1
+
+            aMarkup.append('<u>%s:</u> (%d)' % (self._escape(sGroup), iCnt))
+            for sCardName, iCardCnt in sorted(dCardInfo.items()):
+                if self._iPrintExpansions in (NO_EXPANSION, LONG_INDENT):
+                    aMarkup.append('  %i × %s' % (iCardCnt,
+                     self._escape(sCardName)))
+                    if sCardName in dExpInfo:
+                        for sExp, iCnt in sorted(dExpInfo[sCardName].items()):
+                            aMarkup.append('    %i × %s' % (iCnt,
+                             self._escape(sExp)))
+
+                else:
+                    for sExp, iCnt in sorted(dExpInfo[sCardName].items()):
+                        aMarkup.append('  %i × %s [%s]' % (iCnt,
+                         self._escape(sCardName),
+                         self._escape(sExp)))
+
+            aMarkup.append('')
+
+        return ('\n').join(aMarkup)
+
+    def _add_print_widgets(self, _oOp, dCustomData):
+        """Add widgets to the custom options tab"""
+        oVBox = gtk.VBox(False, 2)
+        oLabel = gtk.Label()
+        oLabel.set_markup('<b>Expansion Information:</b>')
+        oLabel.set_alignment(0.0, 0.5)
+        oVBox.pack_start(oLabel, expand=False, padding=10)
+        aExpButtons = []
+        oFirstBut = gtk.RadioButton(None, 'No Expansion info', False)
+        oFirstBut.set_active(True)
+        oVBox.pack_start(oFirstBut, expand=False)
+        aExpButtons.append(oFirstBut)
+        for sText in self.dOptions:
+            if sText == oFirstBut.get_label():
+                continue
+            oBut = gtk.RadioButton(oFirstBut, sText, False)
+            oBut.set_active(False)
+            oVBox.pack_start(oBut, expand=False)
+            aExpButtons.append(oBut)
+
+        oLabel = gtk.Label()
+        oLabel.set_markup('<b>Font:</b>')
+        oLabel.set_alignment(0.0, 0.5)
+        oVBox.pack_start(oLabel, expand=False, padding=10)
+        oFontSel = gtk.FontSelection()
+        oFontSel.set_font_name(self._sFontName)
+        oVBox.pack_start(oFontSel, expand=False)
+        dCustomData['aExpButtons'] = aExpButtons
+        dCustomData['oFontSel'] = oFontSel
+        oVBox.show_all()
+        return oVBox
+
+    def _get_print_widgets(self, _oOp, _oBox, dCustomData):
+        """Get the selection from the custom area"""
+        for oButton in dCustomData['aExpButtons']:
+            if oButton.get_active():
+                sLabel = oButton.get_label()
+                self._iPrintExpansions = self.dOptions[sLabel]
+
+        self._sFontName = dCustomData['oFontSel'].get_font_name()

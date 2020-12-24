@@ -1,0 +1,1 @@
+ckanext-odi_certificates_store>=1.0.0

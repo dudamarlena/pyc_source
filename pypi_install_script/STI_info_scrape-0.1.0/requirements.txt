@@ -1,0 +1,4 @@
+# Dev/Deployment
+pandas
+pattern
+selenium

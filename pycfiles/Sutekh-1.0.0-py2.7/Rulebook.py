@@ -1,0 +1,221 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/sutekh/gui/plugins/Rulebook.py
+# Compiled at: 2019-12-11 16:37:54
+"""Downloads rulebook HTML pages and makes them available via the Help menu."""
+import os, StringIO, webbrowser, zipfile
+from logging import Logger
+import gtk
+from sutekh.base.Utility import prefs_dir, ensure_dir_exists
+from sutekh.base.io.UrlOps import urlopen_with_timeout
+from sutekh.base.gui.FileOrUrlWidget import FileOrUrlWidget
+from sutekh.base.gui.GuiDataPack import gui_error_handler, progress_fetch_data
+from sutekh.base.gui.SutekhDialog import SutekhDialog, do_exception_complaint
+from sutekh.base.gui.SutekhFileWidget import add_filter
+from sutekh.base.gui.ProgressDialog import ProgressDialog, SutekhCountLogHandler
+from sutekh.io.DataPack import DOC_URL, find_data_pack
+from sutekh.gui.PluginManager import SutekhPlugin
+
+class RulebookConfigDialog(SutekhDialog):
+    """Dialog for configuring the Rulebook plugin."""
+    sDocUrl = DOC_URL
+
+    def __init__(self, oParent, bFirstTime=False):
+        super(RulebookConfigDialog, self).__init__('Configure Rulebook Info Plugin', oParent, gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT, (
+         gtk.STOCK_OK, gtk.RESPONSE_OK,
+         gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL))
+        oDescLabel = gtk.Label()
+        if not bFirstTime:
+            oDescLabel.set_markup('<b>Choose how to configure the rulebook plugin</b>')
+        else:
+            oDescLabel.set_markup('<b>Choose how to configure the rulebook plugin</b>\nChoose cancel to skip configuring the plugin\nYou will not be prompted again')
+        self.oFileWidget = FileOrUrlWidget(oParent, 'Choose location for rulebook zip file', {'Sutekh Datapack': self.sDocUrl})
+        add_filter(self.oFileWidget, 'Zip Files', ['*.zip', '*.ZIP'])
+        self.vbox.pack_start(oDescLabel, False, False)
+        self.vbox.pack_start(self.oFileWidget, False, False)
+        if bFirstTime:
+            self.set_size_request(340, 240)
+        else:
+            self.set_size_request(340, 200)
+        self.show_all()
+
+    def get_data(self):
+        """Return the zip file data containing the rulebooks"""
+        sFile, _bUrl = self.oFileWidget.get_file_or_url()
+        sData = None
+        if sFile == self.sDocUrl:
+            sZipUrl, sHash = find_data_pack('rulebooks', fErrorHandler=gui_error_handler)
+            if not sZipUrl:
+                return
+            oFile = urlopen_with_timeout(sZipUrl, fErrorHandler=gui_error_handler)
+            if oFile:
+                sData = progress_fetch_data(oFile, None, sHash)
+            else:
+                sData = None
+        elif sFile:
+            sData = self.oFileWidget.get_binary_data()
+        return sData
+
+
+class RulebookPlugin(SutekhPlugin):
+    """Plugin allowing downloading of rulebook HTML pages and making them
+       available via the Plugins menu.
+       """
+    aModelsSupported = ('MainWindow', )
+    dGlobalConfig = {'rulebook path': 'string(default=None)'}
+
+    def __init__(self, *args, **kwargs):
+        super(RulebookPlugin, self).__init__(*args, **kwargs)
+        self._oRulebookDlg = None
+        self._oFirstMenuItem = None
+        self._sPrefsPath = None
+        return
+
+    def _read_index(self):
+        """Read the list of rulebooks from the index.txt file.
+
+           Return a list of (filename, title) tuples.
+           """
+        sIndexFile = os.path.join(self._sPrefsPath, 'index.txt')
+        if not os.path.isfile(sIndexFile):
+            return []
+        aRulebooks = []
+        for sLine in open(sIndexFile, 'rU'):
+            sFilename, sSep, sTitle = sLine.partition(':')
+            if not sSep:
+                continue
+            aRulebooks.append((sFilename.strip(), sTitle.strip()))
+
+        return aRulebooks
+
+    def get_menu_item(self):
+        """Overrides method from base class.
+
+           Adds the menu item on the MainWindow if the files can be found.
+           """
+        self._sPrefsPath = self.get_config_item('rulebook path')
+        if self._sPrefsPath is None:
+            self._sPrefsPath = os.path.join(prefs_dir('Sutekh'), 'rulebook')
+            self.set_config_item('rulebook path', self._sPrefsPath)
+        oConfigMenuItem = gtk.MenuItem('Download Rulebook Files')
+        oConfigMenuItem.connect('activate', self.config_activate)
+        aMenuList = [
+         (
+          'Data Downloads', oConfigMenuItem)]
+        for oItem in self._recreate_menu_items():
+            aMenuList.append(('Rulebook', oItem))
+
+        return aMenuList
+
+    def _recreate_menu_items(self):
+        """Read the index file, update the first menu item hack
+           and return the list of menu items.
+           """
+        aItems = []
+        for sFilename, sTitle in self._read_index():
+            oItem = gtk.MenuItem(sTitle)
+            oItem.connect('activate', self.rulebook_activate, sFilename)
+            aItems.append(oItem)
+
+        if not aItems:
+            oItem = gtk.MenuItem('No rulebooks')
+            oItem.set_sensitive(False)
+            aItems.append(oItem)
+        self._oFirstMenuItem = aItems[0]
+        return aItems
+
+    def _update_menu(self):
+        """Read index file and update which menu items are active
+           accordingly.
+           """
+        oRulebookMenu = self._oFirstMenuItem.get_parent()
+        for oChild in oRulebookMenu.get_children():
+            oRulebookMenu.remove(oChild)
+
+        for oItem in self._recreate_menu_items():
+            oRulebookMenu.append(oItem)
+
+        oRulebookMenu.show_all()
+
+    def setup(self):
+        """Prompt the user to download/setup the rulebook the first time"""
+        sIndexTxt = os.path.join(self._sPrefsPath, 'index.txt')
+        if not os.path.exists(sIndexTxt):
+            oDialog = RulebookConfigDialog(self.parent, True)
+            self.handle_config_response(oDialog)
+            ensure_dir_exists(self._sPrefsPath)
+            if not os.path.exists(sIndexTxt):
+                fIndexTxt = open(sIndexTxt, 'wb')
+                fIndexTxt.close()
+
+    def config_activate(self, _oMenuWidget):
+        """Launch the configuration dialog."""
+        oDialog = RulebookConfigDialog(self.parent, False)
+        self.handle_config_response(oDialog)
+
+    def rulebook_activate(self, _oMenuWidget, sFilename):
+        """Show HTML file associated with the sName."""
+        sPath = os.path.join(self._sPrefsPath, sFilename)
+        sPath = os.path.abspath(sPath)
+        sDrive, sPath = os.path.splitdrive(sPath)
+        sPath = sDrive.replace(':', '|') + sPath
+        sPath = sPath.replace(os.path.sep, '/')
+        if not sPath.startswith('/'):
+            sPath = '/' + sPath
+        sUrl = 'file:///' + sPath
+        webbrowser.open(sUrl)
+
+    def _link_resource(self, sLocalUrl):
+        """Return a file-like object which sLocalUrl can be read from."""
+        sResource = os.path.join(self._sPrefsPath, sLocalUrl)
+        if os.path.exists(sResource):
+            return open(sResource, 'rb')
+        raise ValueError('Unknown resource %s' % sLocalUrl)
+
+    def handle_config_response(self, oConfigDialog):
+        """Handle the response from the config dialog"""
+        iResponse = oConfigDialog.run()
+        if iResponse == gtk.RESPONSE_OK:
+            try:
+                sData = oConfigDialog.get_data()
+                if sData:
+                    oRawFile = StringIO.StringIO(sData)
+                    oZipFile = zipfile.ZipFile(oRawFile, 'r')
+                    self._unpack_zip_with_prog_bar(oZipFile)
+            except Exception:
+                do_exception_complaint('Unable to successfully download or copy some or all of the rulebook files')
+
+        self._update_menu()
+        oConfigDialog.destroy()
+
+    def _unpack_zip_with_prog_bar(self, oZipFile):
+        """Unpack the contenst of the zip file showing progress as we go."""
+        oLogHandler = SutekhCountLogHandler()
+        oProgressDialog = ProgressDialog()
+        oProgressDialog.set_description('Importing Rulebooks')
+        oLogger = Logger('Read zip file')
+        oLogger.addHandler(oLogHandler)
+        oLogHandler.set_dialog(oProgressDialog)
+        oLogHandler.set_total(len(oZipFile.infolist()))
+        oProgressDialog.show()
+        try:
+            self._unpack_zipfile(oZipFile, oLogger)
+        finally:
+            oProgressDialog.destroy()
+
+    def _unpack_zipfile(self, oZipFile, oLogger):
+        """Unpack the contents of the zip file into the preferences folder."""
+        ensure_dir_exists(self._sPrefsPath)
+        for oItem in oZipFile.infolist():
+            sBasename = os.path.basename(oItem.filename)
+            oLogger.info('Read %s' % sBasename)
+            sFile = os.path.join(self._sPrefsPath, sBasename)
+            oData = oZipFile.read(oItem.filename)
+            oFile = open(sFile, 'wb')
+            oFile.write(oData)
+            oFile.close()
+
+
+plugin = RulebookPlugin

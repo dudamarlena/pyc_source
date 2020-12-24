@@ -1,0 +1,139 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/cfl/ternaris/marv/pycapnp/buildutils/bundle.py
+"""utilities for fetching build dependencies."""
+import os, shutil, stat, sys, tarfile
+from glob import glob
+from subprocess import Popen, PIPE
+try:
+    from urllib2 import urlopen
+except ImportError:
+    from urllib.request import urlopen
+
+from .msg import fatal, debug, info, warn
+pjoin = os.path.join
+bundled_version = (0, 6, 1)
+libcapnp = 'capnproto-c++-%i.%i.%i.tar.gz' % bundled_version
+libcapnp_url = 'https://capnproto.org/' + libcapnp
+HERE = os.path.dirname(__file__)
+ROOT = os.path.dirname(HERE)
+
+def untgz(archive):
+    return archive.replace('.tar.gz', '')
+
+
+def localpath(*args):
+    """construct an absolute path from a list relative to the root pycapnp directory"""
+    plist = [
+     ROOT] + list(args)
+    return os.path.abspath(pjoin(*plist))
+
+
+def fetch_archive(savedir, url, fname, force=False):
+    """download an archive to a specific location"""
+    dest = pjoin(savedir, fname)
+    if os.path.exists(dest) and not force:
+        info('already have %s' % fname)
+        return dest
+    info('fetching %s into %s' % (url, savedir))
+    if not os.path.exists(savedir):
+        os.makedirs(savedir)
+    req = urlopen(url)
+    with open(dest, 'wb') as (f):
+        f.write(req.read())
+    return dest
+
+
+def fetch_libcapnp(savedir, url=None):
+    """download and extract libcapnp"""
+    is_preconfigured = False
+    if url is None:
+        url = libcapnp_url
+        is_preconfigured = True
+    dest = pjoin(savedir, 'capnproto-c++')
+    if os.path.exists(dest):
+        info('already have %s' % dest)
+        return
+    else:
+        fname = fetch_archive(savedir, url, libcapnp)
+        tf = tarfile.open(fname)
+        with_version = pjoin(savedir, tf.firstmember.path)
+        tf.extractall(savedir)
+        tf.close()
+        if is_preconfigured:
+            shutil.move(with_version, dest)
+        else:
+            cpp_dir = os.path.join(with_version, 'c++')
+            conf = Popen(['autoreconf', '-i'], cwd=cpp_dir)
+            returncode = conf.wait()
+            if returncode != 0:
+                raise RuntimeError('Autoreconf failed. Make sure autotools are installed on your system.')
+            shutil.move(cpp_dir, dest)
+        return
+
+
+def stage_platform_hpp(capnproot):
+    """stage platform.hpp into libcapnp sources
+
+    Tries ./configure first (except on Windows),
+    then falls back on included platform.hpp previously generated.
+    """
+    platform_hpp = pjoin(capnproot, 'src', 'platform.hpp')
+    if os.path.exists(platform_hpp):
+        info('already have platform.hpp')
+        return
+    if os.name == 'nt':
+        platform_dir = pjoin(capnproot, 'builds', 'msvc')
+    else:
+        info('attempting ./configure to generate platform.hpp')
+        p = Popen('./configure', cwd=capnproot, shell=True, stdout=PIPE, stderr=PIPE)
+        o, e = p.communicate()
+        if p.returncode:
+            warn('failed to configure libcapnp:\n%s' % e)
+            if sys.platform == 'darwin':
+                platform_dir = pjoin(HERE, 'include_darwin')
+            elif sys.platform.startswith('freebsd'):
+                platform_dir = pjoin(HERE, 'include_freebsd')
+            elif sys.platform.startswith('linux-armv'):
+                platform_dir = pjoin(HERE, 'include_linux-armv')
+            else:
+                platform_dir = pjoin(HERE, 'include_linux')
+        else:
+            return
+    info('staging platform.hpp from: %s' % platform_dir)
+    shutil.copy(pjoin(platform_dir, 'platform.hpp'), platform_hpp)
+
+
+def copy_and_patch_libcapnp(capnp, libcapnp):
+    """copy libcapnp into source dir, and patch it if necessary.
+
+    This command is necessary prior to running a bdist on Linux or OS X.
+    """
+    if sys.platform.startswith('win'):
+        return
+    local = localpath('capnp', libcapnp)
+    if not capnp and not os.path.exists(local):
+        fatal('Please specify capnp prefix via `setup.py configure --capnp=/path/to/capnp` or copy libcapnp into capnp/ manually prior to running bdist.')
+    try:
+        lib = os.path.realpath(pjoin(capnp, 'lib', libcapnp))
+        print 'copying %s -> %s' % (lib, local)
+        shutil.copy(lib, local)
+    except Exception:
+        if not os.path.exists(local):
+            fatal('Could not copy libcapnp into capnp/, which is necessary for bdist. Please specify capnp prefix via `setup.py configure --capnp=/path/to/capnp` or copy libcapnp into capnp/ manually.')
+
+    if sys.platform == 'darwin':
+        mode = os.stat(local).st_mode
+        os.chmod(local, mode | stat.S_IWUSR)
+        cmd = [
+         'install_name_tool', '-id', '@loader_path/../%s' % libcapnp, local]
+        try:
+            p = Popen(cmd, stdout=PIPE, stderr=PIPE)
+        except OSError:
+            fatal('install_name_tool not found, cannot patch libcapnp for bundling.')
+
+        out, err = p.communicate()
+        if p.returncode:
+            fatal('Could not patch bundled libcapnp install_name: %s' % err, p.returncode)

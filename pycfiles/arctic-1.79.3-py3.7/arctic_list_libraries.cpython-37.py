@@ -1,0 +1,27 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.9-x86_64/egg/arctic/scripts/arctic_list_libraries.py
+# Compiled at: 2019-02-02 17:02:31
+# Size of source mod 2**32: 849 bytes
+from __future__ import print_function
+import optparse
+from .utils import setup_logging
+from ..arctic import Arctic
+print = print
+
+def main():
+    usage = "usage: %prog [options] [prefix ...]\n\n    Lists the libraries available in a user's database.   If any prefix parameters\n    are given, list only libraries with names that start with one of the prefixes.\n\n    Example:\n        %prog --host=hostname rgautier\n    "
+    setup_logging()
+    parser = optparse.OptionParser(usage=usage)
+    parser.add_option('--host', default='localhost', help='Hostname, or clustername. Default: localhost')
+    opts, args = parser.parse_args()
+    store = Arctic(opts.host)
+    for name in sorted(store.list_libraries()):
+        if not args or [n for n in args if name.startswith(n)]:
+            print(name)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,9 @@
+django
+scrapy
+scrapy-redis
+scrapy-splash
+python-scrapyd-api
+redis
+requests
+pymongo
+pymysql

@@ -1,0 +1,202 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/hectorlopez/.virtualenvs/lingotek/lib/python3.7/site-packages/ltk/actions/request_action.py
+# Compiled at: 2020-04-13 16:05:05
+# Size of source mod 2**32: 9808 bytes
+from ltk.actions.action import *
+
+class RequestAction(Action):
+
+    def __init__(self, actionPath, doc_name, requestPath, entered_locales, to_cancel, to_delete, due_date, workflow, document_id=None, surpressMessage=False):
+        Action.__init__(self, actionPath)
+        self.document_name = doc_name
+        self.requestPath = requestPath
+        self.entered_locales = entered_locales
+        self.to_cancel = to_cancel
+        self.to_delete = to_delete
+        self.workflow = workflow
+        self.due_date = due_date
+        self.document_id = document_id
+        self.surpressMessage = surpressMessage
+        self.expected_code = ''
+        self.failure_message = ''
+        self.info_message = ''
+        self.change_db_entry = ''
+        self.docs = []
+
+    def target_action(self):
+        try:
+            is_successful = False
+            locales = []
+            if self.entered_locales:
+                for locale in self.entered_locales:
+                    locales.extend(locale.split(','))
+
+                if self.to_delete:
+                    locales = get_valid_locales(self.api, locales, 'deleted')
+                elif self.to_cancel:
+                    locales = get_valid_locales(self.api, locales, 'cancelled')
+                else:
+                    locales = get_valid_locales(self.api, locales, 'added')
+            elif self.watch_locales:
+                locales = self.watch_locales
+            else:
+                if self.surpressMessage:
+                    return False
+                logger.info('No locales have been set. Locales can be passed in as arguments or set as target locales in ltk config.')
+                return False
+            if self.requestPath:
+                self.document_id = None
+                self.document_name = None
+            else:
+                self.change_db_entry = True
+                if self.to_delete:
+                    if not self.entered_locales:
+                        logger.error('Please enter a target locale to delete')
+                        return
+                    self.expected_code = 204
+                    self.failure_message = 'Failed to delete target'
+                    self.info_message = 'Deleted locale'
+                else:
+                    if self.to_cancel:
+                        if not self.entered_locales:
+                            logger.error('Please enter a target locale to cancel')
+                            return
+                        self.expected_code = 204
+                        self.failure_message = 'Failed to cancel target'
+                        self.info_message = 'Cancelled locale'
+                    else:
+                        self.expected_code = 201
+                        self.failure_message = 'Failed to add target'
+                        self.info_message = 'Added target'
+            if not self.requestPath:
+                if not self.document_name:
+                    if not self.document_id:
+                        self.docs = self.doc_manager.get_all_entries()
+            if self.requestPath:
+                self.docs = self.get_docs_in_path(self.requestPath)
+            else:
+                if self.document_id:
+                    entry = self.doc_manager.get_doc_by_prop('id', self.document_id)
+                    entry or logger.error("Document specified for target doesn't exist: {0}".format(self.document_id))
+                    return
+                else:
+                    if self.document_name:
+                        entry = self.doc_manager.get_doc_by_prop('name', self.document_name)
+                        if not entry:
+                            logger.error("Document name specified for target doesn't exist: {0}".format(self.document_name))
+                            return
+                        if not entry:
+                            logger.error('Could not add target. File specified is invalid.')
+                            return
+                        self.docs.append(entry)
+                    elif len(self.docs) == 0:
+                        if self.requestPath and len(self.requestPath) > 0:
+                            logger.info('File ' + str(self.requestPath) + ' not found')
+                        else:
+                            logger.info('No documents to request a target locale')
+            is_successful = self._request_translations(locales)
+            return is_successful
+        except Exception as e:
+            try:
+                log_error(self.error_file_name, e)
+                if 'string indices must be integers' in str(e) or 'Expecting value: line 1 column 1' in str(e):
+                    logger.error("Error connecting to Lingotek's TMS")
+                else:
+                    logger.error('Error on request: ' + str(e))
+            finally:
+                e = None
+                del e
+
+    def _request_translations(self, locales):
+        for entry in self.docs:
+            if not self._handleEntryRequest(entry, locales):
+                return False
+
+        return True
+
+    def _handleEntryRequest(self, entry, locales):
+        is_successful = False
+        self.document_id = entry['id']
+        self.document_name = entry['file_name']
+        existing_locales = []
+        if 'locales' in entry:
+            if entry['locales']:
+                existing_locales = entry['locales']
+        for locale in locales:
+            locale = locale.replace('_', '-')
+            if self.to_delete:
+                response = self.api.document_delete_target(self.document_id, locale)
+            else:
+                if self.to_cancel:
+                    response = self.api.document_cancel_target(self.document_id, locale)
+                else:
+                    response = self.api.document_add_target(self.document_id, locale, self.workflow, self.due_date)
+            if self.expected_code == 201:
+                if response.status_code == 202:
+                    if 'next_document_id' in response.json():
+                        self.doc_manager.update_document('id', response.json()['next_document_id'], self.document_id)
+                        self.document_id = response.json()['next_document_id']
+                elif response.status_code == 402:
+                    raise_error(response.json(), '', True)
+                else:
+                    if response.status_code == 410:
+                        logger.info('Document has been archived. Reuploading...')
+                        target_locales = existing_locales
+                        if locale not in existing_locales:
+                            target_locales.append(locale)
+                        title = entry['name']
+                        self.doc_manager.remove_element(self.document_id)
+                        self.add_document((self.document_name), title, (self.default_metadata), translation_locale_code=target_locales)
+                        return
+                    if response.status_code == 423:
+                        if 'next_document_id' in response.json():
+                            self.doc_manager.update_document('id', response.json()['next_document_id'], self.document_id)
+                            self.document_id = response.json()['next_document_id']
+                            self._handleEntryRequest(entry, [locale])
+                        else:
+                            raise_error(response.json(), 'Document was locked but no next document id provided', False)
+            if response.status_code != self.expected_code:
+                if response.json():
+                    if response.json()['messages']:
+                        response_message = response.json()['messages'][0]
+                        response_message = response_message.replace(self.document_id, self.document_name + ' (' + self.document_id + ')')
+                        response_message = response_message.replace('.', ' ')
+                        response_message = response_message + 'for document ' + self.document_name
+                        print(response_message + '\n')
+                    else:
+                        raise_error(response.json(), '{message} {locale} for document {name}\n'.format(message=(self.failure_message), locale=locale, name=(self.document_name)), True)
+                    if 'already exists' not in response_message:
+                        self.change_db_entry = False
+                        continue
+                logger.info('{message} {locale} for document {name}\n'.format(message=(self.info_message), locale=locale, name=(self.document_name)))
+
+        remote_locales = self.get_doc_locales(self.document_id, self.document_name)
+        locales_to_add = []
+        existing_locales = []
+        if 'locales' in entry:
+            if entry['locales']:
+                existing_locales = entry['locales']
+        else:
+            if not self.change_db_entry or self.to_delete or self.to_cancel:
+                if self.entered_locales:
+                    locales_to_add = locales
+                else:
+                    if remote_locales:
+                        for locale in remote_locales:
+                            if locale not in locales:
+                                locales_to_add.append(locale)
+
+                    for locale in locales:
+                        locale = locale.replace('_', '-')
+                        if locale not in existing_locales and locale not in locales_to_add:
+                            locales_to_add.append(locale)
+
+                if self.to_delete:
+                    self._target_action_db(self.to_delete, locales_to_add, self.document_id)
+            else:
+                self._target_action_db(self.to_cancel, locales_to_add, self.document_id)
+            is_successful = True
+        return is_successful

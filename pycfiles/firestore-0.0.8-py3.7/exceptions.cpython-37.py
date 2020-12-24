@@ -1,0 +1,20 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.9-x86_64/egg/firestore/exceptions.py
+# Compiled at: 2019-07-28 15:16:05
+# Size of source mod 2**32: 1106 bytes
+
+
+class ConnectionError(Exception):
+    __doc__ = '\n    Error raised when connection to firestore could not be established\n    '
+
+    def __init__(self, *args, **kwargs):
+        super(ConnectionError, self).__init__(args, kwargs)
+        try:
+            msg = args[0]
+        except IndexError:
+            msg = 'Unfortunately we could not connect to the firestore cloud database service'
+
+        self.message = msg

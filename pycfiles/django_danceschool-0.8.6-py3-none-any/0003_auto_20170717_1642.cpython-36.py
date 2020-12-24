@@ -1,0 +1,52 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /c/Users/Lee/Sync/projects/django-danceschool/currentmaster/django-danceschool/danceschool/private_events/migrations/0003_auto_20170717_1642.py
+# Compiled at: 2019-04-03 22:56:32
+# Size of source mod 2**32: 3237 bytes
+from __future__ import unicode_literals
+import colorful.fields
+from django.db import migrations, models
+import django.db.models.deletion
+
+class Migration(migrations.Migration):
+    dependencies = [
+     ('private_events', '0002_auto_20170620_2146')]
+    operations = [
+     migrations.AlterModelOptions(name='eventreminder',
+       options={'ordering':('time', ), 
+      'verbose_name':'Event reminder',  'verbose_name_plural':'Event reminders'}),
+     migrations.AlterModelOptions(name='privateevent',
+       options={'verbose_name':'Private event/calendar item', 
+      'verbose_name_plural':'Private events/calendar items'}),
+     migrations.AlterField(model_name='eventreminder',
+       name='completed',
+       field=models.BooleanField(default=False, help_text='This will be set to true once the reminder has been sent.', verbose_name='Completed')),
+     migrations.AlterField(model_name='eventreminder',
+       name='event',
+       field=models.ForeignKey(on_delete=(django.db.models.deletion.CASCADE), to='core.Event', verbose_name='Event')),
+     migrations.AlterField(model_name='eventreminder',
+       name='time',
+       field=models.DateTimeField(verbose_name='Date/Time')),
+     migrations.AlterField(model_name='privateevent',
+       name='category',
+       field=models.ForeignKey(blank=True, null=True, on_delete=(django.db.models.deletion.CASCADE), to='private_events.PrivateEventCategory', verbose_name='Category')),
+     migrations.AlterField(model_name='privateevent',
+       name='link',
+       field=models.URLField(blank=True, help_text='Optionally include the URL to anything that may be relevant for this event.', verbose_name='Optional link')),
+     migrations.AlterField(model_name='privateevent',
+       name='locationString',
+       field=models.CharField(blank=True, help_text='If this event is not at a public event location, then enter it here.', max_length=200, null=True, verbose_name='Other location')),
+     migrations.AlterField(model_name='privateevent',
+       name='title',
+       field=models.CharField(help_text='Give the event a title', max_length=100, verbose_name='Title')),
+     migrations.AlterField(model_name='privateeventcategory',
+       name='description',
+       field=models.TextField(blank=True, help_text='Add an optional description.', null=True, verbose_name='Description')),
+     migrations.AlterField(model_name='privateeventcategory',
+       name='displayColor',
+       field=colorful.fields.RGBColorField(default='#0000FF', verbose_name='Calendar display color')),
+     migrations.AlterField(model_name='privateeventcategory',
+       name='name',
+       field=models.CharField(help_text='Category name will be displayed.', max_length=100, unique=True, verbose_name='Name'))]

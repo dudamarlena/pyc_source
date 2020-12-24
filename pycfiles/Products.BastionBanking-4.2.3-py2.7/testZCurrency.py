@@ -1,0 +1,82 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/Products/BastionBanking/tests/testZCurrency.py
+# Compiled at: 2015-07-18 19:38:10
+import os, sys
+from Testing import ZopeTestCase
+ZopeTestCase.installProduct('BastionBanking')
+from Products.BastionBanking.ZCurrency import ZCurrency
+
+class ZCurrencyTest(ZopeTestCase.ZopeTestCase):
+
+    def testStringFirst(self):
+        self.failUnless(ZCurrency('GBP', 12.34))
+
+    def testAmountFirst(self):
+        self.failUnless(ZCurrency(-12.34, 'GBP'))
+
+    def testString(self):
+        self.failUnless(ZCurrency('GBP12.34'))
+
+    def testStringGap(self):
+        self.failUnless(ZCurrency('GBP -12.34'))
+
+    def testStringSigns(self):
+        self.failUnless(ZCurrency('-GBP 12.34'))
+        self.failUnless(ZCurrency('+GBP 12.34'))
+        self.assertEqual(ZCurrency('GBP 12.34'), ZCurrency('+GBP -12.34'))
+        self.assertEqual(ZCurrency('GBP 12.34'), ZCurrency('+GBP +12.34'))
+        self.assertEqual(ZCurrency('-GBP 12.34'), ZCurrency('GBP -12.34'))
+        self.assertEqual(ZCurrency('-GBP 12.34'), ZCurrency('-GBP -12.34'))
+
+    def testAdd(self):
+        amt = ZCurrency('GBP12.34')
+        self.assertEqual(amt + amt, ZCurrency('GBP24.68'))
+
+    def testSub(self):
+        amt = ZCurrency('GBP12.34')
+        self.assertEqual(amt - amt, ZCurrency('GBP0.00'))
+
+    def testMul(self):
+        amt = ZCurrency('GBP12.34')
+        self.assertEqual(amt * 2, ZCurrency('GBP24.68'))
+
+    def testEqualities(self):
+        a = ZCurrency('GBP12.34')
+        b = ZCurrency('GBP12.34')
+        c = -ZCurrency('GBP12.34')
+        self.failUnless(a == b)
+        self.failUnless(b != c)
+        self.failIf(b == c)
+
+    def testCurrencyProperty(self):
+        self.folder.manage_addProperty('amount', 'GBP24.78', 'currency')
+        self.folder._updateProperty('amount', 'GBP10.00')
+        self.failUnless(isinstance(self.folder.getProperty('amount'), ZCurrency))
+        self.assertEqual(self.folder.getProperty('amount'), ZCurrency('GBP10.00'))
+
+    def testWidgetMarshalling(self):
+        currency = ZCurrency('GBP10.00')
+        for qs in ('amt:currency=GBP10.00', ):
+            env = {'SERVER_NAME': 'testingharness', 'SERVER_PORT': '80'}
+            env['QUERY_STRING'] = qs
+            from ZPublisher.HTTPRequest import HTTPRequest
+            req = HTTPRequest(None, env, None)
+            req.processInputs()
+            self.assertEqual(currency, req.amt)
+
+        return
+
+
+from unittest import TestSuite, makeSuite
+
+def test_suite():
+    suite = TestSuite()
+    suite.addTest(makeSuite(ZCurrencyTest))
+    return suite
+
+
+if __name__ == '__main__':
+    unittest.main(defaultTest='test_suite')

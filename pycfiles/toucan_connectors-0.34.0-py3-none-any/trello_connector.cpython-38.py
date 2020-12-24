@@ -1,0 +1,118 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/rachelle2/webprojects/toucan-connectors/toucan_connectors/trello/trello_connector.py
+# Compiled at: 2020-03-19 08:41:10
+# Size of source mod 2**32: 6227 bytes
+"""
+Provide a trello connector.
+
+Check https://developers.trello.com/docs/get-started for the official API documentation.
+
+The connector allow you to list in a dataset all the cards of a board with a chosen set of 'fields'.
+The available fields are listed in the `Field ` object.
+
+The dataset has one line by card and one columns by fields
+"""
+from enum import Enum
+from typing import List
+import pandas as pd, requests
+from toucan_connectors.toucan_connector import ToucanConnector, ToucanDataSource
+
+def list_function_handler(card_custom_field, custom_field):
+    list_of_options = {x:x['id'] for x in custom_field['options']}
+    option = list_of_options[card_custom_field['idValue']]
+    return option['value']['text']
+
+
+CUSTOM_FIELD_GET_VALUE = {'number':lambda card_custom_field, _: float(card_custom_field['value']['number']), 
+ 'text':lambda card_custom_field, _: card_custom_field['value']['text'], 
+ 'date':lambda card_custom_field, _: card_custom_field['value']['date'], 
+ 'checkbox':lambda card_custom_field, _: card_custom_field['value']['checked'] == 'true', 
+ 'list':list_function_handler}
+API_URL = 'https://api.trello.com/1/boards'
+
+class Fields(str, Enum):
+    name = 'name'
+    url = 'url'
+    lists = 'lists'
+    members = 'members'
+    labels = 'labels'
+
+
+class TrelloDataSource(ToucanDataSource):
+    board_id: str
+    fields_list = list(Fields.__members__)
+    fields_list: List[Fields]
+    custom_fields = True
+    custom_fields: bool
+
+
+class TrelloConnector(ToucanConnector):
+    data_source_model: TrelloDataSource
+    key_id = None
+    key_id: str
+    token = None
+    token: str
+
+    def get_board(self, path, **custom_params):
+        return requests.get(f"{API_URL}/{path}",
+          params={**{'key':self.key_id,  'token':self.token}, **custom_params}).json()
+
+    @staticmethod
+    def replace_id_by_value(card_with_id, lists_ids_mapping=None, labels_id_mapping=None, members_id_mapping=None, custom_fields_id_mapping=None):
+        """
+        `card_with_id` is a dictionary containing all data of a card,
+        but with unreadlable id instead of value
+        This fonction return `card_with_value` with the same dictionnary
+        as `card_with_id` but with readable value
+
+        `lists_ids_mapping`: dictionnary of correspondance between list names and ids
+        `labels_id_mapping`: dictionnary of correspondance between label names and ids
+        `members_id_mapping`: dictionnary of correspondance between members names and ids
+        `custom_fields_id_mapping`: dictionnary of correspondance between custom field
+        and there representation
+        """
+        card_with_value = {'id': card_with_id['id']}
+        if 'name' in card_with_id:
+            card_with_value['name'] = card_with_id['name']
+        if 'url' in card_with_id:
+            card_with_value['url'] = card_with_id['url']
+        if lists_ids_mapping:
+            card_with_value['lists'] = lists_ids_mapping[card_with_id['idList']]
+        if members_id_mapping:
+            card_with_value['members'] = [members_id_mapping[member] for member in card_with_id['idMembers']]
+        if labels_id_mapping:
+            card_with_value['labels'] = [labels_id_mapping[label['id']] for label in card_with_id['labels']]
+        if custom_fields_id_mapping:
+            for card_custom_field in card_with_id['customFieldItems']:
+                custom_field = custom_fields_id_mapping[card_custom_field['idCustomField']]
+                get_value = CUSTOM_FIELD_GET_VALUE[custom_field['type']]
+                card_with_value[custom_field['name']] = get_value(card_custom_field, custom_field)
+
+        return card_with_value
+
+    def _retrieve_data(self, data_source: TrelloDataSource) -> pd.DataFrame:
+        fields_for_request = []
+        lists_ids_mapping = labels_id_mapping = members_id_mapping = custom_fields_id_mapping = None
+        if 'name' in data_source.fields_list:
+            fields_for_request += ['name']
+        if 'url' in data_source.fields_list:
+            fields_for_request += ['url']
+        if 'lists' in data_source.fields_list:
+            fields_for_request += ['idList']
+            lists_ids_mapping = {x['name']:x['id'] for x in self.get_board(f"{data_source.board_id}/lists", fields='name')}
+        if 'labels' in data_source.fields_list:
+            fields_for_request += ['labels']
+            labels_id_mapping = {x['name']:x['id'] for x in self.get_board(f"{data_source.board_id}/labels", fields='name')}
+        if 'members' in data_source.fields_list:
+            fields_for_request += ['idMembers']
+            members_id_mapping = {x['fullName']:x['id'] for x in self.get_board(f"{data_source.board_id}/members", fields='fullName')}
+        if data_source.custom_fields:
+            custom_fields_id_mapping = {x:x['id'] for x in self.get_board(f"{data_source.board_id}/customFields", fields='name')}
+        cards_with_id = self.get_board(f"{data_source.board_id}/cards",
+          fields=fields_for_request,
+          customFieldItems=('true' if data_source.custom_fields else 'false'))
+        cards_with_value = [self.replace_id_by_value(card_with_id, lists_ids_mapping, labels_id_mapping, members_id_mapping, custom_fields_id_mapping) for card_with_id in cards_with_id]
+        return pd.DataFrame(cards_with_value)

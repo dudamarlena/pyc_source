@@ -1,0 +1,9 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/mautrix/types.py
+# Compiled at: 2019-11-21 01:01:47
+# Size of source mod 2**32: 1901 bytes
+from .api.http import JSON, Method, APIPath
+from .client.api.types import UserID, EventID, RoomID, RoomAlias, FilterID, ContentURI, SyncToken, Filter, EventFilter, RoomFilter, RoomEventFilter, EventType, RedactionEvent, RedactionEventContent, ReactionEventContent, ReactionEvent, MessageEvent, MessageEventContent, MessageUnsigned, MediaMessageEventContent, LocationMessageEventContent, LocationInfo, RelationType, MessageType, Format, MediaInfo, FileInfo, AudioInfo, VideoInfo, ImageInfo, ThumbnailInfo, TextMessageEventContent, BaseMessageEventContent, RelatesTo, PowerLevelStateEventContent, Membership, MemberStateEventContent, StateEvent, AliasesStateEventContent, CanonicalAliasStateEventContent, StrippedStateEvent, RoomNameStateEventContent, RoomTopicStateEventContent, RoomPinnedEventsStateEventContent, StateUnsigned, RoomAvatarStateEventContent, StateEventContent, AccountDataEvent, AccountDataEventContent, RoomTagInfo, RoomTagAccountDataEventContent, Event, EventContent, BaseFileInfo, PresenceEventContent, PresenceState, TypingEventContent, TypingEvent, PresenceEvent, PresenceState, SingleReceiptEventContent, ReceiptEventContent, ReceiptEvent, ReceiptType, GenericEvent, Obj, Lst, RoomTombstoneEventContent, RoomCreatePreset, RoomDirectoryVisibility, PaginationDirection, RoomAliasInfo, RoomDirectoryResponse, DirectoryPaginationToken, PaginatedMessages, User, Member, UserSearchResults, MediaRepoConfig, MXOpenGraph, OpenGraphVideo, OpenGraphImage, OpenGraphAudio, SerializerError, Serializable, SerializableEnum, SerializableAttrs, serializer, deserializer

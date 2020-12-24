@@ -1,0 +1,19 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\Tipstestlib\testlib1.py
+# Compiled at: 2018-09-15 22:26:56
+# Size of source mod 2**32: 143 bytes
+
+
+def run():
+    print('sz lib test ---run')
+
+
+def sum(x, y, z):
+    return x + y + z
+
+
+print(__name__)
+print(sum(1, 2, 3))

@@ -1,0 +1,46 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Volumes/Ozgur/Sites/senpilic.com.tr/senpilic/utils/templatetags/get_placeholder_tag.py
+# Compiled at: 2012-10-03 04:42:22
+from classytags.arguments import Argument, MultiValueArgument
+from classytags.values import StringValue
+from cms.templatetags.cms_tags import Placeholder, PlaceholderOptions
+from cms.models.placeholdermodel import Placeholder as PlaceholderModel
+from django import template
+from django.utils.safestring import mark_safe
+register = template.Library()
+
+class RenderGetPlaceholder(Placeholder):
+    """
+        Render the content of a placeholder to a variable. 
+        
+        Can be provided with the name of the placholder (i.e. "Header" in the case of a normal
+        CMS page) or a template variable containing a placeholder (i.e. myentry.content in the
+        case of an external app using a placeholder)
+        
+        Usage::
+        
+            {% get_placeholder ["string"|placeholder_var] [inherit] as variable_name %}
+            
+        """
+    name = 'get_placeholder'
+    options = PlaceholderOptions(Argument('name', resolve=True), MultiValueArgument('extra_bits', required=False, resolve=False), 'as', Argument('varname', resolve=False, required=True), blocks=[
+     ('endplaceholder', 'nodelist')])
+
+    def render_tag(self, context, name, extra_bits, varname, nodelist=None):
+        if isinstance(name, PlaceholderModel):
+            content = name.render(context, None)
+        else:
+            content = super(RenderGetPlaceholder, self).render_tag(context, name, extra_bits, nodelist)
+        context[varname] = mark_safe(content)
+        return ''
+
+    def get_name(self):
+        if isinstance(self.kwargs['name'].var, StringValue):
+            return self.kwargs['name'].var.value.strip('"').strip("'")
+        return self.kwargs['name'].var.var
+
+
+register.tag(RenderGetPlaceholder)

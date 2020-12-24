@@ -1,0 +1,52 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.5 (62131)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.6-i386/egg/blipapi/dirmsg.py
+# Compiled at: 2010-12-26 11:28:50
+import os.path
+from _utils import encode_multipart
+
+def create(**args):
+    """ Create new directed message. """
+    if not args.get('body') or not args.get('user'):
+        raise ValueError('Directed_message body or recipient is missing.')
+    fields = {'directed_message[body]': args['body'], 
+       'directed_message[recipient]': args['user']}
+    if args.get('image') and os.path.isfile(args['image']):
+        fields['directed_message[picture]'] = (
+         args['image'], args['image'])
+    (data, boundary) = encode_multipart(fields)
+    return dict(url='/directed_messages', method='post', data=data, boundary=boundary)
+
+
+def read(**args):
+    """ Read directed messages to specified or logged user, or by ID. """
+    if args.get('user'):
+        if args['user'] == '__ALL__':
+            if args.get('since_id'):
+                url = '/directed_messages/' + str(args['since_id']) + '/all_since'
+            else:
+                url = '/directed_messages/all'
+        elif args.get('since_id'):
+            url = '/users/' + args['user'] + '/directed_messages/' + str(args['since_id']) + '/since'
+        else:
+            url = '/users/' + args['user'] + '/directed_messages'
+    elif args.get('id'):
+        url = '/directed_messages/' + str(args['id'])
+    else:
+        url = '/directed_messages'
+        if args.get('since_id'):
+            url += str(args['since_id']) + '/since'
+    params = dict()
+    params['limit'] = args.get('limit', 10)
+    params['offset'] = args.get('offset', 0)
+    params['include'] = (',').join(args.get('include', ''))
+    return dict(url=url, method='get', params=params)
+
+
+def delete(**args):
+    """ Delete directed message. """
+    if not args.get('id'):
+        raise ValueError('Directed_message ID is missing.')
+    return dict(url='/directed_messages/' + str(args['id']), method='delete')

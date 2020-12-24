@@ -1,0 +1,137 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.9-x86_64/egg/git2gitee/project.py
+# Compiled at: 2020-05-08 01:23:12
+# Size of source mod 2**32: 5435 bytes
+"""
+import to gitee, clone to local, rename config url
+"""
+import re, sys, time, os
+from git2gitee.config import params, gitee_base_url, url_check_project_duplicate, url_check_project_private
+from git2gitee.util import parse_token, valib_github_repo_url, parse_repo_name, to_gitee_repo_url
+
+class Project:
+    __doc__ = "\n    :params username: gitee username\n    :params token: gitee csrf-token\n    :params repo: github repo\n    >>> from git2gitee import GiteeLogin, Project\n    >>> gitee = GiteeLogin(username='mikele', password='password')\n    >>> gitee.login()\n    project = Project('toyourheart163/git2gitee', 'mikele', gitee.token, gitee.sess)\n    project.import_from_github()\n    "
+
+    def __init__(self, repo, username, sess, headers):
+        self.username = username
+        self.token = None
+        self.headers = headers
+        self.repo = repo
+        self.sess = sess
+
+    def _get_project_import_token(self):
+        """get token from project import page"""
+        url_project_import = gitee_base_url + 'projects/import/url'
+        resp_get_project_import = self.sess.get(url_project_import, headers=(self.headers))
+        self.token = parse_token(resp_get_project_import)
+
+    def _set_new_headers(self):
+        """get project import token, set new headers"""
+        self._get_project_import_token()
+        new_headers = self.headers.copy()
+        new_headers['X-CSRF-Token'] = self.token
+        del new_headers['Upgrade-Insecure-Requests']
+        del new_headers['DNT']
+        self.headers = new_headers
+
+    def check_private(self):
+        """
+        检查自己仓库里是否有了些repo
+        如果有就退出
+        """
+        data = {'import_url': valib_github_repo_url(self.repo)}
+        response = self.sess.get(url_check_project_private, params=data, headers=(self.headers))
+        print('check private', data)
+        datas = response.json()
+        if datas.get('private'):
+            print(datas.get('message'))
+            os._exit(0)
+
+    def check_duplicate(self):
+        """
+        检查是否重复, 是否有人已经导入过了.
+        如果有人导入过了，设置repo为另人的repo, 并退出程序
+        """
+        data = {'import_url': valib_github_repo_url(self.repo)}
+        response = self.sess.get(url_check_project_duplicate, params=data, headers=(self.headers))
+        print('check duplicate', data)
+        datas = response.json()
+        if datas['is_duplicate']:
+            self.repo = re.search('<a.*?>(.*?)</a>', datas['message']).group(1)
+            print('有人导入了: ', self.repo)
+            reimport = input('是否导入到你的仓库y/n?')
+            if reimport.lower() == 'n':
+                os._exit(0)
+
+    def import_from_github(self):
+        """fetch github url to gitee"""
+        url = valib_github_repo_url(self.repo)
+        payload = params(parse_repo_name(self.repo), self.username, self.token, url)
+        print(payload)
+        print('开始导入', url)
+        import_url = gitee_base_url + self.username + '/projects'
+        resp = self.sess.post(import_url, data=payload, headers=(self.headers))
+        if resp.status_code == 200:
+            timeout = 180
+            success = False
+            while not success:
+                sys.stdout.write('\r正在导入, 请先等待>>> {}秒'.format(timeout))
+                timeout -= 10
+                time.sleep(10)
+                if self.check_fetch():
+                    print('导入成功')
+                    success = True
+
+    def check_fetch(self):
+        """
+        检查是否导入成功
+        """
+        repo_name = parse_repo_name(self.repo)
+        gitee_repo_url = to_gitee_repo_url(self.username, repo_name)
+        gitee_url_check = gitee_repo_url + '/check_fetch'
+        response = self.sess.get(gitee_url_check, headers=(self.headers))
+        data = response.json()
+        if data['in_fetch'] == 'false':
+            return False
+        else:
+            return True
+
+    def clone(self):
+        """clone 到本地"""
+        os.system('git clone ' + valib_github_repo_url(self.repo))
+
+    def rename_config_repo_url(self):
+        """修改本地的git remote -v 为 import_url 的地址"""
+        repo_name = parse_repo_name(self.repo)
+        config = os.path.join(repo_name, '.git', 'config')
+        with open(config, 'r+') as (f_config):
+            gitee_config = f_config.read()
+            github_config = gitee_config.replace(to_gitee_repo_url(self.username, repo_name), valib_github_repo_url(self.repo))
+            f_config.write(github_config)
+            print('game over')
+
+    def force_sync_github(self) -> int:
+        """
+        force sync import url
+        return:
+            status -> 1
+        """
+        payload = {'user_sync_code':'', 
+         'password_sync_code':'', 
+         'sync_wiki':'false', 
+         'authenticity_token':self.token}
+        url = valib_github_repo_url(self.repo) + '/force_sync_project'
+        response = self.sess.post(url, data=payload, headers=(self.headers))
+        return response.json()['status']
+
+    def check_private_duplicate(self):
+        """
+        1. 先查询自己仓库里是否已有些repo；
+        2. 查询有人导过吗？
+        """
+        self._set_new_headers()
+        self.check_private()
+        self.check_duplicate()

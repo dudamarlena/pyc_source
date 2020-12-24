@@ -1,0 +1,86 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.7-x86_64/egg/airflow/contrib/operators/qubole_operator.py
+# Compiled at: 2019-09-11 03:47:34
+# Size of source mod 2**32: 10313 bytes
+from typing import Iterable
+from airflow.models.baseoperator import BaseOperator, BaseOperatorLink
+from airflow.utils.decorators import apply_defaults
+from airflow.contrib.hooks.qubole_hook import QuboleHook, COMMAND_ARGS, HYPHEN_ARGS, flatten_list, POSITIONAL_ARGS
+
+class QDSLink(BaseOperatorLink):
+    name = 'Go to QDS'
+
+    def get_link(self, operator, dttm):
+        return operator.get_hook().get_extra_links(operator, dttm)
+
+
+class QuboleOperator(BaseOperator):
+    __doc__ = '\n    Execute tasks (commands) on QDS (https://qubole.com).\n\n    :param qubole_conn_id: Connection id which consists of qds auth_token\n    :type qubole_conn_id: str\n\n    kwargs:\n        :command_type: type of command to be executed, e.g. hivecmd, shellcmd, hadoopcmd\n        :tags: array of tags to be assigned with the command\n        :cluster_label: cluster label on which the command will be executed\n        :name: name to be given to command\n        :notify: whether to send email on command completion or not (default is False)\n\n        **Arguments specific to command types**\n\n        hivecmd:\n            :query: inline query statement\n            :script_location: s3 location containing query statement\n            :sample_size: size of sample in bytes on which to run query\n            :macros: macro values which were used in query\n            :sample_size: size of sample in bytes on which to run query\n            :hive-version: Specifies the hive version to be used. eg: 0.13,1.2,etc.\n        prestocmd:\n            :query: inline query statement\n            :script_location: s3 location containing query statement\n            :macros: macro values which were used in query\n        hadoopcmd:\n            :sub_commnad: must be one these ["jar", "s3distcp", "streaming"] followed by\n                1 or more args\n        shellcmd:\n            :script: inline command with args\n            :script_location: s3 location containing query statement\n            :files: list of files in s3 bucket as file1,file2 format. These files will be\n                copied into the working directory where the qubole command is being\n                executed.\n            :archives: list of archives in s3 bucket as archive1,archive2 format. These\n                will be unarchived into the working directory where the qubole command is\n                being executed\n            :parameters: any extra args which need to be passed to script (only when\n                script_location is supplied)\n        pigcmd:\n            :script: inline query statement (latin_statements)\n            :script_location: s3 location containing pig query\n            :parameters: any extra args which need to be passed to script (only when\n                script_location is supplied\n        sparkcmd:\n            :program: the complete Spark Program in Scala, R, or Python\n            :cmdline: spark-submit command line, all required information must be specify\n                in cmdline itself.\n            :sql: inline sql query\n            :script_location: s3 location containing query statement\n            :language: language of the program, Scala, R, or Python\n            :app_id: ID of an Spark job server app\n            :arguments: spark-submit command line arguments\n            :user_program_arguments: arguments that the user program takes in\n            :macros: macro values which were used in query\n            :note_id: Id of the Notebook to run\n        dbtapquerycmd:\n            :db_tap_id: data store ID of the target database, in Qubole.\n            :query: inline query statement\n            :macros: macro values which were used in query\n        dbexportcmd:\n            :mode: Can be 1 for Hive export or 2 for HDFS/S3 export\n            :schema: Db schema name assumed accordingly by database if not specified\n            :hive_table: Name of the hive table\n            :partition_spec: partition specification for Hive table.\n            :dbtap_id: data store ID of the target database, in Qubole.\n            :db_table: name of the db table\n            :db_update_mode: allowinsert or updateonly\n            :db_update_keys: columns used to determine the uniqueness of rows\n            :export_dir: HDFS/S3 location from which data will be exported.\n            :fields_terminated_by: hex of the char used as column separator in the dataset\n            :use_customer_cluster: To use cluster to run command\n            :customer_cluster_label: the label of the cluster to run the command on\n            :additional_options: Additional Sqoop options which are needed enclose options in\n                double or single quotes e.g. \'--map-column-hive id=int,data=string\'\n        dbimportcmd:\n            :mode: 1 (simple), 2 (advance)\n            :hive_table: Name of the hive table\n            :schema: Db schema name assumed accordingly by database if not specified\n            :hive_serde: Output format of the Hive Table\n            :dbtap_id: data store ID of the target database, in Qubole.\n            :db_table: name of the db table\n            :where_clause: where clause, if any\n            :parallelism: number of parallel db connections to use for extracting data\n            :extract_query: SQL query to extract data from db. $CONDITIONS must be part\n                of the where clause.\n            :boundary_query: Query to be used get range of row IDs to be extracted\n            :split_column: Column used as row ID to split data into ranges (mode 2)\n            :use_customer_cluster: To use cluster to run command\n            :customer_cluster_label: the label of the cluster to run the command on\n            :additional_options: Additional Sqoop options which are needed enclose options in\n                double or single quotes\n\n    .. note:\n\n        Following fields are template-supported : ``query``, ``script_location``,\n        ``sub_command``, ``script``, ``files``, ``archives``, ``program``, ``cmdline``,\n        ``sql``, ``where_clause``, ``extract_query``, ``boundary_query``, ``macros``,\n        ``tags``, ``name``, ``parameters``, ``dbtap_id``, ``hive_table``, ``db_table``,\n        ``split_column``, ``note_id``, ``db_update_keys``, ``export_dir``,\n        ``partition_spec``, ``qubole_conn_id``, ``arguments``, ``user_program_arguments``.\n        You can also use ``.txt`` files for template driven use cases.\n\n    .. note:\n\n        In QuboleOperator there is a default handler for task failures and retries,\n        which generally kills the command running at QDS for the corresponding task\n        instance. You can override this behavior by providing your own failure and retry\n        handler in task definition.\n    '
+    template_fields = ('query', 'script_location', 'sub_command', 'script', 'files',
+                       'archives', 'program', 'cmdline', 'sql', 'where_clause', 'tags',
+                       'extract_query', 'boundary_query', 'macros', 'name', 'parameters',
+                       'dbtap_id', 'hive_table', 'db_table', 'split_column', 'note_id',
+                       'db_update_keys', 'export_dir', 'partition_spec', 'qubole_conn_id',
+                       'arguments', 'user_program_arguments', 'cluster_label')
+    template_ext = ('.txt', )
+    ui_color = '#3064A1'
+    ui_fgcolor = '#fff'
+    qubole_hook_allowed_args_list = ['command_type', 'qubole_conn_id', 'fetch_logs']
+    operator_extra_links = (
+     QDSLink(),)
+
+    @apply_defaults
+    def __init__(self, qubole_conn_id='qubole_default', *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.kwargs['qubole_conn_id'] = qubole_conn_id
+        self.hook = None
+        filtered_base_kwargs = self._get_filtered_args(kwargs)
+        (super(QuboleOperator, self).__init__)(*args, **filtered_base_kwargs)
+        if self.on_failure_callback is None:
+            self.on_failure_callback = QuboleHook.handle_failure_retry
+        if self.on_retry_callback is None:
+            self.on_retry_callback = QuboleHook.handle_failure_retry
+
+    def _get_filtered_args(self, all_kwargs):
+        qubole_args = flatten_list(COMMAND_ARGS.values()) + HYPHEN_ARGS + flatten_list(POSITIONAL_ARGS.values()) + self.qubole_hook_allowed_args_list
+        return {key:value for key, value in all_kwargs.items() if key not in qubole_args}
+
+    def execute(self, context):
+        return self.get_hook().execute(context)
+
+    def on_kill(self, ti=None):
+        if self.hook:
+            self.hook.kill(ti)
+        else:
+            self.get_hook().kill(ti)
+
+    def get_results(self, ti=None, fp=None, inline=True, delim=None, fetch=True):
+        return self.get_hook().get_results(ti, fp, inline, delim, fetch)
+
+    def get_log(self, ti):
+        return self.get_hook().get_log(ti)
+
+    def get_jobs_id(self, ti):
+        return self.get_hook().get_jobs_id(ti)
+
+    def get_hook(self):
+        return QuboleHook(*self.args, **self.kwargs)
+
+    def __getattribute__(self, name):
+        if name in QuboleOperator.template_fields:
+            if name in self.kwargs:
+                return self.kwargs[name]
+            else:
+                return ''
+        else:
+            return object.__getattribute__(self, name)
+
+    def __setattr__(self, name, value):
+        if name in QuboleOperator.template_fields:
+            self.kwargs[name] = value
+        else:
+            object.__setattr__(self, name, value)

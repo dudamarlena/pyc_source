@@ -1,0 +1,2 @@
+PyUserInput==0.1.9
+pyperclip==1.5.26

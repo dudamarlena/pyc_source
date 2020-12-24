@@ -1,0 +1,158 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.macosx-10.7-x86_64/egg/airflow/contrib/hooks/aws_hook.py
+# Compiled at: 2019-09-11 03:47:34
+# Size of source mod 2**32: 8297 bytes
+import boto3, configparser, logging
+from airflow.exceptions import AirflowException
+from airflow.hooks.base_hook import BaseHook
+
+def _parse_s3_config(config_file_name, config_format='boto', profile=None):
+    """
+    Parses a config file for s3 credentials. Can currently
+    parse boto, s3cmd.conf and AWS SDK config formats
+
+    :param config_file_name: path to the config file
+    :type config_file_name: str
+    :param config_format: config type. One of "boto", "s3cmd" or "aws".
+        Defaults to "boto"
+    :type config_format: str
+    :param profile: profile name in AWS type config file
+    :type profile: str
+    """
+    config = configparser.ConfigParser()
+    if config.read(config_file_name):
+        sections = config.sections()
+    else:
+        raise AirflowException("Couldn't read {0}".format(config_file_name))
+    if config_format is None:
+        config_format = 'boto'
+    else:
+        conf_format = config_format.lower()
+        if conf_format == 'boto':
+            if profile is not None:
+                if 'profile ' + profile in sections:
+                    cred_section = 'profile ' + profile
+            cred_section = 'Credentials'
+        elif conf_format == 'aws':
+            if profile is not None:
+                cred_section = profile
+        else:
+            cred_section = 'default'
+        if conf_format in ('boto', 'aws'):
+            key_id_option = 'aws_access_key_id'
+            secret_key_option = 'aws_secret_access_key'
+        else:
+            key_id_option = 'access_key'
+            secret_key_option = 'secret_key'
+        if cred_section not in sections:
+            raise AirflowException('This config file format is not recognized')
+        else:
+            try:
+                access_key = config.get(cred_section, key_id_option)
+                secret_key = config.get(cred_section, secret_key_option)
+            except Exception:
+                logging.warning('Option Error in parsing s3 config file')
+                raise
+
+            return (access_key, secret_key)
+
+
+class AwsHook(BaseHook):
+    """AwsHook"""
+
+    def __init__(self, aws_conn_id='aws_default', verify=None):
+        self.aws_conn_id = aws_conn_id
+        self.verify = verify
+
+    def _get_credentials(self, region_name):
+        aws_access_key_id = None
+        aws_secret_access_key = None
+        aws_session_token = None
+        endpoint_url = None
+        if self.aws_conn_id:
+            try:
+                connection_object = self.get_connection(self.aws_conn_id)
+                extra_config = connection_object.extra_dejson
+                if connection_object.login:
+                    aws_access_key_id = connection_object.login
+                    aws_secret_access_key = connection_object.password
+                else:
+                    if 'aws_secret_access_key' in extra_config:
+                        aws_access_key_id = extra_config['aws_access_key_id']
+                        aws_secret_access_key = extra_config['aws_secret_access_key']
+                    else:
+                        if 's3_config_file' in extra_config:
+                            aws_access_key_id, aws_secret_access_key = _parse_s3_config(extra_config['s3_config_file'], extra_config.get('s3_config_format'), extra_config.get('profile'))
+                if region_name is None:
+                    region_name = extra_config.get('region_name')
+                role_arn = extra_config.get('role_arn')
+                external_id = extra_config.get('external_id')
+                aws_account_id = extra_config.get('aws_account_id')
+                aws_iam_role = extra_config.get('aws_iam_role')
+                if role_arn is None:
+                    if aws_account_id is not None:
+                        if aws_iam_role is not None:
+                            role_arn = 'arn:aws:iam::{}:role/{}'.format(aws_account_id, aws_iam_role)
+                if role_arn is not None:
+                    sts_session = boto3.session.Session(aws_access_key_id=aws_access_key_id,
+                      aws_secret_access_key=aws_secret_access_key,
+                      region_name=region_name)
+                    sts_client = sts_session.client('sts')
+                    if external_id is None:
+                        sts_response = sts_client.assume_role(RoleArn=role_arn,
+                          RoleSessionName=('Airflow_' + self.aws_conn_id))
+                    else:
+                        sts_response = sts_client.assume_role(RoleArn=role_arn,
+                          RoleSessionName=('Airflow_' + self.aws_conn_id),
+                          ExternalId=external_id)
+                    credentials = sts_response['Credentials']
+                    aws_access_key_id = credentials['AccessKeyId']
+                    aws_secret_access_key = credentials['SecretAccessKey']
+                    aws_session_token = credentials['SessionToken']
+                endpoint_url = extra_config.get('host')
+            except AirflowException:
+                pass
+
+        return (
+         boto3.session.Session(aws_access_key_id=aws_access_key_id,
+           aws_secret_access_key=aws_secret_access_key,
+           aws_session_token=aws_session_token,
+           region_name=region_name), endpoint_url)
+
+    def get_client_type(self, client_type, region_name=None, config=None):
+        session, endpoint_url = self._get_credentials(region_name)
+        return session.client(client_type, endpoint_url=endpoint_url, config=config,
+          verify=(self.verify))
+
+    def get_resource_type(self, resource_type, region_name=None, config=None):
+        session, endpoint_url = self._get_credentials(region_name)
+        return session.resource(resource_type, endpoint_url=endpoint_url, config=config,
+          verify=(self.verify))
+
+    def get_session(self, region_name=None):
+        """Get the underlying boto3.session."""
+        session, _ = self._get_credentials(region_name)
+        return session
+
+    def get_credentials(self, region_name=None):
+        """Get the underlying `botocore.Credentials` object.
+
+        This contains the following authentication attributes: access_key, secret_key and token.
+        """
+        session, _ = self._get_credentials(region_name)
+        return session.get_credentials().get_frozen_credentials()
+
+    def expand_role(self, role):
+        """
+        If the IAM role is a role name, get the Amazon Resource Name (ARN) for the role.
+        If IAM role is already an IAM role ARN, no change is made.
+
+        :param role: IAM role name or ARN
+        :return: IAM role ARN
+        """
+        if '/' in role:
+            return role
+        else:
+            return self.get_client_type('iam').get_role(RoleName=role)['Role']['Arn']

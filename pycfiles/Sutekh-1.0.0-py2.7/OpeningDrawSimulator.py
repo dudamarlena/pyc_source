@@ -1,0 +1,175 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/sutekh/gui/plugins/OpeningDrawSimulator.py
+# Compiled at: 2019-12-11 16:37:54
+"""Simulate the opening hand draw."""
+import gtk
+from sutekh.gui.PluginManager import SutekhPlugin
+from sutekh.base.gui.SutekhDialog import do_complaint_error
+from sutekh.base.gui.plugins.BaseOpeningDraw import BaseOpeningDraw, fill_string, format_dict, draw_cards, get_cards_filter, hypergeometric_mean, fill_frame, check_cards
+from sutekh.core.Filters import CryptCardFilter, CardFunctionFilter
+from sutekh.base.core.BaseFilters import MultiCardTypeFilter, CardTypeFilter, FilterNot
+
+class HandDetails(object):
+    """Convience class for holding drawn hand details"""
+
+    def __init__(self, dHand, dCrypt, sTypeDetails, sPropDetails, dNextHand, dNextCrypt):
+        self.sHand = format_dict(dHand)
+        self.sCrypt = format_dict(dCrypt)
+        self.sType = sTypeDetails
+        self.sProp = sPropDetails
+        self.dNextHand = dNextHand
+        self.dNextCrypt = dNextCrypt
+
+
+class OpeningHandSimulator(SutekhPlugin, BaseOpeningDraw):
+    """Simulate opening hands."""
+    COLUMN_WIDTH = 290
+    sHelpText = 'This tool treats the card set as a completed deck, and\n                   displays the expected distribution of cards in the opening\n                   hand and crypt. It is intended to give you some idea of how\n                   the deck will work in practice. In addition, you can\n                   generate example opening hands and crypts by clicking the\n                   _Draw sample hand_ button.'
+
+    def __init__(self, *args, **kwargs):
+        super(OpeningHandSimulator, self).__init__(*args, **kwargs)
+        self.dCardTypes = {}
+        self.dCardProperties = {}
+        self.aLibrary = []
+        self.aCrypt = []
+        self.iMoreLib = 0
+        self.iMoreCrypt = 0
+
+    def _get_cards(self):
+        """Extract card details from the card set."""
+        oCryptFilter = CryptCardFilter()
+        self.aCrypt = get_cards_filter(self.model, oCryptFilter)
+        self.aLibrary = get_cards_filter(self.model, FilterNot(oCryptFilter))
+        if len(self.aLibrary) < 7:
+            do_complaint_error('Library needs to be at least as large as the opening hand')
+            return False
+        if len(self.aCrypt) < 4:
+            do_complaint_error('Crypt needs to be at least as large as the opening draw')
+            return False
+        for sType in MultiCardTypeFilter.get_values():
+            aList = get_cards_filter(self.model, CardTypeFilter(sType))
+            if aList and aList[0] in self.aLibrary:
+                self.dCardTypes[sType] = set([ oC.name for oC in aList ])
+
+        for sFunction in CardFunctionFilter.get_values():
+            aList = get_cards_filter(self.model, CardFunctionFilter(sFunction))
+            if aList:
+                self.dCardProperties[sFunction] = set([ oC.name for oC in aList
+                                                      ])
+
+        return True
+
+    def _cleanup(self):
+        """Cleanup"""
+        self.dCardTypes = {}
+        self.dCardProperties = {}
+        self.aLibrary = []
+        super(OpeningHandSimulator, self)._cleanup()
+
+    def _fill_stats(self, oDialog):
+        """Fill in the stats from the draws"""
+        oHBox = gtk.HBox(True, 3)
+        oDialog.vbox.pack_start(oHBox)
+        dLibProbs = self._get_lib_props()
+        oHBox.pack_start(self._setup_grouped_view(dLibProbs, self.dCardTypes, 'Card Types'))
+        oHBox.pack_start(self._setup_grouped_view(dLibProbs, self.dCardProperties, 'Card Properties'))
+        oHBox.pack_start(self._setup_flat_view(self.aCrypt, 4, 'Crypt Cards'))
+        oHBox.show_all()
+
+    def _get_lib_props(self):
+        """Calculate the expected number of each card in the opening hand"""
+        dLibCount = {}
+        for oCard in self.aLibrary:
+            dLibCount.setdefault(oCard.name, 0)
+            dLibCount[oCard.name] += 1
+
+        dLibProbs = {}
+        iTot = len(self.aLibrary)
+        for sName, iCount in dLibCount.iteritems():
+            dLibProbs[sName] = hypergeometric_mean(iCount, 7, iTot)
+
+        return dLibProbs
+
+    def _do_draw_hand(self):
+        """Create a new sample hand"""
+        dProps = {}
+        dTypes = {}
+        dHand, aThisLib = draw_cards(self.aLibrary, 7, True)
+        check_cards(dHand, self.dCardTypes, dTypes)
+        check_cards(dHand, self.dCardProperties, dProps)
+        dCrypt, aThisCrypt = draw_cards(self.aCrypt, 4, True)
+        dNextHand = {}
+        dNextCrypt = {}
+        for iNextDraw in range(3):
+            dNextHand[iNextDraw] = {}
+            dNextCrypt[iNextDraw] = {}
+            dNextHand[iNextDraw], _aTemp = draw_cards(aThisLib, 5, False)
+            dNextCrypt[iNextDraw], _aTemp = draw_cards(aThisCrypt, 1, False)
+
+        return HandDetails(dHand, dCrypt, fill_string(dTypes, dHand, self.dCardTypes), fill_string(dProps, dHand, self.dCardProperties), dNextHand, dNextCrypt)
+
+    def _fill_hand(self, oHBox):
+        """Fill in details of the hand"""
+        self.iMoreLib = 0
+        self.iMoreCrypt = 0
+        oHandLabel = gtk.Label()
+        oHandLabel.set_markup(self.aDrawnHands[(self.iCurHand - 1)].sHand)
+        oCryptLabel = gtk.Label()
+        oCryptLabel.set_markup(self.aDrawnHands[(self.iCurHand - 1)].sCrypt)
+        oCryptInfoBox = gtk.VBox(False, 0)
+        oHandInfoBox = gtk.VBox(False, 0)
+        oHandInfoBox.pack_start(oHandLabel, True, True)
+        oMoreCards = gtk.Button('Next 5')
+        oMoreCards.connect('clicked', self._more_lib, oHandInfoBox)
+        oHandInfoBox.pack_start(oMoreCards, False, False)
+        oCryptInfoBox.pack_start(oCryptLabel, True, True)
+        oMoreCrypt = gtk.Button('Next 1')
+        oMoreCrypt.connect('clicked', self._more_crypt, oCryptInfoBox)
+        oCryptInfoBox.pack_start(oMoreCrypt, False, False)
+        oFrame = gtk.Frame('Opening Hand')
+        oFrame.add(oHandInfoBox)
+        oHBox.pack_start(oFrame)
+        oFrame = gtk.Frame('Opening Crypt Draw')
+        oFrame.add(oCryptInfoBox)
+        oHBox.pack_start(oFrame)
+
+    def _more_lib(self, oButton, oBox):
+        """Add the next 5 library cards"""
+        if self.iMoreLib < 3:
+            dNextHand = self.aDrawnHands[(self.iCurHand - 1)].dNextHand[self.iMoreLib]
+            oCardLabel = gtk.Label()
+            oCardLabel.set_markup(format_dict(dNextHand))
+            oBox.remove(oButton)
+            oBox.pack_start(oCardLabel, True, True)
+            self.iMoreLib += 1
+            if self.iMoreLib < 3:
+                oBox.pack_start(oButton, False, False)
+            oBox.show_all()
+
+    def _more_crypt(self, oButton, oBox):
+        """Add the next crypt card"""
+        if self.iMoreCrypt < 3:
+            dNextCrypt = self.aDrawnHands[(self.iCurHand - 1)].dNextCrypt[self.iMoreCrypt]
+            oCardLabel = gtk.Label()
+            oCardLabel.set_markup(format_dict(dNextCrypt))
+            oBox.remove(oButton)
+            oBox.pack_start(oCardLabel, True, True)
+            self.iMoreCrypt += 1
+            if self.iMoreCrypt < 3:
+                oBox.pack_start(oButton, False, False)
+            oBox.show_all()
+
+    def _redraw_detail_box(self):
+        """Fill in the details for the given hand"""
+        oDetailBox = gtk.VBox(False, 2)
+        oHBox = gtk.HBox(False, 2)
+        oHBox.pack_start(fill_frame(self.aDrawnHands[(self.iCurHand - 1)].sType, 'Card Types'))
+        oHBox.pack_start(fill_frame(self.aDrawnHands[(self.iCurHand - 1)].sProp, 'Card Properties'))
+        oDetailBox.pack_start(oHBox)
+        return oDetailBox
+
+
+plugin = OpeningHandSimulator

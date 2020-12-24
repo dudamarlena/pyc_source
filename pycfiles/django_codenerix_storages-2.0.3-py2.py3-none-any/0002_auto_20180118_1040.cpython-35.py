@@ -1,0 +1,15 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3351)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/www.django/makarthy/codenerix_storages/migrations/0002_auto_20180118_1040.py
+# Compiled at: 2018-01-18 04:57:21
+# Size of source mod 2**32: 499 bytes
+from __future__ import unicode_literals
+from django.db import migrations, models
+
+class Migration(migrations.Migration):
+    dependencies = [
+     ('codenerix_storages', '0001_initial')]
+    operations = [
+     migrations.AlterField(model_name='storageboxkind', name='max_weight', field=models.FloatField(blank=True, null=True, verbose_name='Max weight'))]

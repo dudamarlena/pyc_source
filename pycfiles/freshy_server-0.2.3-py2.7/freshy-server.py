@@ -1,0 +1,105 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/freshy-server/freshy-server.py
+# Compiled at: 2012-02-29 12:40:13
+"""
+Parts of this code is reused from the samples at 
+http://www.tavendo.de/autobahn/tutorial/broadcast.html
+and is Copyright 2011 Tavendo GmbH
+"""
+import logging, sys, os, time
+from watchdog.observers import Observer
+from watchdog.events import LoggingEventHandler
+from twisted.internet import reactor
+from autobahn.websocket import WebSocketServerFactory, WebSocketServerProtocol, listenWS, WebSocketProtocol, ConnectionRequest
+from MessangerEventHandler import MessangerEventHandler
+from twisted.python import log
+
+class FreshyServerProtocol(WebSocketServerProtocol):
+
+    def connectionMade(self):
+        print 'connection made'
+        WebSocketServerProtocol.connectionMade(self)
+
+    def onOpen(self):
+        WebSocketServerProtocol.onOpen(self)
+        self.factory.register(self)
+        print 'Connection opened to', self.peerstr
+
+    def sendFSEvent(self, json):
+        WebSocketProtocol.sendMessage(self, json)
+        print 'to', self.peerstr
+
+    def onClose(self, wasClean, code, reason):
+        print 'closed', self.peerstr
+        WebSocketServerProtocol.onClose(self, wasClean, code, reason)
+        self.factory.unregister(self)
+
+
+class FreshyServerFactory(WebSocketServerFactory):
+    protocol = FreshyServerProtocol
+
+    def __init__(self, url='ws://localhost', port=4444):
+        addr = url + ':' + str(port)
+        print 'listening on', addr
+        WebSocketServerFactory.__init__(self, addr)
+        self.clients = []
+
+    def register(self, client):
+        if client not in self.clients:
+            print 'registered client', client.peerstr
+            self.clients.append(client)
+
+    def unregister(self, client):
+        if client in self.clients:
+            print 'unregistered client', client.peerstr
+            self.clients.remove(client)
+        self._printConnected()
+
+    def _printConnected(self):
+        print 'connected clients:[',
+        for client in self.clients:
+            print client.peerstr + ',',
+
+        print ']'
+
+    def notify_clients(self, message):
+        print 'broadcasting ', message
+        for c in self.clients:
+            c.sendFSEvent(message)
+
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print 'Usage: python freshy-server.py <dirs>'
+        sys.exit(1)
+    observers = []
+    log.startLogging(sys.stdout)
+    ffactory = FreshyServerFactory('ws://localhost', 4444)
+    ffactory.protocol = FreshyServerProtocol
+    listenWS(ffactory)
+    for arg in sys.argv[1:]:
+        dir_path = os.path.abspath(arg)
+        if not os.path.exists(dir_path):
+            print dir_path, 'does not exist.'
+            sys.exit(1)
+        if not os.path.isdir(dir_path):
+            print dir_path, 'is not a directory.'
+            sys.exit(1)
+        event_handler = MessangerEventHandler(ffactory, reactor, os.getcwd())
+        observer = Observer()
+        observer.schedule(event_handler, path=dir_path, recursive=True)
+        observer.start()
+        observers.append(observer)
+
+    try:
+        reactor.run()
+    except KeyboardInterrupt:
+        for obs in observers:
+            obs.stop()
+
+        reactor.stop()
+        print '\nbye'
+        sys.exit(1)

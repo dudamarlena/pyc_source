@@ -1,0 +1,107 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.5 (3350)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/contractvmd/api.py
+# Compiled at: 2015-12-10 17:15:43
+# Size of source mod 2**32: 4707 bytes
+import time, logging, json, inspect, random
+from . import config
+from .proto import Protocol
+from .chain.message import *
+from threading import Thread
+from threading import Lock
+from werkzeug.wrappers import Request, Response
+from werkzeug.serving import run_simple
+from jsonrpc import JSONRPCResponseManager, dispatcher
+logger = logging.getLogger(config.APP_NAME)
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+
+class API:
+
+    def __init__(self, backend, chain, dht, port, threads):
+        self.port = int(port)
+        self.threads = int(threads)
+        self.dht = dht
+        self.backend = backend
+        self.chain = chain
+        self.RPCHelp = {'broadcast': {'args': ['signed_transaction', 'temp_id'], 'return': {'txid': 'transaction_hash'}}, 
+         'info': {'args': [], 'return': {'chain': {'code': 'XLT', 
+                                       'height': 561596, 
+                                       'name': 'Litecoin testnet'}, 
+                             
+                             'node': {'backend': ['rpc', 'chainsoapi'], 
+                                      'dapps': {'list': ['cotst'], 'enabled': ['cotst']}, 
+                                      'version': '0.1'}}}, 
+         
+         'net.peers': {'args': [], 'return': {'list': [('host', 'port', 'id')]}}, 
+         'net.connections': {'args': [], 'return': {'count': 'total_peers'}}, 
+         'help': {'args': [], 'return': {}}}
+        self.RPCDispatcher = {}
+        self.RPCDispatcher['broadcast'] = self.method_broadcast
+        self.RPCDispatcher['help'] = self.method_help
+        self.RPCDispatcher['info'] = self.method_info
+        self.RPCDispatcher['net.peers'] = self.method_net_peers
+        self.RPCDispatcher['net.connections'] = self.method_net_connections
+
+    def registerRPCMethod(self, name, method):
+        self.RPCDispatcher[name] = method['call']
+        self.RPCHelp[name] = method['help']
+
+    def method_net_connections(self):
+        return {'count': len(self.dht.peers())}
+
+    def method_net_peers(self):
+        return self.dht.peers()
+
+    def method_broadcast(self, thex, temp_id):
+        r = self.backend.broadcastTransaction(thex)
+        if r != None:
+            self.dht.publish(temp_id, r)
+        return {'txid': r}
+
+    def method_help(self):
+        return self.RPCHelp
+
+    def method_info(self):
+        return {'chain': {'height': self.chain.getChainHeight(), 'regtest': config.CONF['regtest'], 
+                   'code': self.chain.getChainCode(), 'name': self.chain.getChainName()}, 
+         
+         'node': {'dapps': config.CONF['dapps'], 'backend': config.CONF['backend']['protocol'], 
+                  'version': config.APP_VERSION}}
+
+    @Request.application
+    def serveApplication(self, request):
+        try:
+            rjson = json.loads(request.data.decode('ascii'))
+        except:
+            apiresponse = Response({}, mimetype='application/json')
+            apiresponse.headers.add('Access-Control-Allow-Origin', '*')
+            apiresponse.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH')
+            apiresponse.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+            return apiresponse
+
+        if rjson['method'] in self.RPCDispatcher:
+            nargs = len(inspect.getargspec(self.RPCDispatcher[rjson['method']]).args) - 1
+            if len(rjson['params']) != nargs:
+                logger.error('Client invalid request arguments: "%s" %s', rjson['method'], str(rjson['params']))
+            elif rjson['method'].find('get') == -1 and rjson['method'].find('info') == -1:
+                logger.debug('Client request: %s', rjson['method'])
+        else:
+            logger.error('Client invalid request: "%s" %s', rjson['method'], str(rjson['params']))
+        response = JSONRPCResponseManager.handle(request.data, self.RPCDispatcher)
+        apiresponse = Response(response.json, mimetype='application/json')
+        apiresponse.headers.add('Access-Control-Allow-Origin', '*')
+        apiresponse.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH')
+        apiresponse.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        return apiresponse
+
+    def serverThread(self):
+        if self.threads > 1:
+            run_simple('localhost', self.port, self.serveApplication, threaded=True, processes=self.threads, use_debugger=False)
+        else:
+            run_simple('localhost', self.port, self.serveApplication, use_debugger=False)
+
+    def run(self):
+        logger.info('Starting jsonrpc api server at port %d (%d threads)', self.port, self.threads)
+        self.servethread = Thread(target=self.serverThread, args=())
+        self.servethread.start()

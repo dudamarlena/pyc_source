@@ -1,0 +1,58 @@
+# uncompyle6 version 3.7.4
+# PyPy Python bytecode 2.7 (62218)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/greg/Dropbox/code/dealertrack/flake8-diff/flake8diff/vcs/base.py
+# Compiled at: 2015-07-06 16:58:51
+from __future__ import unicode_literals, print_function
+import re
+from ..exceptions import VCSNotInstalledError
+IS_PYTHON = re.compile(b'.*[.]py$')
+
+class VCSBase(object):
+    name = None
+
+    def __init__(self, commits, options):
+        self.commits = commits
+        self.options = options
+        try:
+            self.vcs = self.get_vcs()
+        except:
+            raise VCSNotInstalledError(self.name)
+
+    def get_vcs(self):
+        """
+        Get the binary executable of the vcs
+        """
+        raise NotImplementedError
+
+    def is_used(self):
+        """
+        If this VCS is used
+        """
+        raise NotImplementedError
+
+    def changed_lines(self, filename):
+        """
+        Get a list of all lines changed by this set of commits.
+        """
+        raise NotImplementedError
+
+    def filter_file(self, filename):
+        """
+        Function which given filename determines
+        if the file should be compared
+        """
+        return IS_PYTHON.match(filename)
+
+    def changed_files(self):
+        """
+        Return a list of all changed files.
+        """
+        raise NotImplementedError
+
+    def check(self):
+        """
+        Returns True if the configuration is correct or raises the exception
+        """
+        return True

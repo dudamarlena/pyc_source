@@ -1,0 +1,10 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: c:\Users\rodrigo\github\datalib\libextract\tests\__init__.py
+# Compiled at: 2015-04-22 21:09:43
+import os
+
+def asset_path(filename, asset_dir='assets'):
+    return os.path.join(os.path.dirname(__file__), asset_dir, filename)

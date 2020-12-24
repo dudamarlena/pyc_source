@@ -1,0 +1,1426 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.15-x86_64/egg/btrdb/stream.py
+# Compiled at: 2020-05-13 17:11:01
+# Size of source mod 2**32: 46883 bytes
+"""
+Module for Stream and related classes
+"""
+import re, json, uuid as uuidlib
+from copy import deepcopy
+from collections.abc import Sequence
+from btrdb.utils.buffer import PointBuffer
+from btrdb.point import RawPoint, StatPoint
+from btrdb.transformers import StreamSetTransformer
+from btrdb.exceptions import BTrDBError, InvalidOperation
+from btrdb.utils.timez import currently_as_ns, to_nanoseconds
+from btrdb.utils.conversion import AnnotationEncoder, AnnotationDecoder
+import btrdb.utils.general as pw
+INSERT_BATCH_SIZE = 50000
+MINIMUM_TIME = -1152921504606846976
+MAXIMUM_TIME = 3458764513820540927
+try:
+    RE_PATTERN = re._pattern_type
+except Exception:
+    RE_PATTERN = re.Pattern
+else:
+
+    class Stream(object):
+        __doc__ = '\n    An object that represents a specific time series stream in the BTrDB database.\n\n    Parameters\n    ----------\n        btrdb : BTrDB\n            A reference to the BTrDB object connecting this stream back to the physical server.\n        uuid : UUID\n            The unique UUID identifier for this stream.\n        db_values : kwargs\n            Framework only initialization arguments.  Not for developer use.\n\n    '
+
+        def __init__(self, btrdb, uuid, **db_values):
+            db_args = ('known_to_exist', 'collection', 'tags', 'annotations', 'property_version')
+            for key in db_args:
+                value = db_values.pop(key, None)
+                setattr(self, '_{}'.format(key), value)
+            else:
+                if db_values:
+                    bad_keys = ', '.join(db_values.keys())
+                    raise TypeError("got unexpected db_values argument(s) '{}'".format(bad_keys))
+                self._btrdb = btrdb
+                self._uuid = uuid
+
+        def refresh_metadata(self):
+            """
+        Refreshes the locally cached meta data for a stream
+
+        Queries the BTrDB server for all stream metadata including collection,
+        annotation, and tags. This method requires a round trip to the server.
+        """
+            ep = self._btrdb.ep
+            self._collection, self._property_version, self._tags, self._annotations, _ = ep.streamInfo(self._uuid, False, True)
+            self._known_to_exist = True
+            self._annotations = {json.loads(val, cls=AnnotationDecoder):key for key, val in self._annotations.items()}
+
+        def exists--- This code section failed: ---
+
+ L. 115         0  LOAD_FAST                'self'
+                2  LOAD_ATTR                _known_to_exist
+                4  POP_JUMP_IF_FALSE    10  'to 10'
+
+ L. 116         6  LOAD_CONST               True
+                8  RETURN_VALUE     
+             10_0  COME_FROM             4  '4'
+
+ L. 118        10  SETUP_FINALLY        26  'to 26'
+
+ L. 119        12  LOAD_FAST                'self'
+               14  LOAD_METHOD              refresh_metadata
+               16  CALL_METHOD_0         0  ''
+               18  POP_TOP          
+
+ L. 120        20  POP_BLOCK        
+               22  LOAD_CONST               True
+               24  RETURN_VALUE     
+             26_0  COME_FROM_FINALLY    10  '10'
+
+ L. 121        26  DUP_TOP          
+               28  LOAD_GLOBAL              BTrDBError
+               30  COMPARE_OP               exception-match
+               32  POP_JUMP_IF_FALSE    82  'to 82'
+               34  POP_TOP          
+               36  STORE_FAST               'bte'
+               38  POP_TOP          
+               40  SETUP_FINALLY        70  'to 70'
+
+ L. 122        42  LOAD_FAST                'bte'
+               44  LOAD_ATTR                code
+               46  LOAD_CONST               404
+               48  COMPARE_OP               ==
+               50  POP_JUMP_IF_FALSE    62  'to 62'
+
+ L. 123        52  POP_BLOCK        
+               54  POP_EXCEPT       
+               56  CALL_FINALLY         70  'to 70'
+               58  LOAD_CONST               False
+               60  RETURN_VALUE     
+             62_0  COME_FROM            50  '50'
+
+ L. 124        62  LOAD_FAST                'bte'
+               64  RAISE_VARARGS_1       1  'exception instance'
+               66  POP_BLOCK        
+               68  BEGIN_FINALLY    
+             70_0  COME_FROM            56  '56'
+             70_1  COME_FROM_FINALLY    40  '40'
+               70  LOAD_CONST               None
+               72  STORE_FAST               'bte'
+               74  DELETE_FAST              'bte'
+               76  END_FINALLY      
+               78  POP_EXCEPT       
+               80  JUMP_FORWARD         84  'to 84'
+             82_0  COME_FROM            32  '32'
+               82  END_FINALLY      
+             84_0  COME_FROM            80  '80'
+
+Parse error at or near `RETURN_VALUE' instruction at offset 24
+
+        def count(self, start=MINIMUM_TIME, end=MAXIMUM_TIME, pointwidth=62, precise=False, version=0):
+            """
+        Compute the total number of points in the stream
+
+        Counts the number of points in the specified window and version. By
+        default returns the latest total count of points in the stream. This
+        helper method sums the counts of all StatPoints returned by
+        ``aligned_windows``. Because of this, note that the start and end
+        timestamps may be adjusted if they are not powers of 2. For smaller
+        windows of time, you may also need to adjust the pointwidth to ensure
+        that the count granularity is captured appropriately.
+
+        Alternatively you can set the precise argument to True which will
+        give an exact count to the nanosecond but may be slower to execute.
+
+        Parameters
+        ----------
+        start : int or datetime like object, default: MINIMUM_TIME
+            The start time in nanoseconds for the range to be queried. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+
+        end : int or datetime like object, default: MAXIMUM_TIME
+            The end time in nanoseconds for the range to be queried. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+
+        pointwidth : int, default: 62
+            Specify the number of ns between data points (2**pointwidth).  If the value
+            is too large for the time window than the next smallest, appropriate
+            pointwidth will be used.
+
+        precise : bool, default: False
+            Forces the use of a windows query instead of aligned_windows
+            to determine exact count down to the nanosecond.  This will
+            be some amount slower than the aligned_windows version.
+
+        version : int, default: 0
+            Version of the stream to query
+
+        Returns
+        -------
+        int
+            The total number of points in the stream for the specified window.
+        """
+            if not precise:
+                pointwidth = min(pointwidth, pw.from_nanoseconds(to_nanoseconds(end) - to_nanoseconds(start)) - 1)
+                points = self.aligned_windows(start, end, pointwidth, version)
+                return sum([point.count for point, _ in points])
+            depth = 0
+            width = to_nanoseconds(end) - to_nanoseconds(start)
+            points = self.windows(start, end, width, depth, version)
+            return sum([point.count for point, _ in points])
+
+        @property
+        def btrdb(self):
+            """
+        Returns the stream's BTrDB object.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        BTrDB
+            The BTrDB database object.
+
+        """
+            return self._btrdb
+
+        @property
+        def uuid(self):
+            """
+        Returns the stream's UUID. The stream may nor may not exist
+        yet, depending on how the stream object was obtained.
+
+        Returns
+        -------
+        UUID
+            The unique identifier of the stream.
+
+        See Also
+        --------
+        stream.exists()
+
+        """
+            return self._uuid
+
+        @property
+        def name(self):
+            """
+        Returns the stream's name which is parsed from the stream tags.  This
+        may require a round trip to the server depending on how the stream was
+        acquired.
+
+        Returns
+        -------
+        str
+            The name of the stream.
+
+        """
+            return self.tags()['name']
+
+        @property
+        def unit(self):
+            """
+        Returns the stream's unit which is parsed from the stream tags.  This
+        may require a round trip to the server depending on how the stream was
+        acquired.
+
+        Returns
+        -------
+        str
+            The unit for values of the stream.
+
+        """
+            return self.tags()['unit']
+
+        @property
+        def collection(self):
+            """
+        Returns the collection of the stream. It may require a round trip to the
+        server depending on how the stream was acquired.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        str
+            the collection of the stream
+
+        """
+            if self._collection is not None:
+                return self._collection
+            self.refresh_metadata()
+            return self._collection
+
+        def earliest(self, version=0):
+            """
+        Returns the first point of data in the stream. Returns None if error
+        encountered during lookup or no values in stream.
+
+        Parameters
+        ----------
+        version : int, default: 0
+            Specify the version of the stream to query; if zero, queries the latest
+            stream state rather than pinning to a version.
+
+        Returns
+        -------
+        tuple
+            The first data point in the stream and the version of the stream
+            the value was retrieved at (tuple(RawPoint, int)).
+
+        """
+            start = MINIMUM_TIME
+            return self.nearest(start, version=version, backward=False)
+
+        def latest(self, version=0):
+            """
+        Returns last point of data in the stream. Returns None if error
+        encountered during lookup or no values in stream.
+
+        Parameters
+        ----------
+        version : int, default: 0
+            Specify the version of the stream to query; if zero, queries the latest
+            stream state rather than pinning to a version.
+
+        Returns
+        -------
+        tuple
+            The last data point in the stream and the version of the stream
+            the value was retrieved at (tuple(RawPoint, int)).
+
+        """
+            start = MAXIMUM_TIME
+            return self.nearest(start, version=version, backward=True)
+
+        def current(self, version=0):
+            """
+        Returns the point that is closest to the current timestamp, e.g. the latest
+        point in the stream up until now. Note that no future values will be returned.
+        Returns None if errors during lookup or there are no values before now.
+
+        Parameters
+        ----------
+        version : int, default: 0
+            Specify the version of the stream to query; if zero, queries the latest
+            stream state rather than pinning to a version.
+
+        Returns
+        -------
+        tuple
+            The last data point in the stream up until now and the version of the stream
+            the value was retrieved at (tuple(RawPoint, int)).
+        """
+            start = currently_as_ns()
+            return self.nearest(start, version, backward=True)
+
+        def tags(self, refresh=False):
+            """
+        Returns the stream's tags.
+
+        Tags returns the tags of the stream. It may require a round trip to the
+        server depending on how the stream was acquired.
+
+        Parameters
+        ----------
+        refresh: bool
+            Indicates whether a round trip to the server should be implemented
+            regardless of whether there is a local copy.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the tags.
+
+        """
+            if refresh or self._tags is None:
+                self.refresh_metadata()
+            return deepcopy(self._tags)
+
+        def annotations(self, refresh=False):
+            """
+        Returns a stream's annotations
+
+        Annotations returns the annotations of the stream (and the annotation
+        version). It will always require a round trip to the server. If you are
+        ok with stale data and want a higher performance version, use
+        Stream.CachedAnnotations().
+
+        Do not modify the resulting map.
+
+        Parameters
+        ----------
+        refresh: bool
+            Indicates whether a round trip to the server should be implemented
+            regardless of whether there is a local copy.
+
+        Returns
+        -------
+        tuple
+            A tuple containing a dictionary of annotations and an integer representing
+            the version of the metadata (tuple(dict, int)).
+
+        """
+            if refresh or self._annotations is None:
+                self.refresh_metadata()
+            return (deepcopy(self._annotations), deepcopy(self._property_version))
+
+        def version(self):
+            """
+        Returns the current data version of the stream.
+
+        Version returns the current data version of the stream. This is not
+        cached, it queries each time. Take care that you do not intorduce races
+        in your code by assuming this function will always return the same vaue
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        int
+            The version of the stream.
+
+        """
+            return self._btrdb.ep.streamInfo(self._uuid, True, False)[4]
+
+        def insert(self, data):
+            """
+        Insert new data in the form (time, value) into the series.
+
+        Inserts a list of new (time, value) tuples into the series. The tuples
+        in the list need not be sorted by time. If the arrays are larger than
+        appropriate, this function will automatically chunk the inserts. As a
+        consequence, the insert is not necessarily atomic, but can be used with
+        a very large array.
+
+        Parameters
+        ----------
+        data: list[tuple[int, float]]
+            A list of tuples in which each tuple contains a time (int) and
+            value (float) for insertion to the database
+
+        Returns
+        -------
+        int
+            The version of the stream after inserting new points.
+
+        """
+            i = 0
+            version = 0
+            while i < len(data):
+                thisBatch = data[i:i + INSERT_BATCH_SIZE]
+                version = self._btrdb.ep.insert(self._uuid, thisBatch)
+                i += INSERT_BATCH_SIZE
+
+            return version
+
+        def _update_tags_collection(self, tags, collection):
+            tags = self.tags() if tags is None else tags
+            collection = self.collection if collection is None else collection
+            if collection is None:
+                raise ValueError('collection must be provided to update tags or collection')
+            self._btrdb.ep.setStreamTags(uu=(self.uuid),
+              expected=(self._property_version),
+              tags=tags,
+              collection=collection)
+
+        def _update_annotations--- This code section failed: ---
+
+ L. 450         0  LOAD_GLOBAL              deepcopy
+                2  LOAD_DEREF               'annotations'
+                4  CALL_FUNCTION_1       1  ''
+                6  STORE_FAST               'serialized'
+
+ L. 451         8  LOAD_DEREF               'encoder'
+               10  LOAD_CONST               None
+               12  COMPARE_OP               is-not
+               14  POP_JUMP_IF_FALSE    38  'to 38'
+
+ L. 452        16  LOAD_CLOSURE             'encoder'
+               18  BUILD_TUPLE_1         1 
+               20  LOAD_DICTCOMP            '<code_object <dictcomp>>'
+               22  LOAD_STR                 'Stream._update_annotations.<locals>.<dictcomp>'
+               24  MAKE_FUNCTION_8          'closure'
+
+ L. 454        26  LOAD_FAST                'serialized'
+               28  LOAD_METHOD              items
+               30  CALL_METHOD_0         0  ''
+
+ L. 452        32  GET_ITER         
+               34  CALL_FUNCTION_1       1  ''
+               36  STORE_FAST               'serialized'
+             38_0  COME_FROM            14  '14'
+
+ L. 457        38  BUILD_LIST_0          0 
+               40  STORE_FAST               'removals'
+
+ L. 458        42  LOAD_FAST                'replace'
+               44  POP_JUMP_IF_FALSE    70  'to 70'
+
+ L. 459        46  LOAD_CLOSURE             'annotations'
+               48  BUILD_TUPLE_1         1 
+               50  LOAD_LISTCOMP            '<code_object <listcomp>>'
+               52  LOAD_STR                 'Stream._update_annotations.<locals>.<listcomp>'
+               54  MAKE_FUNCTION_8          'closure'
+               56  LOAD_FAST                'self'
+               58  LOAD_ATTR                _annotations
+               60  LOAD_METHOD              keys
+               62  CALL_METHOD_0         0  ''
+               64  GET_ITER         
+               66  CALL_FUNCTION_1       1  ''
+               68  STORE_FAST               'removals'
+             70_0  COME_FROM            44  '44'
+
+ L. 461        70  LOAD_FAST                'self'
+               72  LOAD_ATTR                _btrdb
+               74  LOAD_ATTR                ep
+               76  LOAD_ATTR                setStreamAnnotations
+
+ L. 462        78  LOAD_FAST                'self'
+               80  LOAD_ATTR                uuid
+
+ L. 463        82  LOAD_FAST                'self'
+               84  LOAD_ATTR                _property_version
+
+ L. 464        86  LOAD_FAST                'serialized'
+
+ L. 465        88  LOAD_FAST                'removals'
+
+ L. 461        90  LOAD_CONST               ('uu', 'expected', 'changes', 'removals')
+               92  CALL_FUNCTION_KW_4     4  '4 total positional and keyword args'
+               94  POP_TOP          
+
+Parse error at or near `LOAD_DICTCOMP' instruction at offset 20
+
+        def update(self, tags=None, annotations=None, collection=None, encoder=AnnotationEncoder, replace=False):
+            """
+        Updates metadata including tags, annotations, and collection as an
+        UPSERT operation.
+
+        By default, the update will only affect the keys and values in the
+        specified tags and annotations dictionaries, inserting them if they
+        don't exist, or updating the value for the key if it does exist. If
+        any of the update arguments (i.e. tags, annotations, collection) are
+        None, they will remain unchanged in the database.
+
+        To delete either tags or annotations, you must specify exactly which
+        keys and values you want set for the field and set `replace=True`. For
+        example:
+
+            >>> annotations, _ = stream.anotations()
+            >>> del annotations["key_to_delete"]
+            >>> stream.update(annotations=annotations, replace=True)
+
+        This ensures that all of the keys and values for the annotations are
+        preserved except for the key to be deleted.
+
+        Parameters
+        -----------
+        tags : dict, optional
+            Specify the tag key/value pairs as a dictionary to upsert or
+            replace. If None, the tags  will remain unchanged in the database.
+        annotations : dict, optional
+            Specify the annotations key/value pairs as a dictionary to upsert
+            or replace. If None, the annotations will remain unchanged in the
+            database.
+        collection : str, optional
+            Specify a new collection for the stream. If None, the collection
+            will remain unchanged.
+        encoder : json.JSONEncoder or None
+            JSON encoder class to use for annotation serialization. Set to None
+            to prevent JSON encoding of the annotations.
+        replace : bool, default: False
+            Replace all annotations or tags with the specified dictionaries
+            instead of performing the normal upsert operation. Specifying True
+            is the only way to remove annotation keys.
+
+        Returns
+        -------
+        int
+            The version of the metadata (separate from the version of the data)
+            also known as the "property version".
+
+        """
+            if tags is None:
+                if annotations is None:
+                    if collection is None:
+                        raise ValueError('you must supply a tags, annotations, or collection argument')
+            else:
+                if tags is not None:
+                    if isinstance(tags, dict) is False:
+                        raise TypeError('tags must be of type dict')
+                if annotations is not None:
+                    if isinstance(annotations, dict) is False:
+                        raise TypeError('annotations must be of type dict')
+                if collection is not None and isinstance(collection, str) is False:
+                    raise TypeError('collection must be of type string')
+            if tags is not None or collection is not None:
+                self._update_tags_collection(tags, collection)
+                self.refresh_metadata()
+            if annotations is not None:
+                self._update_annotations(annotations, encoder, replace)
+                self.refresh_metadata()
+            return self._property_version
+
+        def delete(self, start, end):
+            """
+        "Delete" all points between [`start`, `end`)
+
+        "Delete" all points between `start` (inclusive) and `end` (exclusive),
+        both in nanoseconds. As BTrDB has persistent multiversioning, the
+        deleted points will still exist as part of an older version of the
+        stream.
+
+        Parameters
+        ----------
+        start : int or datetime like object
+            The start time in nanoseconds for the range to be deleted. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+        end : int or datetime like object
+            The end time in nanoseconds for the range to be deleted. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+
+        Returns
+        -------
+        int
+            The version of the new stream created
+
+        """
+            return self._btrdb.ep.deleteRange(self._uuid, to_nanoseconds(start), to_nanoseconds(end))
+
+        def values(self, start, end, version=0):
+            """
+        Read raw values from BTrDB between time [a, b) in nanoseconds.
+
+        RawValues queries BTrDB for the raw time series data points between
+        `start` and `end` time, both in nanoseconds since the Epoch for the
+        specified stream `version`.
+
+        Parameters
+        ----------
+        start : int or datetime like object
+            The start time in nanoseconds for the range to be queried. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+        end : int or datetime like object
+            The end time in nanoseconds for the range to be queried. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+        version: int
+            The version of the stream to be queried
+
+        Returns
+        ------
+        list
+            Returns a list of tuples containing a RawPoint and the stream
+            version (list(tuple(RawPoint,int))).
+
+        Notes
+        -----
+        Note that the raw data points are the original values at the sensor's
+        native sampling rate (assuming the time series represents measurements
+        from a sensor). This is the lowest level of data with the finest time
+        granularity. In the tree data structure of BTrDB, this data is stored in
+        the vector nodes.
+
+        """
+            materialized = []
+            start = to_nanoseconds(start)
+            end = to_nanoseconds(end)
+            point_windows = self._btrdb.ep.rawValues(self._uuid, start, end, version)
+            for point_list, version in point_windows:
+                for point in point_list:
+                    materialized.append((RawPoint.from_proto(point), version))
+                else:
+                    return materialized
+
+        def aligned_windows(self, start, end, pointwidth, version=0):
+            """
+        Read statistical aggregates of windows of data from BTrDB.
+
+        Query BTrDB for aggregates (or roll ups or windows) of the time series
+        with `version` between time `start` (inclusive) and `end` (exclusive) in
+        nanoseconds. Each point returned is a statistical aggregate of all the
+        raw data within a window of width 2**`pointwidth` nanoseconds. These
+        statistical aggregates currently include the mean, minimum, and maximum
+        of the data and the count of data points composing the window.
+
+        Note that `start` is inclusive, but `end` is exclusive. That is, results
+        will be returned for all windows that start in the interval [start, end).
+        If end < start+2^pointwidth you will not get any results. If start and
+        end are not powers of two, the bottom pointwidth bits will be cleared.
+        Each window will contain statistical summaries of the window.
+        Statistical points with count == 0 will be omitted.
+
+        Parameters
+        ----------
+        start : int or datetime like object
+            The start time in nanoseconds for the range to be queried. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+        end : int or datetime like object
+            The end time in nanoseconds for the range to be queried. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+        pointwidth : int
+            Specify the number of ns between data points (2**pointwidth)
+        version : int
+            Version of the stream to query
+
+        Returns
+        -------
+        tuple
+            Returns a tuple containing windows of data.  Each window is a tuple
+            containing data tuples.  Each data tuple contains a StatPoint and
+            the stream version.
+
+        Notes
+        -----
+        As the window-width is a power-of-two, it aligns with BTrDB internal
+        tree data structure and is faster to execute than `windows()`.
+        """
+            materialized = []
+            start = to_nanoseconds(start)
+            end = to_nanoseconds(end)
+            windows = self._btrdb.ep.alignedWindows(self._uuid, start, end, pointwidth, version)
+            for stat_points, version in windows:
+                for point in stat_points:
+                    materialized.append((StatPoint.from_proto(point), version))
+                else:
+                    return tuple(materialized)
+
+        def windows(self, start, end, width, depth=0, version=0):
+            """
+        Read arbitrarily-sized windows of data from BTrDB.  StatPoint objects
+        will be returned representing the data for each window.
+
+        Parameters
+        ----------
+        start : int or datetime like object
+            The start time in nanoseconds for the range to be queried. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+        end : int or datetime like object
+            The end time in nanoseconds for the range to be queried. (see
+            :func:`btrdb.utils.timez.to_nanoseconds` for valid input types)
+        width : int
+            The number of nanoseconds in each window, subject to the depth
+            parameter.
+        depth : int
+            The precision of the window duration as a power of 2 in nanoseconds.
+            E.g 30 would make the window duration accurate to roughly 1 second
+        version : int
+            The version of the stream to query.
+
+        Returns
+        -------
+        tuple
+            Returns a tuple containing windows of data.  Each window is a tuple
+            containing data tuples.  Each data tuple contains a StatPoint and
+            the stream version (tuple(tuple(StatPoint, int), ...)).
+
+        Notes
+        -----
+        Windows returns arbitrary precision windows from BTrDB. It is slower
+        than AlignedWindows, but still significantly faster than RawValues. Each
+        returned window will be `width` nanoseconds long. `start` is inclusive,
+        but `end` is exclusive (e.g if end < start+width you will get no
+        results). That is, results will be returned for all windows that start
+        at a time less than the end timestamp. If (`end` - `start`) is not a
+        multiple of width, then end will be decreased to the greatest value less
+        than end such that (end - start) is a multiple of `width` (i.e., we set
+        end = start + width * floordiv(end - start, width). The `depth`
+        parameter is an optimization that can be used to speed up queries on
+        fast queries. Each window will be accurate to 2^depth nanoseconds. If
+        depth is zero, the results are accurate to the nanosecond. On a dense
+        stream for large windows, this accuracy may not be required. For example
+        for a window of a day, +- one second may be appropriate, so a depth of
+        30 can be specified. This is much faster to execute on the database
+        side.
+
+        """
+            materialized = []
+            start = to_nanoseconds(start)
+            end = to_nanoseconds(end)
+            windows = self._btrdb.ep.windows(self._uuid, start, end, width, depth, version)
+            for stat_points, version in windows:
+                for point in stat_points:
+                    materialized.append((StatPoint.from_proto(point), version))
+                else:
+                    return tuple(materialized)
+
+        def nearest--- This code section failed: ---
+
+ L. 753         0  SETUP_FINALLY        36  'to 36'
+
+ L. 754         2  LOAD_FAST                'self'
+                4  LOAD_ATTR                _btrdb
+                6  LOAD_ATTR                ep
+                8  LOAD_METHOD              nearest
+               10  LOAD_FAST                'self'
+               12  LOAD_ATTR                _uuid
+
+ L. 755        14  LOAD_GLOBAL              to_nanoseconds
+               16  LOAD_FAST                'time'
+               18  CALL_FUNCTION_1       1  ''
+
+ L. 755        20  LOAD_FAST                'version'
+
+ L. 755        22  LOAD_FAST                'backward'
+
+ L. 754        24  CALL_METHOD_4         4  ''
+               26  UNPACK_SEQUENCE_2     2 
+               28  STORE_FAST               'rp'
+               30  STORE_FAST               'version'
+               32  POP_BLOCK        
+               34  JUMP_FORWARD         88  'to 88'
+             36_0  COME_FROM_FINALLY     0  '0'
+
+ L. 756        36  DUP_TOP          
+               38  LOAD_GLOBAL              BTrDBError
+               40  COMPARE_OP               exception-match
+               42  POP_JUMP_IF_FALSE    86  'to 86'
+               44  POP_TOP          
+               46  STORE_FAST               'exc'
+               48  POP_TOP          
+               50  SETUP_FINALLY        74  'to 74'
+
+ L. 757        52  LOAD_FAST                'exc'
+               54  LOAD_ATTR                code
+               56  LOAD_CONST               401
+               58  COMPARE_OP               !=
+               60  POP_JUMP_IF_FALSE    64  'to 64'
+
+ L. 758        62  RAISE_VARARGS_0       0  'reraise'
+             64_0  COME_FROM            60  '60'
+
+ L. 759        64  POP_BLOCK        
+               66  POP_EXCEPT       
+               68  CALL_FINALLY         74  'to 74'
+               70  LOAD_CONST               None
+               72  RETURN_VALUE     
+             74_0  COME_FROM            68  '68'
+             74_1  COME_FROM_FINALLY    50  '50'
+               74  LOAD_CONST               None
+               76  STORE_FAST               'exc'
+               78  DELETE_FAST              'exc'
+               80  END_FINALLY      
+               82  POP_EXCEPT       
+               84  JUMP_FORWARD         88  'to 88'
+             86_0  COME_FROM            42  '42'
+               86  END_FINALLY      
+             88_0  COME_FROM            84  '84'
+             88_1  COME_FROM            34  '34'
+
+ L. 761        88  LOAD_GLOBAL              RawPoint
+               90  LOAD_METHOD              from_proto
+               92  LOAD_FAST                'rp'
+               94  CALL_METHOD_1         1  ''
+               96  LOAD_FAST                'version'
+               98  BUILD_TUPLE_2         2 
+              100  RETURN_VALUE     
+               -1  RETURN_LAST      
+
+Parse error at or near `CALL_FINALLY' instruction at offset 68
+
+        def obliterate(self):
+            """
+        Obliterate deletes a stream from the BTrDB server.  An exception will be
+        raised if the stream could not be found.
+
+        Raises
+        ------
+        BTrDBError [404] stream does not exist
+            The stream could not be found in BTrDB
+
+        """
+            self._btrdb.ep.obliterate(self._uuid)
+
+        def flush(self):
+            """
+        Flush writes the stream buffers out to persistent storage.
+
+        """
+            self._btrdb.ep.flush(self._uuid)
+
+        def __repr__(self):
+            return '<Stream collection={} name={}>'.format(self.collection, self.name)
+
+
+    class StreamSetBase(Sequence):
+        __doc__ = '\n    A lighweight wrapper around a list of stream objects\n    '
+
+        def __init__(self, streams):
+            self._streams = streams
+            self._pinned_versions = None
+            self.filters = []
+            self.pointwidth = None
+            self.width = None
+            self.depth = None
+
+        @property
+        def allow_window(self):
+            return not bool(self.pointwidth or self.width and self.depth)
+
+        def _latest_versions(self):
+            return {s.version():s.uuid for s in self._streams}
+
+        def pin_versions(self, versions=None):
+            """
+        Saves the stream versions that future materializations should use.  If
+        no pin is requested then the first materialization will automatically
+        pin the return versions.  Versions can also be supplied through a dict
+        object with key:UUID, value:stream.version().
+
+        Parameters
+        ----------
+        versions : dict[UUID: int]
+            A dict containing the stream UUID and version ints as key/values
+
+        Returns
+        -------
+        StreamSet
+            Returns self
+
+        """
+            if versions is not None:
+                if not isinstance(versions, dict):
+                    raise TypeError('`versions` argument must be dict')
+                for key in versions.keys():
+                    if not isinstance(key, uuidlib.UUID):
+                        raise TypeError('version keys must be type UUID')
+
+            self._pinned_versions = self._latest_versions() if not versions else versions
+            return self
+
+        def versions(self):
+            """
+        Returns a dict of the stream versions.  These versions are the pinned
+        values if previously pinned or the latest stream versions if not
+        pinned.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        dict
+            A dict containing the stream UUID and version ints as key/values
+
+        """
+            if self._pinned_versions:
+                return self._pinned_versions
+            return self._latest_versions()
+
+        def count(self):
+            """
+        Compute the total number of points in the streams using filters.
+
+        Computes the total number of points across all streams using the
+        specified filters. By default, this returns the latest total count of
+        all points in the streams. The count is modified by start and end
+        filters or by pinning versions.
+
+        Note that this helper method sums the counts of all StatPoints returned
+        by ``aligned_windows``. Because of this the start and end timestamps
+        may be adjusted if they are not powers of 2. You can also set the
+        pointwidth property for smaller windows of time to ensure that the
+        count granularity is captured appropriately.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        int
+            The total number of points in all streams for the specified filters.
+        """
+            params = self._params_from_filters()
+            start = params.get('start', MINIMUM_TIME)
+            end = params.get('end', MAXIMUM_TIME)
+            versions = self._pinned_versions if self._pinned_versions else {}
+            count = 0
+            for s in self._streams:
+                version = versions.get(s.uuid, 0)
+                count += s.count(start, end, version=version)
+            else:
+                return count
+
+        def earliest(self):
+            """
+        Returns earliest points of data in streams using available filters.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        tuple
+            The earliest points of data found among all streams
+
+        """
+            earliest = []
+            params = self._params_from_filters()
+            start = params.get('start', MINIMUM_TIME)
+            for s in self._streams:
+                version = self.versions()[s.uuid]
+                point, _ = s.nearest(start, version=version, backward=False)
+                earliest.append(point)
+            else:
+                return tuple(earliest)
+
+        def latest(self):
+            """
+        Returns latest points of data in the streams using available filters.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        tuple
+            The latest points of data found among all streams
+
+        """
+            latest = []
+            params = self._params_from_filters()
+            start = params.get('end', MAXIMUM_TIME)
+            for s in self._streams:
+                version = self.versions()[s.uuid]
+                point, _ = s.nearest(start, version=version, backward=True)
+                latest.append(point)
+            else:
+                return tuple(latest)
+
+        def current(self):
+            """
+        Returns the points of data in the streams closest to the current timestamp. If
+        the current timestamp is outside of the filtered range of data, a ValueError is
+        raised.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        tuple
+            The latest points of data found among all streams
+        """
+            latest = []
+            params = self._params_from_filters()
+            now = currently_as_ns()
+            end = params.get('end', None)
+            start = params.get('start', None)
+            if end is not None and end <= now or start is not None:
+                if start > now:
+                    raise ValueError('current time is not included in filtered stream range')
+            for s in self._streams:
+                version = self.versions()[s.uuid]
+                point, _ = s.nearest(now, version=version, backward=True)
+                latest.append(point)
+            else:
+                return tuple(latest)
+
+        def filter(self, start=None, end=None, collection=None, name=None, unit=None, tags=None, annotations=None):
+            """
+        Provides a new StreamSet instance containing stored query parameters and
+        stream objects that match filtering criteria.
+
+        The collection, name, and unit arguments will be used to select streams
+        from the original StreamSet object.  If a string is supplied, then a
+        case-insensitive exact match is used to select streams.  Otherwise, you
+        may supply a compiled regex pattern that will be used with `re.search`.
+
+        The tags and annotations arguments expect dictionaries for the desired
+        key/value pairs.  Any stream in the original instance that has the exact
+        key/values will be included in the new StreamSet instance.
+
+        Parameters
+        ----------
+        start : int or datetime like object
+            the inclusive start of the query (see :func:`btrdb.utils.timez.to_nanoseconds`
+            for valid input types)
+        end : int or datetime like object
+            the exclusive end of the query (see :func:`btrdb.utils.timez.to_nanoseconds`
+            for valid input types)
+        collection : str or regex
+            string for exact (case-insensitive) matching of collection when filtering streams
+            or a compiled regex expression for re.search of stream collections.
+        name : str or regex
+            string for exact (case-insensitive) matching of name when filtering streams
+            or a compiled regex expression for re.search of stream names.
+        unit : str or regex
+            string for exact (case-insensitive) matching of unit when filtering streams
+            or a compiled regex expression for re.search of stream units.
+        tags : dict
+            key/value pairs for filtering streams based on tags
+        annotations : dict
+            key/value pairs for filtering streams based on annotations
+
+        Returns
+        -------
+        StreamSet
+            a new instance cloned from the original with filters applied
+
+        """
+            obj = self.clone()
+            if start is not None or end is not None:
+                obj.filters.append(StreamFilter(start, end))
+            if collection is not None:
+                if isinstance(collection, RE_PATTERN):
+                    obj._streams = [s for s in obj._streams if m for m in (collection.search(s.collection),)]
+                else:
+                    if isinstance(collection, str):
+                        obj._streams = [s for s in obj._streams if s.collection.lower() == collection.lower()]
+                    else:
+                        raise TypeError('collection must be string or compiled regex')
+            else:
+                if name is not None:
+                    if isinstance(name, RE_PATTERN):
+                        obj._streams = [s for s in obj._streams if m for m in (name.search(s.name),)]
+                    else:
+                        if isinstance(name, str):
+                            obj._streams = [s for s in obj._streams if s.name.lower() == name.lower()]
+                        else:
+                            raise TypeError('name must be string or compiled regex')
+                if unit is not None:
+                    if isinstance(unit, RE_PATTERN):
+                        obj._streams = [s for s in obj._streams if m for m in (unit.search(s.tags()['unit']),)]
+                    else:
+                        if isinstance(unit, str):
+                            obj._streams = [s for s in obj._streams if s.tags().get('unit', '').lower() == unit.lower()]
+                        else:
+                            raise TypeError('unit must be string or compiled regex')
+            if tags:
+                obj._streams = [s for s in obj._streams if tags.items() <= s.tags().items()]
+            if annotations:
+                obj._streams = [s for s in obj._streams if annotations.items() <= s.annotations()[0].items()]
+            return obj
+
+        def clone(self):
+            """
+        Returns a deep copy of the object.  Attributes that cannot be copied
+        will be referenced to both objects.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        StreamSet
+            Returns a new copy of the instance
+
+        """
+            protected = ('_streams', )
+            clone = self.__class__(self._streams)
+            for attr, val in self.__dict__.items():
+                if attr not in protected:
+                    setattr(clone, attr, deepcopy(val))
+                return clone
+
+        def windows(self, width, depth):
+            """
+        Stores the request for a windowing operation when the query is
+        eventually materialized.
+
+        Parameters
+        ----------
+        width : int
+            The number of nanoseconds to use for each window size.
+        depth : int
+            The requested accuracy of the data up to 2^depth nanoseconds.  A
+            depth of 0 is accurate to the nanosecond.
+
+        Returns
+        -------
+        StreamSet
+            Returns self
+
+        Notes
+        -----
+        Windows returns arbitrary precision windows from BTrDB. It is slower
+        than aligned_windows, but still significantly faster than values. Each
+        returned window will be width nanoseconds long. start is inclusive, but
+        end is exclusive (e.g if end < start+width you will get no results).
+        That is, results will be returned for all windows that start at a time
+        less than the end timestamp. If (end - start) is not a multiple of
+        width, then end will be decreased to the greatest value less than end
+        such that (end - start) is a multiple of width (i.e., we set end = start
+        + width * floordiv(end - start, width). The depth parameter is an
+        optimization that can be used to speed up queries on fast queries. Each
+        window will be accurate to 2^depth nanoseconds. If depth is zero, the
+        results are accurate to the nanosecond. On a dense stream for large
+        windows, this accuracy may not be required. For example for a window of
+        a day, +- one second may be appropriate, so a depth of 30 can be
+        specified. This is much faster to execute on the database side.
+
+        """
+            if not self.allow_window:
+                raise InvalidOperation('A window operation is already requested')
+            self.width = int(width)
+            self.depth = int(depth)
+            return self
+
+        def aligned_windows(self, pointwidth):
+            """
+        Stores the request for an aligned windowing operation when the query is
+        eventually materialized.
+
+        Parameters
+        ----------
+        pointwidth : int
+            The length of each returned window as computed by 2^pointwidth.
+
+        Returns
+        -------
+        StreamSet
+            Returns self
+
+        Notes
+        -----
+        `aligned_windows` reads power-of-two aligned windows from BTrDB. It is
+        faster than Windows(). Each returned window will be 2^pointwidth
+        nanoseconds long, starting at start. Note that start is inclusive, but
+        end is exclusive. That is, results will be returned for all windows that
+        start in the interval [start, end). If end < start+2^pointwidth you will
+        not get any results. If start and end are not powers of two, the bottom
+        pointwidth bits will be cleared. Each window will contain statistical
+        summaries of the window. Statistical points with count == 0 will be
+        omitted.
+
+        """
+            if not self.allow_window:
+                raise InvalidOperation('A window operation is already requested')
+            self.pointwidth = int(pointwidth)
+            return self
+
+        def _streamset_data(self, as_iterators=False):
+            """
+        Private method to return a list of lists representing the data from each
+        stream within the StreamSetself.
+
+        Parameters
+        ----------
+        as_iterators : bool
+            Returns each single stream's data as an iterator.  Defaults to False.
+        """
+            params = self._params_from_filters()
+            versions = self.versions()
+            data = []
+            if self.pointwidth is not None:
+                params.update({'pointwidth': self.pointwidth})
+                for s in self._streams:
+                    params.update({'version': versions[s.uuid]})
+                    data.append((s.aligned_windows)(**params))
+
+            else:
+                if self.width is not None and self.depth is not None:
+                    params.update({'width':self.width,  'depth':self.depth})
+                    for s in self._streams:
+                        params.update({'version': versions[s.uuid]})
+                        data.append((s.windows)(**params))
+
+                else:
+                    data = [(s.values)(**params) for s in self._streams]
+            if as_iterators:
+                return [iter(ii) for ii in data]
+            return data
+
+        def rows--- This code section failed: ---
+
+ L.1232         0  BUILD_LIST_0          0 
+                2  STORE_FAST               'result'
+
+ L.1233         4  LOAD_FAST                'self'
+                6  LOAD_ATTR                _streamset_data
+                8  LOAD_CONST               True
+               10  LOAD_CONST               ('as_iterators',)
+               12  CALL_FUNCTION_KW_1     1  '1 total positional and keyword args'
+               14  STORE_FAST               'streamset_data'
+
+ L.1234        16  LOAD_GLOBAL              PointBuffer
+               18  LOAD_GLOBAL              len
+               20  LOAD_FAST                'self'
+               22  LOAD_ATTR                _streams
+               24  CALL_FUNCTION_1       1  ''
+               26  CALL_FUNCTION_1       1  ''
+               28  STORE_FAST               'buffer'
+             30_0  COME_FROM           180  '180'
+             30_1  COME_FROM           164  '164'
+
+ L.1237        30  LOAD_CONST               True
+               32  STORE_FAST               'streams_empty'
+
+ L.1240        34  LOAD_GLOBAL              enumerate
+               36  LOAD_FAST                'streamset_data'
+               38  CALL_FUNCTION_1       1  ''
+               40  GET_ITER         
+             42_0  COME_FROM            58  '58'
+               42  FOR_ITER            130  'to 130'
+               44  UNPACK_SEQUENCE_2     2 
+               46  STORE_FAST               'stream_idx'
+               48  STORE_FAST               'data'
+
+ L.1242        50  LOAD_FAST                'buffer'
+               52  LOAD_ATTR                active
+               54  LOAD_FAST                'stream_idx'
+               56  BINARY_SUBSCR    
+               58  POP_JUMP_IF_FALSE    42  'to 42'
+
+ L.1243        60  SETUP_FINALLY        94  'to 94'
+
+ L.1244        62  LOAD_GLOBAL              next
+               64  LOAD_FAST                'data'
+               66  CALL_FUNCTION_1       1  ''
+               68  UNPACK_SEQUENCE_2     2 
+               70  STORE_FAST               'point'
+               72  STORE_FAST               '_'
+
+ L.1245        74  LOAD_FAST                'buffer'
+               76  LOAD_METHOD              add_point
+               78  LOAD_FAST                'stream_idx'
+               80  LOAD_FAST                'point'
+               82  CALL_METHOD_2         2  ''
+               84  POP_TOP          
+
+ L.1246        86  LOAD_CONST               False
+               88  STORE_FAST               'streams_empty'
+               90  POP_BLOCK        
+               92  JUMP_BACK            42  'to 42'
+             94_0  COME_FROM_FINALLY    60  '60'
+
+ L.1247        94  DUP_TOP          
+               96  LOAD_GLOBAL              StopIteration
+               98  COMPARE_OP               exception-match
+              100  POP_JUMP_IF_FALSE   126  'to 126'
+              102  POP_TOP          
+              104  POP_TOP          
+              106  POP_TOP          
+
+ L.1248       108  LOAD_FAST                'buffer'
+              110  LOAD_METHOD              deactivate
+              112  LOAD_FAST                'stream_idx'
+              114  CALL_METHOD_1         1  ''
+              116  POP_TOP          
+
+ L.1249       118  POP_EXCEPT       
+              120  JUMP_BACK            42  'to 42'
+              122  POP_EXCEPT       
+              124  JUMP_BACK            42  'to 42'
+            126_0  COME_FROM           100  '100'
+              126  END_FINALLY      
+              128  JUMP_BACK            42  'to 42'
+
+ L.1251       130  LOAD_FAST                'buffer'
+              132  LOAD_METHOD              next_key_ready
+              134  CALL_METHOD_0         0  ''
+              136  STORE_FAST               'key'
+
+ L.1252       138  LOAD_FAST                'key'
+              140  POP_JUMP_IF_FALSE   162  'to 162'
+
+ L.1253       142  LOAD_FAST                'result'
+              144  LOAD_METHOD              append
+              146  LOAD_GLOBAL              tuple
+              148  LOAD_FAST                'buffer'
+              150  LOAD_METHOD              pop
+              152  LOAD_FAST                'key'
+              154  CALL_METHOD_1         1  ''
+              156  CALL_FUNCTION_1       1  ''
+              158  CALL_METHOD_1         1  ''
+              160  POP_TOP          
+            162_0  COME_FROM           140  '140'
+
+ L.1255       162  LOAD_FAST                'streams_empty'
+              164  POP_JUMP_IF_FALSE    30  'to 30'
+              166  LOAD_GLOBAL              len
+              168  LOAD_FAST                'buffer'
+              170  LOAD_METHOD              keys
+              172  CALL_METHOD_0         0  ''
+              174  CALL_FUNCTION_1       1  ''
+              176  LOAD_CONST               0
+              178  COMPARE_OP               ==
+              180  POP_JUMP_IF_FALSE    30  'to 30'
+
+ L.1256       182  BREAK_LOOP          186  'to 186'
+              184  JUMP_BACK            30  'to 30'
+
+ L.1258       186  LOAD_FAST                'result'
+              188  RETURN_VALUE     
+               -1  RETURN_LAST      
+
+Parse error at or near `POP_EXCEPT' instruction at offset 122
+
+        def _params_from_filters(self):
+            params = {}
+            for filter in self.filters:
+                if filter.start is not None:
+                    params['start'] = filter.start
+                if filter.end is not None:
+                    params['end'] = filter.end
+                return params
+
+        def values_iter(self):
+            """
+        Must return context object which would then close server cursor on __exit__
+        """
+            raise NotImplementedError()
+
+        def values(self):
+            """
+        Returns a fully materialized list of lists for the stream values/points
+        """
+            result = []
+            streamset_data = self._streamset_data()
+            for stream_data in streamset_data:
+                result.append([point[0] for point in stream_data])
+            else:
+                return result
+
+        def __repr__(self):
+            token = 'stream' if len(self) == 1 else 'streams'
+            return '<{}({} {})>'.format(self.__class__.__name__, len(self._streams), token)
+
+        def __str__(self):
+            token = 'stream' if len(self) == 1 else 'streams'
+            return '{} with {} {}'.format(self.__class__.__name__, len(self._streams), token)
+
+        def __getitem__(self, item):
+            if isinstance(item, str):
+                item = uuidlib.UUID(item)
+            if isinstance(item, uuidlib.UUID):
+                for stream in self._streams:
+                    if stream.uuid == item:
+                        return stream
+                else:
+                    raise KeyError('Stream with uuid `{}` not found.'.format(str(item)))
+
+            return self._streams[item]
+
+        def __len__(self):
+            return len(self._streams)
+
+
+    class StreamSet(StreamSetBase, StreamSetTransformer):
+        __doc__ = '\n    Public class for a collection of streams\n    '
+
+
+    class StreamFilter(object):
+        __doc__ = '\n    Object for storing requested filtering options\n    '
+
+        def __init__(self, start=None, end=None):
+            self.start = to_nanoseconds(start) if start else None
+            self.end = to_nanoseconds(end) if end else None
+            if self.start is None:
+                if self.end is None:
+                    raise ValueError('A valid `start` or `end` must be supplied')
+            if self.start is not None:
+                if self.end is not None:
+                    if self.start >= self.end:
+                        raise ValueError('`start` must be strictly less than `end` argument')

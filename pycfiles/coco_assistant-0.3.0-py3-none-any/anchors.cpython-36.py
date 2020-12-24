@@ -1,0 +1,114 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/ashwin/Desktop/Projects/COCO-Assistant/coco_assistant/utils/anchors.py
+# Compiled at: 2019-11-17 11:40:26
+# Size of source mod 2**32: 3630 bytes
+"""
+Modified version of gen_anchors.py by Ngoc Anh Huynh (@experiencor)
+Link: https://github.com/experiencor/keras-yolo2/blob/master/gen_anchors.py
+"""
+import random, numpy as np
+from pycocotools.coco import COCO
+
+def iou(ann, centroids):
+    w, h = ann
+    similarities = []
+    for centroid in centroids:
+        c_w, c_h = centroid
+        if c_w >= w:
+            if c_h >= h:
+                similarity = w * h / (c_w * c_h)
+        elif c_w >= w:
+            if c_h <= h:
+                similarity = w * c_h / (w * h + (c_w - w) * c_h)
+        elif c_w <= w:
+            if c_h >= h:
+                similarity = c_w * h / (w * h + c_w * (c_h - h))
+        else:
+            similarity = c_w * c_h / (w * h)
+        similarities.append(similarity)
+
+    return np.array(similarities)
+
+
+def avg_iou(anns, centroids):
+    n, _ = anns.shape
+    s = 0
+    for i in range(anns.shape[0]):
+        s += max(iou(anns[i], centroids))
+
+    return s / n
+
+
+def print_anchors(centroids):
+    anchors = centroids.copy()
+    widths = anchors[:, 0]
+    sorted_indices = np.argsort(widths)
+    r = 'anchors: ['
+    for i in sorted_indices[:-1]:
+        r += '%0.2f,%0.2f, ' % (anchors[(i, 0)], anchors[(i, 1)])
+
+    r += '%0.2f,%0.2f' % (anchors[(sorted_indices[-1:], 0)], anchors[(sorted_indices[-1:], 1)])
+    r += ']'
+    print(r)
+    print('')
+
+
+def run_kmeans(ann_dims, anchor_num):
+    ann_num = ann_dims.shape[0]
+    prev_assignments = np.ones(ann_num) * -1
+    iteration = 0
+    old_distances = np.zeros((ann_num, anchor_num))
+    r = random.SystemRandom()
+    indices = [r.randrange(ann_dims.shape[0]) for i in range(anchor_num)]
+    centroids = ann_dims[indices]
+    anchor_dim = ann_dims.shape[1]
+    while True:
+        distances = []
+        iteration += 1
+        for i in range(ann_num):
+            d = 1 - iou(ann_dims[i], centroids)
+            distances.append(d)
+
+        distances = np.array(distances)
+        print('iteration {}: dists = {}'.format(iteration, np.sum(np.abs(old_distances - distances))))
+        assignments = np.argmin(distances, axis=1)
+        if (assignments == prev_assignments).all():
+            return centroids
+        centroid_sums = np.zeros((anchor_num, anchor_dim), np.float)
+        for i in range(ann_num):
+            centroid_sums[assignments[i]] += ann_dims[i]
+
+        for j in range(anchor_num):
+            centroids[j] = centroid_sums[j] / (np.sum(assignments == j) + 1e-06)
+
+        prev_assignments = assignments.copy()
+        old_distances = distances.copy()
+
+
+def format_anchors(centroids):
+    new_anchors = [[max(i)] * 2 for i in centroids.round(0)]
+    return sorted(new_anchors)
+
+
+def generate_anchors(cann, num_anchors, fmt=None):
+    anns = cann.anns
+    dims = [tuple(map(float, (anns[i]['bbox'][(-2)], anns[i]['bbox'][(-1)]))) for i in anns]
+    dims = np.array(dims)
+    centroids = run_kmeans(dims, num_anchors)
+    print('\naverage IOU for', num_anchors, 'anchors:', '%0.2f' % avg_iou(dims, centroids))
+    if fmt == 'square':
+        print('formatted anchors: {}\n'.format(format_anchors(centroids)))
+        return format_anchors(centroids)
+    else:
+        print_anchors(centroids.round(0))
+        return centroids
+
+
+if __name__ == '__main__':
+    x = '/home/ashwin/Desktop/Projects/COCO-Assistant/data/annotations/val.json'
+    xc = COCO(x)
+    num_anchors = 2
+    generate_anchors(xc, num_anchors, 'square')

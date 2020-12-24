@@ -1,0 +1,5 @@
+Click>=7.0
+click-log>=0.2.1
+sendgrid>=5.6.0
+Jinja2>=2.10.1
+PyYAML>=5.2

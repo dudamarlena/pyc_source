@@ -1,0 +1,11 @@
+setuptools
+bob.bio.video
+bob.db.base
+bob.io.base
+future
+matplotlib
+numpy 
+scikit-image
+scipy
+six
+sqlalchemy

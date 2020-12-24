@@ -1,0 +1,12 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/dossier/models/features/stopwords.py
+# Compiled at: 2015-07-08 07:34:06
+from __future__ import absolute_import, division, print_function
+import re
+javascript_words = map(lambda s: unicode(s).lower(), re.split('\\s', '\nabstract  \telse  \tinstanceof  \tsuper\nboolean  \tenum  \tint  \tswitch\nbreak  \texport  \tinterface  \tsynchronized\nbyte  \textends  \tlet  \tthis\ncase  \tfalse  \tlong  \tthrow\ncatch  \tfinal  \tnative  \tthrows\nchar  \tfinally  \tnew  \ttransient\nclass  \tfloat  \tnull  \ttrue\nconst  \tfor  \tpackage  \ttry\ncontinue  \tfunction  \tprivate  \ttypeof\ndebugger  \tgoto  \tprotected  \tvar\ndefault  \tif  \tpublic  \tvoid\ndelete  \timplements  \treturn  \tvolatile\ndo  \timport  \tshort  \twhile\ndouble  \tin  \tstatic  \twith\nalert  \tframes  \touterHeight\nall  \tframeRate  \touterWidth\nanchor  \tfunction  \tpackages\nanchors  \tgetClass  \tpageXOffset\narea  \thasOwnProperty  \tpageYOffset\nArray  \thidden  \tparent\nassign  \thistory  \tparseFloat\nblur  \timage  \tparseInt\nbutton  \timages  \tpassword\ncheckbox  \tInfinity  \tpkcs11\nclearInterval  \tisFinite  \tplugin\nclearTimeout  \tisNaN  \tprompt\nclientInformation  \tisPrototypeOf  \tpropertyIsEnum\nclose  \tjava  \tprototype\nclosed  \tJavaArray  \tradio\nconfirm  \tJavaClass  \treset\nconstructor  \tJavaObject  \tscreenX\ncrypto  \tJavaPackage  \tscreenY\nDate  \tinnerHeight  \tscroll\ndecodeURI  \tinnerWidth  \tsecure\ndecodeURIComponent  \tlayer  \tselect\ndefaultStatus  \tlayers  \tself\ndocument  \tlength  \tsetInterval\nelement  \tlink  \tsetTimeout\nelements  \tlocation  \tstatus\nembed  \tMath  \tString\nembeds  \tmimeTypes  \tsubmit\nencodeURI  \tname  \ttaint\nencodeURIComponent  \tNaN  \ttext\nescape  \tnavigate  \ttextarea\neval  \tnavigator  \ttop\nevent  \tNumber  \ttoString\nfileUpload  \tObject  \tundefined\nfocus  \toffscreenBuffering  \tunescape\nform  \topen  \tuntaint\nforms  \topener  \tvalueOf\nframe  \toption  \twindow\nonbeforeunload  \tondragdrop  \tonkeyup  \tonmouseover\nonblur  \tonerror  \tonload  \tonmouseup\nondragdrop  \tonfocus  \tonmousedown  \tonreset\nonclick  \tonkeydown  \tonmousemove  \tonsubmit\noncontextmenu  \tonkeypress  \tonmouseout  \tonunload\n'))
+
+def stopwords():
+    return javascript_words[:]

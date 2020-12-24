@@ -1,0 +1,25 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/aarontraas/workspace/personal/Clash-Royale-Clan-Tools/crtools/models/demerit.py
+# Compiled at: 2019-10-17 14:46:54
+# Size of source mod 2**32: 496 bytes
+
+
+class Demerit:
+
+    def __init__(self, tag, status, action=None, date=0, notes=''):
+        self.tag = tag.strip()
+        self.action = action
+        self.status = status
+        self.date = date
+        self.notes = notes
+
+    def __str__(self):
+        return str(self.__dict__)
+
+    def merge(self, other_demerit):
+        self.notes = '{}<br>- {}'.format(other_demerit.notes, self.notes)
+        if not self.notes.startswith('<br>- '):
+            self.notes = '<br>- {}'.format(self.notes)

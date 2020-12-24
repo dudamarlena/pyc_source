@@ -1,0 +1,67 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.9-x86_64/egg/MICA/bin/clustering.py
+# Compiled at: 2019-10-04 13:04:58
+# Size of source mod 2**32: 3783 bytes
+import itertools, time, argparse, pandas as pd
+from multiprocessing import Pool
+from functools import partial
+from MICA.bin import utils
+start_time = time.time()
+
+def main():
+    """Handles arguments and calls the driver function"""
+    head_description = 'Clusters reduced data'
+    parser = argparse.ArgumentParser(formatter_class=(argparse.RawDescriptionHelpFormatter), description=head_description)
+    parser.add_argument('-i', '--input-file', metavar='STR', required=True, help='Reduced matrix file in h5 format')
+    parser.add_argument('-dr', '--merge-option', metavar='STR', required=True, help='Method used for dimension reduction')
+    parser.add_argument('-k', '--k', type=int, metavar='INT', required=True, help='k value for k-means')
+    parser.add_argument('-n', '--n-bootstrap', type=int, metavar='INT', required=True, help='Number of bootstraps')
+    parser.add_argument('-o', '--output-file', metavar='STR', required=True, help='Output file name')
+    parser.add_argument('-m', '--plot-method', metavar='STR', required=True, help='Method for plotting after clustering')
+    parser.add_argument('-d', '--umap-min-dist', type=float, metavar='FLOAT', required=True, help='Minimum distance for umap')
+    parser.add_argument('-p', '--tsne-perplexity', type=int, metavar='INT', required=True, help='TSNE perplexity measure')
+    parser.add_argument('-dim', '--plot-dim', type=int, metavar='INT', required=True, help='Dimension of plot')
+    parser.add_argument('-t', '--n-thread', type=int, metavar='INT', required=True, help='Total number of threads used')
+    parser.add_argument('-km', '--dim-km', nargs='+', type=int, metavar='INT', required=True, help='Size of k-means dimensions')
+    args = parser.parse_args()
+    clustering(args.input_file, args.merge_option.lower(), args.k, args.n_bootstrap, args.output_file, args.plot_method, args.umap_min_dist, args.tsne_perplexity, args.plot_dim, args.n_thread, args.dim_km)
+
+
+def km_multiprocess(mi_file, n_cluster, n_iter, common_name, dims=[
+ 19], num_processes=1):
+    pool = Pool(processes=num_processes)
+    hdf = pd.HDFStore(mi_file)
+    r = []
+    for trans in hdf.keys():
+        df = hdf[trans]
+        km_iterable = partial(utils.kmeans, df, n_cluster, common_name)
+        iterations = itertools.product(dims, range(n_iter))
+        res = pool.starmap(km_iterable, iterations)
+        r = r + res
+
+    pool.close()
+    hdf.close()
+    return r
+
+
+def clustering(in_file, dr, k, n_bootstrap, out_name, plot_method, umap_min_dist, tsne_perplexity, plot_dim, n_processes, dim_km):
+    dim_km = map(int, dim_km)
+    result = km_multiprocess(in_file, n_cluster=k, n_iter=n_bootstrap, common_name=out_name,
+      dims=dim_km,
+      num_processes=n_processes)
+    agg, out_f = utils.aggregate(result, k, out_name)
+    utils.visualization(agg, in_file,
+      dr,
+      out_f,
+      max_dim=plot_dim,
+      visualize=(plot_method.lower()),
+      min_dist=umap_min_dist,
+      perplexity=tsne_perplexity)
+    print('--- %s seconds ---' % (time.time() - start_time))
+
+
+if __name__ == '__main__':
+    main()

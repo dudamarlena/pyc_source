@@ -1,0 +1,9 @@
+EbookLib
+attrs
+cfgs
+import_all
+pillow
+progress
+pypng
+pyyaml
+segno

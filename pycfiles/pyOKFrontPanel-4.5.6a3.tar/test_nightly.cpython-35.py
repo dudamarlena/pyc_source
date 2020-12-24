@@ -1,0 +1,48 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.5 (3350)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/okera/tests/test_nightly.py
+# Compiled at: 2020-02-27 14:06:57
+# Size of source mod 2**32: 2282 bytes
+import os, unittest
+from okera import context
+from okera.tests import pycerebro_test_common as common
+ROOT_TOKEN = os.environ['OKERA_HOME'] + '/integration/tokens/cerebro.token'
+NIGHTLY_PLANNER = 'nightly.internal.okera.rocks'
+
+class ConnectionErrorsTest(unittest.TestCase):
+
+    @unittest.skipIf(common.TEST_LEVEL == 'smoke', 'Skipping at unit test level.')
+    def test_okera_sample_users(self):
+        ctx = context()
+        ctx.enable_token_auth(token_file=ROOT_TOKEN)
+        with ctx.connect(NIGHTLY_PLANNER) as (conn):
+            json_data = conn.scan_as_json('okera_sample.users')
+            self.assertEqual(38455, len(json_data))
+            json_data = conn.scan_as_json('okera_sample.users', max_records=200)
+            self.assertEqual(200, len(json_data))
+            json_data = conn.scan_as_json('okera_sample.users', max_records=40000)
+            self.assertEqual(38455, len(json_data))
+            json_data = conn.scan_as_json('okera_sample.users', max_records=200, max_client_process_count=2)
+            self.assertEqual(200, len(json_data))
+            pd = conn.scan_as_pandas('okera_sample.users')
+            self.assertEqual(38455, len(pd))
+            pd = conn.scan_as_pandas('okera_sample.users', max_records=200)
+            self.assertEqual(200, len(pd))
+            pd = conn.scan_as_pandas('okera_sample.users', max_records=40000)
+            self.assertEqual(38455, len(pd))
+            pd = conn.scan_as_pandas('okera_sample.users', max_records=200, max_client_process_count=2)
+            self.assertEqual(200, len(pd))
+
+    @unittest.skipIf(common.TEST_LEVEL == 'smoke', 'Skipping at unit test level.')
+    def test_okera_fs_read(self):
+        common.configure_botocore_patch()
+        import boto3
+        s3 = boto3.client('s3')
+        res = s3.get_object(Bucket='cerebrodata-test', Key='large-doubles/data.txt')
+        output = res['Body'].read().decode('UTF-8').strip(' \t\n\r')
+        self.assertEqual(output, '901225911454.29')
+
+
+if __name__ == '__main__':
+    unittest.main()

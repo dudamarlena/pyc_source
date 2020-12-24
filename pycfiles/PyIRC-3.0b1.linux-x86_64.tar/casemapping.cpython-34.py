@@ -1,0 +1,295 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/lib64/python3.4/site-packages/PyIRC/casemapping.py
+# Compiled at: 2015-10-10 05:24:17
+# Size of source mod 2**32: 10166 bytes
+r""" IRC-style casemapping and casefolding
+
+IRC uses two forms of casemapping: RFC1459 and ASCII. Unicode is not handled
+or casemapped by any known servers.
+
+ASCII is simply casemapped as "abc..." <-> "ABC...".
+
+RFC1459 is the same as ASCII in terms of casefolding semantics, except that
+the characters {}|- are the lowercase equivalents of []\^. This is due to an
+historical wart in the protocol.
+"""
+from string import ascii_lowercase, ascii_uppercase
+from collections import UserString, UserDict
+from collections.abc import MutableSet
+RFC1459_LOWER = ascii_lowercase + '{}|~'
+RFC1459_UPPER = ascii_uppercase + '[]\\^'
+RFC1459_TOLOWER = str.maketrans(RFC1459_UPPER, RFC1459_LOWER)
+RFC1459_TOUPPER = str.maketrans(RFC1459_LOWER, RFC1459_UPPER)
+ASCII_TOLOWER = str.maketrans(ascii_uppercase, ascii_lowercase)
+ASCII_TOUPPER = str.maketrans(ascii_lowercase, ascii_uppercase)
+
+class IRCString(UserString):
+    __doc__ = "An IRC string.\n\n    Same as a normal string, with IRC style casemapping.\n\n    >>> s = IRCString(IRCString.ASCII, 'Søs')\n    >>> s\n    IRCString('Søs')\n    >>> s.upper()\n    IRCString('SøS')\n    >>> s.lower()\n    IRCString('søs')\n    >>> s.casefold()\n    IRCString('søs')\n    >>> s = IRCString(IRCString.RFC1459, 'Têst{}|~')\n    >>> s\n    IRCString('Têst{}|~')\n    >>> s.lower()\n    IRCString('têst{}|~')\n    >>> s.upper()\n    IRCString('TêST[]\\\\^')\n    "
+    UNICODE = 0
+    ASCII = 1
+    RFC1459 = 2
+
+    def __init__(self, case, string):
+        """Create a new IRC String.
+
+        Arguments:
+
+        :param case:
+            Casemapping, can be UNICODE, ASCII, or RFC1459. This controls the
+            behaviour of the irc_* functions.
+
+        :param string:
+            String to use
+
+        """
+        self.case = case
+        super().__init__(string)
+
+    def str_upper(self):
+        """Uppercase string into a real Python string."""
+        if self.case == IRCString.ASCII:
+            return self.ascii_upper()
+        else:
+            if self.case == IRCString.RFC1459:
+                return self.rfc1459_upper()
+            return str.upper(self.data)
+
+    def str_lower(self):
+        """Lowercase string into a real python string."""
+        if self.case == IRCString.ASCII:
+            return self.ascii_lower()
+        else:
+            if self.case == IRCString.RFC1459:
+                return self.rfc1459_lower()
+            return str.lower(self.data)
+
+    def str_casefold(self):
+        """Casefold string into a real Python string."""
+        if self.case == IRCString.ASCII:
+            return self.ascii_casefold()
+        else:
+            if self.case == IRCString.RFC1459:
+                return self.rfc1459_casefold()
+            return str.casefold(self.data)
+
+    def upper(self):
+        """Uppercase string according to default semantics."""
+        return IRCString(self.case, self.str_upper())
+
+    def lower(self):
+        """Lowercase string according to default semantics."""
+        return IRCString(self.case, self.str_lower())
+
+    def casefold(self):
+        """Casefold string according to default semantics."""
+        return IRCString(self.case, self.str_casefold())
+
+    def __hash__(self):
+        return hash(self.str_casefold())
+
+    def __gt__(self, other):
+        if hasattr(other, 'str_casefold'):
+            other = other.str_casefold()
+        else:
+            other = other.casefold()
+        return self.str_casefold() > other
+
+    def __lt__(self, other):
+        if hasattr(other, 'str_casefold'):
+            other = other.str_casefold()
+        else:
+            other = other.casefold()
+        return self.str_casefold() < other
+
+    def __eq__(self, other):
+        if hasattr(other, 'str_casefold'):
+            other = other.str_casefold()
+        else:
+            other = other.casefold()
+        return self.str_casefold() == other
+
+    def __ne__(self, other):
+        if hasattr(other, 'str_casefold'):
+            other = other.str_casefold()
+        else:
+            other = other.casefold()
+        return self.str_casefold() != other
+
+    def __ge__(self, other):
+        if hasattr(other, 'str_casefold'):
+            other = other.str_casefold()
+        else:
+            other = other.casefold()
+        return self.str_casefold() >= other
+
+    def __le__(self, other):
+        if hasattr(other, 'str_casefold'):
+            other = other.str_casefold()
+        else:
+            other = other.casefold()
+        return self.str_casefold() <= other
+
+    def convert(self, case):
+        """Convert string into another caseform."""
+        return IRCString(case, self)
+
+    def ascii_lower(self):
+        """Return a copy of the string S converted to lowercase, using ASCII
+        semantics."""
+        return str.translate(self.data, ASCII_TOLOWER)
+
+    def ascii_upper(self):
+        """Return a copy of the string S converted to uppercase, using ASCII
+        semantics."""
+        return str.translate(self.data, ASCII_TOUPPER)
+
+    def ascii_casefold(self):
+        """Return a version of S suitable for caseless comparisons, using ASCII
+        semantics."""
+        return str.translate(self.data, ASCII_TOLOWER)
+
+    def rfc1459_lower(self):
+        """Return a copy of the string S converted to lowercase, using RFC1459
+        semantics."""
+        return str.translate(self.data, RFC1459_TOLOWER)
+
+    def rfc1459_upper(self):
+        """Return a copy of the string S converted to uppercase, using RFC1459
+        semantics."""
+        return str.translate(self.data, RFC1459_TOUPPER)
+
+    def rfc1459_casefold(self):
+        """Return a version of S suitable for caseless comparisons, using
+        RFC1459 semantics."""
+        return str.translate(self.data, RFC1459_TOLOWER)
+
+    def __repr__(self):
+        return 'IRCString({})'.format(super().__repr__())
+
+
+class IRCDict(UserDict):
+    __doc__ = 'An IRC dictionary class, with caseless key lookup.'
+
+    def __init__(self, case, *args, **kwargs):
+        self.case = case
+        super().__init__(*args, **kwargs)
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            key = IRCString(self.case, key)
+        elif hasattr(key, 'convert'):
+            key = IRCString(self.case, key.convert(self.case))
+        return super().__getitem__(key)
+
+    def __setitem__(self, key, value):
+        if isinstance(key, str):
+            key = IRCString(self.case, key)
+        elif hasattr(key, 'convert'):
+            key = IRCString(self.case, key.convert(self.case))
+        return super().__setitem__(key, value)
+
+    def __delitem__(self, key):
+        if isinstance(key, str):
+            key = IRCString(self.case, key)
+        elif hasattr(key, 'convert'):
+            key = IRCString(self.case, key.convert(self.case))
+        return super().__delitem__(key)
+
+    def __contains__(self, key):
+        if isinstance(key, str):
+            key = IRCString(self.case, key)
+        elif hasattr(key, 'convert'):
+            key = IRCString(self.case, key.convert(self.case))
+        return super().__contains__(key)
+
+    def convert(self, case):
+        """Convert dictionary to new casemapping."""
+        new = IRCDict(case)
+        for key, value in self.items():
+            if isinstance(key, str):
+                key = IRCString(self.case, key)
+            elif hasattr(key, 'convert'):
+                key = IRCString(self.case, key.convert(self.case))
+            new[key] = value
+
+        return new
+
+    def __repr__(self):
+        return 'IRCDict({}, {})'.format(self.case, super().__repr__())
+
+
+class IRCDefaultDict(IRCDict):
+    __doc__ = 'Similar to the built in :py:class:`defaultdict`, but with the semantics\n    of :py:class:`~PyIRC.casemapping.IRCDict`.'
+
+    def __init__(self, case, default, *args, **kwargs):
+        self.default = default
+        super().__init__(case, *args, **kwargs)
+
+    def __missing__(self, key):
+        if isinstance(key, str):
+            key = IRCString(self.case, key)
+        elif hasattr(key, 'convert'):
+            key = IRCString(self.case, key.convert(self.case))
+        ret = self.default()
+        self[key] = ret
+        return ret
+
+    def __repr__(self):
+        return 'IRCDefaultDict({}, {}, {})'.format(self.case, self.default, UserDict.__repr__(self))
+
+
+class IRCSet(MutableSet):
+    __doc__ = 'An IRC set class, with caseless members.'
+
+    def __init__(self, case, iterable=None):
+        self.case = case
+        self.store = set()
+        if iterable is None:
+            iterable = set()
+        for item in iterable:
+            self.add(item)
+
+    def add(self, item):
+        if isinstance(item, str):
+            item = IRCString(self.case, item)
+        elif hasattr(item, 'convert'):
+            item = IRCString(self.case, item.convert(self.case))
+        self.store.add(item)
+
+    def discard(self, item):
+        if isinstance(item, str):
+            item = IRCString(self.case, item)
+        elif hasattr(item, 'convert'):
+            item = IRCString(self.case, item.convert(self.case))
+        self.store.discard(item)
+
+    def convert(self, case):
+        """Convert all members of this set to the specified case."""
+        new = IRCSet(case)
+        for item in self:
+            if isinstance(item, str):
+                item = IRCString(case, item)
+            elif hasattr(item, 'convert'):
+                item = item.convert(case)
+            new.add(item)
+
+        return new
+
+    def __contains__(self, item):
+        if isinstance(item, str):
+            item = IRCString(self.case, item)
+        elif hasattr(item, 'convert'):
+            item = IRCString(self.case, item.convert(self.case))
+        return item in self.store
+
+    def __iter__(self):
+        return iter(self.store)
+
+    def __len__(self):
+        return len(self.store)
+
+    def __repr__(self):
+        return 'IRCSet({}, {})'.format(self.case, super().__repr__())

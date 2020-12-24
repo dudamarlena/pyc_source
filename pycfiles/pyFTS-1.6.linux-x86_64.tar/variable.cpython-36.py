@@ -1,0 +1,70 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python3.6/dist-packages/pyFTS/models/multivariate/variable.py
+# Compiled at: 2019-02-15 14:39:00
+# Size of source mod 2**32: 2964 bytes
+import pandas as pd
+from pyFTS.common import fts, FuzzySet, FLR, Membership, tree
+from pyFTS.partitioners import Grid
+from pyFTS.models.multivariate import FLR as MVFLR
+
+class Variable:
+    __doc__ = '\n    A variable of a fuzzy time series multivariate model. Each variable contains its own\n    transformations and partitioners.\n    '
+
+    def __init__(self, name, **kwargs):
+        r"""
+
+        :param name:
+        :param \**kwargs: See below
+
+        :Keyword Arguments:
+            * *alias* -- Alternative name for the variable
+        """
+        self.name = name
+        self.alias = kwargs.get('alias', self.name)
+        self.data_label = kwargs.get('data_label', self.name)
+        self.type = kwargs.get('type', 'common')
+        self.data_type = kwargs.get('data_type', None)
+        self.mask = kwargs.get('mask', None)
+        self.transformation = kwargs.get('transformation', None)
+        self.transformation_params = kwargs.get('transformation_params', None)
+        self.partitioner = None
+        self.alpha_cut = kwargs.get('alpha_cut', 0.0)
+        if kwargs.get('data', None) is not None:
+            (self.build)(**kwargs)
+
+    def build(self, **kwargs):
+        """
+
+        :param kwargs:
+        :return:
+        """
+        fs = kwargs.get('partitioner', Grid.GridPartitioner)
+        mf = kwargs.get('func', Membership.trimf)
+        np = kwargs.get('npart', 10)
+        data = kwargs.get('data', None)
+        kw = kwargs.get('partitioner_specific', {})
+        self.partitioner = fs(data=data[self.data_label].values, npart=np, func=mf, transformation=self.transformation, 
+         prefix=self.alias, variable=self.name, **kw)
+        self.partitioner.name = self.name + ' ' + self.partitioner.name
+
+    def apply_transformations(self, data, **kwargs):
+        if kwargs.get('params', None) is not None:
+            self.transformation_params = kwargs.get('params', None)
+        if self.transformation is not None:
+            return self.transformation.apply(data, self.transformation_params)
+        else:
+            return data
+
+    def apply_inverse_transformations(self, data, **kwargs):
+        if kwargs.get('params', None) is not None:
+            self.transformation_params = kwargs.get('params', None)
+        if self.transformation is not None:
+            return self.transformation.inverse(data, self.transformation_params)
+        else:
+            return data
+
+    def __str__(self):
+        return self.name

@@ -1,0 +1,7 @@
+numpy==1.17.3
+gevent==1.4.0
+Click==7.0
+pykwalify==1.7.0
+Shapely==1.6.4.post2
+tqdm==4.38.0
+Pillow==6.2.1

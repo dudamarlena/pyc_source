@@ -1,0 +1,17 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python2.7/dist-packages/duashttp/filters.py
+# Compiled at: 2014-10-30 10:12:16
+from django_filters import FilterSet
+from duashttp.models import AssetVersion
+
+class AssetVersionFilter(FilterSet):
+
+    class Meta:
+        model = AssetVersion
+        fields = {'name': [
+                  'icontains', 'iexact'], 
+           'revision': [
+                      'exact']}

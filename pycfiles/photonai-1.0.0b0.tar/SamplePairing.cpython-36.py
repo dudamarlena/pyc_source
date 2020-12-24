@@ -1,0 +1,234 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/nwinter/PycharmProjects/photon_projects/photon_core/photonai/modelwrapper/SamplePairing.py
+# Compiled at: 2019-09-17 07:01:07
+# Size of source mod 2**32: 10602 bytes
+"""
+===========================================================
+Project: PHOTON Model Wrapper
+===========================================================
+Description
+-----------
+Wrapper for sample pairing
+
+Version
+-------
+Created:        25-03-2019
+Last updated:   25-03-2019
+
+Author
+------
+Tim Hahn & Nils Winter
+Translationale Psychiatrie
+Universitaetsklinikum Muenster
+"""
+from photonai.photonlogger import Logger
+import numpy as np
+from sklearn.base import BaseEstimator, TransformerMixin
+import random
+from scipy.spatial.distance import pdist
+import math, itertools
+from sklearn.preprocessing import StandardScaler
+
+class SamplePairingBase(BaseEstimator, TransformerMixin):
+
+    @staticmethod
+    def _stirling(n):
+        return math.sqrt(2 * math.pi * n) * (n / math.e) ** n
+
+    @staticmethod
+    def _calculate_number_of_possible_combinations(n, r):
+        """
+        Get number of combinations of r from n items (e.g. n=10, r=2--> pairs from 0 to 10
+        :param n: n items to draw from
+        :param r: number of items to draw each time
+        :return: approximate number of combinations
+        """
+        try:
+            stirling_n = SamplePairingBase._stirling(n)
+            stirling_r = SamplePairingBase._stirling(r)
+            stirling_n_r = SamplePairingBase._stirling(n - r)
+            if n > 20:
+                return stirling_n / stirling_r / stirling_n_r
+            math.factorial(n) / math.factorial(r) / math.factorial(n - r)
+        except:
+            return -1
+
+    @staticmethod
+    def random_pair_generator(sample_indices, rand_seed, draw_limit):
+        """Return a list of random pairs from a list of items."""
+        random.seed(rand_seed)
+        pairs = list()
+        for i in range(draw_limit):
+            n_attempts = 0
+            while True:
+                pair = tuple(sorted(random.sample(sample_indices, 2)))
+                if pair not in pairs:
+                    pairs.append(pair)
+                    break
+                else:
+                    if n_attempts > draw_limit:
+                        break
+                n_attempts += 1
+
+        return pairs
+
+    @staticmethod
+    def nearest_pair_generator(X, distance_metric, draw_limit):
+        n_samples = X.shape[0]
+        X = StandardScaler().fit_transform(X)
+        distance_indices = np.argsort(pdist(X, distance_metric))
+        triu_indices = np.triu_indices(n_samples, k=1)
+        pairs = list()
+        for i in range(draw_limit):
+            if i > len(distance_indices) - 1:
+                break
+            else:
+                pairs.append((triu_indices[0][distance_indices[i]], triu_indices[1][distance_indices[i]]))
+
+        return pairs
+
+    def _get_combinations(self, X, draw_limit, rand_seed, distance_metric, generator='random_pair'):
+        """
+        :param X: data array
+        :param draw_limit: in case the full number of combinations is > 10k, how many to draw?
+        :param rand_seed: sets seed for random sampling of combinations (for reproducibility)
+        :param generator: method with which to obtain sample pairs (samples until draw_limit is reached or generator stops)
+                            'random_pair': sample randomly from all pairs
+                            'nearest_pair': get most similar pairs
+        :param distance metric: if generator is 'nearest_pair', this will set the distance metric to obtained similarity
+        :return: list of tuples indicating which samples to merge
+        """
+        sample_indices = range(X.shape[0])
+        n_combinations = self._calculate_number_of_possible_combinations(n=(len(sample_indices)), r=2)
+        if n_combinations > draw_limit or n_combinations == -1:
+            if generator == 'random_pair':
+                return self.random_pair_generator(sample_indices=sample_indices, rand_seed=rand_seed, draw_limit=draw_limit)
+            if generator == 'nearest_pair':
+                return self.nearest_pair_generator(X=X, distance_metric=distance_metric, draw_limit=draw_limit)
+            raise NotImplementedError("{} is not supported. Possible options: 'random_pair', 'nearest_pair")
+        else:
+            return list(itertools.combinations(sample_indices, 2))
+
+    def _get_samples(self, X, y, generator, distance_metric, draw_limit, rand_seed, **kwargs):
+        """
+                Generates "new samples" by computing the mean between all or n_draws pairs of existing samples and appends them to X
+                The target for each new sample is computed as the mean between the constituent targets
+                :param X: data
+                :param y: targets (optional)
+                :param draw_limit: in case the full number of combinations is > 10k, how many to draw?
+                :param rand_seed: sets seed for random sampling of combinations (for reproducibility only)
+                :return: X_new: X and X_augmented; (y_new: the correspoding targets)
+                """
+        combs = self._get_combinations(X=X, generator=generator,
+          distance_metric=distance_metric,
+          draw_limit=draw_limit,
+          rand_seed=rand_seed)
+        X_aug = np.empty([len(combs), X.shape[1]])
+        i = 0
+        for c in combs:
+            X_aug[i] = np.mean([X[c[0]], X[c[1]]], axis=0)
+            i += 1
+
+        X_new = np.concatenate((X, X_aug), axis=0)
+        if kwargs:
+            for name, kwarg in kwargs.items():
+                kwarg_new = np.empty(len(combs))
+                for i, c in enumerate(combs):
+                    kwarg_new[i] = np.mean([kwargs[name][c[0]], kwargs[name][c[1]]])
+
+                kwargs[name] = np.concatenate((np.asarray(kwargs[name]), kwarg_new))
+
+        if y is not None:
+            y_aug = np.empty(len(combs))
+            i = 0
+            for c in combs:
+                y_aug[i] = np.mean([y[c[0]], y[c[1]]])
+                i += 1
+
+            y_new = np.concatenate((y, y_aug))
+            return (
+             X_new, y_new, kwargs)
+        else:
+            return (
+             X_new, None, kwargs)
+
+
+class SamplePairingRegression(SamplePairingBase):
+    _estimator_type = 'transformer'
+
+    def __init__(self, generator='random_pair', distance_metric='euclidean', draw_limit=10000, rand_seed=True):
+        self.needs_covariates = True
+        self.needs_y = True
+        self.generator = generator
+        self.distance_metric = distance_metric
+        self.draw_limit = draw_limit
+        self.rand_seed = rand_seed
+
+    def fit(self, X, y=None, **kwargs):
+        return self
+
+    def transform(self, X, y=None, **kwargs):
+        """
+        Generates "new samples" by computing the mean between all or n_draws pairs of existing samples and appends them to X
+        The target for each new sample is computed as the mean between the constituent targets
+        :param X: data
+        :param y: targets (optional)
+        :param draw_limit: in case the full number of combinations is > 10k, how many to draw?
+        :param rand_seed: sets seed for random sampling of combinations (for reproducibility only)
+        :return: X_new: X and X_augmented; (y_new: the correspoding targets)
+        """
+        return (self._get_samples)(X, y, (self.generator), (self.distance_metric), (self.draw_limit), (self.rand_seed), **kwargs)
+
+
+class SamplePairingClassification(SamplePairingBase):
+    _estimator_type = 'transformer'
+
+    def __init__(self, generator='random_pair', distance_metric='euclidean', draw_limit=10000, rand_seed=True, balance_classes=True):
+        self.needs_covariates = True
+        self.needs_y = True
+        self.generator = generator
+        self.distance_metric = distance_metric
+        self.draw_limit = draw_limit
+        self.rand_seed = rand_seed
+        self.balance_classes = balance_classes
+
+    def fit(self, X, y=None, **kwargs):
+        return self
+
+    def transform(self, X, y=None, **kwargs):
+        """
+        Generates "new samples" by computing the mean between all or n_draws pairs of existing samples and appends them to X
+        The target for each new sample is computed as the mean between the constituent targets
+        :param X: data
+        :param y: targets (optional)
+        :param draw_limit: in case the full number of combinations is > 10k, how many to draw?
+        :param rand_seed: sets seed for random sampling of combinations (for reproducibility only)
+        :return: X_new: X and X_augmented; (y_new: the correspoding targets)
+        """
+        Logger().debug('Pairing ' + str(self.draw_limit) + ' samples...')
+        nDiff = list()
+        for t in np.unique(y):
+            if self.balance_classes == True:
+                nDiff.append(self.draw_limit - np.sum(y == t))
+            else:
+                nDiff.append(self.draw_limit)
+
+        kwargs_new = kwargs
+        X_new = list()
+        y_new = list()
+        for t, limit in zip(np.unique(y), nDiff):
+            X_new_class, y_new_class, kwargs = (self._get_samples)(X[(y == t)], y[(y == t)], generator=self.generator, 
+             distance_metric=self.distance_metric, 
+             draw_limit=limit, 
+             rand_seed=self.rand_seed, **kwargs)
+            X_new.extend(X_new_class)
+            y_new.extend(y_new_class)
+            if kwargs:
+                for name, kwarg in kwargs.items():
+                    kwargs_new[name] = np.concatenate((np.asarray(kwargs_new[name]), kwarg))
+
+        return (
+         X_new, y_new, kwargs_new)

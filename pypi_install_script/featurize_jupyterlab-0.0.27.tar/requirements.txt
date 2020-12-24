@@ -1,0 +1,13 @@
+jupyterlab
+grpcio
+protobuf
+pystream-protobuf
+jupyter_nbextensions_configurator
+pytest
+pytest-tornado
+click
+sqlalchemy
+psycopg2
+pyhumps
+redis
+aioredis

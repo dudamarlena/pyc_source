@@ -1,0 +1,76 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/alex/dev/dummydata/dummydata/model3.py
+# Compiled at: 2017-03-16 09:39:03
+# Size of source mod 2**32: 2214 bytes
+from .dummydata import DummyData
+
+class Model3(DummyData):
+    __doc__ = '\n    Dummydata that mimic Model data with three spatial dimensions\n    '
+
+    def __init__(self, var='ta', oname='DummyM3.nc', **kwargs):
+        """
+        create an empty 3D file
+
+        Parameters
+        ----------
+        month : int
+            number of months
+        var : str
+            variable name to specify
+        """
+        (super(Model3, self).__init__)(oname, **kwargs)
+        self.oname = oname
+        self.var = var
+        self.createM3Dimension()
+        self.createM3Variable()
+        self.addM3Data()
+        self.add_ancillary_data()
+        self.close()
+
+    def createM3Dimension(self):
+        self._create_time_dimension()
+        self._create_coordinate_dimensions()
+        self._create_bnds_dimensions()
+        self.createDimension('plev', 17)
+
+    def createM3Variable(self):
+        self._create_time_variable()
+        self._create_coordinates()
+        self.createVariable('plev', 'f8', ('plev', ))
+        self.createVariable((self.var),
+          'f4',
+          ('time', 'plev', 'lat', 'lon'),
+          fill_value=1e+20)
+        self.variables['plev'].units = 'Pa'
+        self.variables['plev'].axis = 'Z'
+        self.variables['plev'].positive = 'down'
+        self.variables['plev'].long_name = 'pressure'
+        self.variables['plev'].standard_name = 'air_pressure'
+        self._set_variable_metadata()
+        self._set_metadata()
+
+    def addM3Data(self):
+        self.variables['plev'][:] = [
+         100000,
+         92500,
+         85000,
+         70000,
+         60000,
+         50000,
+         40000,
+         30000,
+         25000,
+         20000,
+         15000,
+         10000,
+         7000,
+         5000,
+         3000,
+         2000,
+         1000]
+        self.variables[self.var][0:self.month, :, :, :] = self._get_variable_data()
+        self._set_coordinate_data()
+        self._set_time_data()

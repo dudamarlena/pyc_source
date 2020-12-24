@@ -1,0 +1,10 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/doorpi/status/requirements_lib/req_config.py
+# Compiled at: 2016-08-01 11:57:45
+import logging
+logger = logging.getLogger(__name__)
+logger.debug('%s loaded', __name__)
+REQUIREMENT = dict(fulfilled_with_one=True, text_description='', events=[], configuration=[], libraries=dict(ConfigParser=dict(text_warning='', text_description='Das Config-Modul wird benötigt um alle Einstellungen in einer Datei abspeichern und später wieder laden zu können.', text_installation='Eine Installation ist nicht nötig, da es sich hierbei um eine Python-Standard-Modul handelt.', auto_install=False, text_test='Der Status kann gestestet werden, in dem im Python-Interpreter <code>import ConfigParser</code> eingeben wird.', text_configuration='Eine Konfiguration als Eintrag in der Konfigurationsdatei macht logischerweise keinen Sinn.\nDeshalb kann die zu nutzende Config-Datei als Parameter (--configfile) beim DoorPi Start mitgegeben werden. Beispiel:\n<code>sudo /home/DoorPi/doorpi/main.py --configfile /home/DoorPi/conf/doorpi.ini</code>\n\nWenn der Parameter wegelassen wird, sucht der ConfigParser automatisch nach folgenden Dateien (wobei !BASEPATH! das Home-Verzeichnis von DoorPi ist)\n<ol>\n    <li>!BASEPATH!/conf/doorpi.ini</li>\n    <li>!BASEPATH!/conf/doorpi.cfg</li>\n    <li>!BASEPATH!\\conf\\doorpi.ini</li>\n    <li>!BASEPATH!\\conf\\doorpi.cfg</li>\n</ol>\n\nSollte keine Datei vorhanden sein, so wird mit default-Werten versucht DoorPi zum Laufen zu bringen und die Config-Datei als erster möglicher Eintrag abzuspeichern.\n', configuration=[], text_links={'docs.python.org': 'https://docs.python.org/2.7/library/configparser.html'})))

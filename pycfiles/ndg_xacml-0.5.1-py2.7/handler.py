@@ -1,0 +1,53 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.6-intel/egg/ndg/xacml/core/context/handler.py
+# Compiled at: 2011-02-11 08:34:12
+"""NDG Security Context handler base class
+
+NERC DataGrid
+"""
+__author__ = 'P J Kershaw'
+__date__ = '24/02/10'
+__copyright__ = '(C) 2010 Science and Technology Facilities Council'
+__contact__ = 'Philip.Kershaw@stfc.ac.uk'
+__license__ = 'BSD - see LICENSE file in top-level directory'
+__contact__ = 'Philip.Kershaw@stfc.ac.uk'
+__revision__ = '$Id: handler.py 7665 2010-10-28 13:48:06Z pjkersha $'
+from ndg.xacml.core.context.handlerinterface import CtxHandlerInterface
+from ndg.xacml.core.context.pdpinterface import PDPInterface
+from ndg.xacml.core.context.pipinterface import PIPInterface
+
+class CtxHandlerBase(CtxHandlerInterface):
+    """Base class for Context handlers - extends Context handler interface to 
+    include Policy Decision Point and Policy Information Point references
+    """
+    __slots__ = ('__pip', '__pdp')
+
+    def __init__(self):
+        self.__pip = None
+        self.__pdp = None
+        return
+
+    def _getPip(self):
+        return self.__pip
+
+    def _setPip(self, value):
+        if not isinstance(value, PIPInterface):
+            raise TypeError('Expecting %r type for "pip" attribute; got %r instead' % (
+             PIPInterface, value))
+        self.__pip = value
+
+    pip = property(_getPip, _setPip, None, 'Policy Information Point')
+
+    def _getPdp(self):
+        return self.__pdp
+
+    def _setPdp(self, value):
+        if not isinstance(value, PDPInterface):
+            raise TypeError('Expecting %r type for "pdp" attribute; got %r instead' % (
+             PDPInterface, value))
+        self.__pdp = value
+
+    pdp = property(_getPdp, _setPdp, None, 'Policy Decision Point')

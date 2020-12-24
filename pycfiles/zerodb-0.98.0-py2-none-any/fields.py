@@ -1,0 +1,47 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /zerodb/models/fields.py
+# Compiled at: 2016-03-05 15:57:06
+from zerodb.catalog.indexes.text import CatalogTextIndex, CatalogTextIndexOkapi
+from zerodb.catalog.indexes.field import CatalogFieldIndex
+from . import exceptions
+
+class Indexable(object):
+    Index = None
+
+    def __init__(self, default=None, virtual=None, index=True):
+        """
+        :param default: Default value (which can be callable, like utcnow)
+        :param virtual: Virtual value which is *only* calculated but is not
+            stored. Still, it is indexed
+        :param bool index: If False, we just use schema for validation
+        """
+        self.default = default
+        self.virtual = virtual
+        self.indexed = index
+        if default is not None and virtual is not None:
+            raise exceptions.FieldException('One cannot simultaneously set the default valueand claim that the field is derived by calculation only')
+        return
+
+    def __repr__(self):
+        return 'Indexable field <%s>' % self.__class__.__name__
+
+
+class Field(Indexable):
+    """
+    Field of any type which supports comparisions
+    """
+    Index = CatalogFieldIndex
+
+
+class Text(Indexable):
+    """
+    Text field to be used for fulltext search
+    """
+    Index = CatalogTextIndex
+
+
+class TextOkapi(Indexable):
+    Index = CatalogTextIndexOkapi

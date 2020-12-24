@@ -1,0 +1,113 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/mdiazmel/code/aramis/clinica/clinica/iotools/converters/nifd_to_bids/utils/descriptor.py
+# Compiled at: 2019-10-10 04:46:11
+# Size of source mod 2**32: 4421 bytes
+__author__ = 'Adam Wild'
+__copyright__ = 'Copyright 2016-2019 The Aramis Lab Team'
+__credits__ = ['Adam Wild']
+__license__ = 'See LICENSE.txt file'
+__version__ = '0.1.0'
+__maintainer__ = 'Adam Wild'
+__email__ = 'adam.wild@icm-institute.org'
+__status__ = 'Development'
+
+class Descriptor(object):
+    """Descriptor"""
+
+    def __init__(self, dic_des):
+        self.dataType = None
+        self.modalityLabel = None
+        self.customLabels = None
+        self.priority = 0
+        self.criteria = False
+        self.Modality = None
+        self.SeriesDescription = None
+        if 'dataType' in dic_des:
+            self.dataType = dic_des['dataType']
+        if 'modalityLabel' in dic_des:
+            self.modalityLabel = dic_des['modalityLabel']
+        if 'customLabels' in dic_des:
+            self.customLabels = dic_des['customLabels']
+        if 'priority' in dic_des:
+            self.priority = int(dic_des['priority'])
+        if 'criteria' in dic_des:
+            self.criteria = True
+            if 'Modality' in dic_des['criteria']:
+                self.Modality = dic_des['criteria']['Modality']
+            if 'SeriesDescription' in dic_des['criteria']:
+                self.SeriesDescription = dic_des['criteria']['SeriesDescription']
+
+    def describes(self, str_image):
+        """
+        Uses self.SeriesDescription to determine whether self describes str_image
+        For instance, if self.SeriesDescription = "*FLAIR*^*DIS3D:*flair*^*DIS3D"
+        every image containing the string "FLAIR" and ending with "DIS3D" will make this method return True
+        an image containing the string "flair" and ending with "DIS3D" will also return True
+        '*' stands for any string
+        '^' stands for AND
+        ':' stands for OR
+
+        Args:
+            str_image: Image name
+
+        Returns:
+            Boolean: True if str_image corresponds to the pattern written in self.SeriesDescription, else False
+        """
+
+        def test_desc(str_image, desc):
+            if desc[0] == '*':
+                if desc[(-1)] == '*':
+                    return desc[1:-1] in str_image
+                else:
+                    return str_image[-len(desc) + 1:] == desc[1:]
+            else:
+                if desc[(-1)] == '*':
+                    return str_image[:len(desc) - 1] == desc[:-1]
+                else:
+                    return str_image == desc
+
+        descriptions = self.SeriesDescription.split(':')
+        for desc in descriptions:
+            sub_desc = desc.split('^')
+            bool = True
+            for sub in sub_desc:
+                bool = bool and test_desc(str_image, sub)
+
+            if bool:
+                return True
+
+        return False
+
+    def get_bids_info(self):
+        s = ''
+        if self.customLabels is not None:
+            s += self.customLabels + '_'
+        if self.modalityLabel is not None:
+            s += self.modalityLabel + '_'
+        if len(s) == 0:
+            return s
+        else:
+            return s[:-1]
+
+    def __str__(self):
+        s = ''
+        if self.dataType is not None:
+            s += 'dataType : ' + self.dataType + ', '
+        if self.modalityLabel is not None:
+            s += 'modalityLabel : ' + self.modalityLabel + ', '
+        if self.customLabels is not None:
+            s += 'customLabels : ' + self.customLabels + ', '
+        if self.priority != 0:
+            s += 'priority : ' + str(self.priority) + ', '
+        if self.criteria:
+            s += '\n(criteria) '
+            if self.Modality is not None:
+                s += 'Modality : ' + self.Modality + ', '
+            if self.SeriesDescription is not None:
+                s += 'SeriesDescription : ' + self.SeriesDescription + ', '
+        if len(s) > 2:
+            return s[:-2]
+        else:
+            return s

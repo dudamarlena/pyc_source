@@ -1,0 +1,92 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.5 (62131)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.5-i386/egg/ore/alchemist/vocabulary.py
+# Compiled at: 2008-09-11 20:29:53
+"""
+
+$Id: vocabulary.py 326 2008-08-18 18:26:17Z kapilt $
+"""
+from ore.alchemist import Session
+from zope import interface
+from zope.schema.interfaces import IContextSourceBinder
+from zope.schema import vocabulary
+import sqlalchemy as rdb
+
+class DatabaseSource(object):
+    """
+    a simple implementation of vocabularies on top of a domain model, ideally should
+    only be used with small skinny tables, actual value stored is the id
+    """
+    interface.implements(IContextSourceBinder)
+
+    def __init__(self, domain_model, token_field, value_field, title_field=None, order_by=None):
+        self.domain_model = domain_model
+        self.token_field = token_field
+        self.value_field = value_field
+        self.title_field = title_field
+        self.order_by = order_by
+
+    def constructQuery(self, context):
+        session = Session()
+        query = session.query(self.domain_model)
+        if self.order_by:
+            query = query.order_by(self.order_by)
+        return query
+
+    def __call__(self, context=None):
+        query = self.constructQuery(context)
+        results = query.all()
+        terms = []
+        title_field = self.title_field or self.token_field
+        for ob in results:
+            terms.append(vocabulary.SimpleTerm(value=getattr(ob, self.value_field), token=getattr(ob, self.token_field), title=getattr(ob, title_field)))
+
+        return vocabulary.SimpleVocabulary(terms)
+
+
+class ObjectSource(DatabaseSource):
+    """
+    a vocabulary source, where objects are the values, for suitable for o2m fields.
+    """
+
+    def constructQuery(self, context):
+        session = Session()
+        query = session.query(self.domain_model)
+        return query
+
+    def __call__(self, context=None):
+        query = self.constructQuery(context)
+        results = query.all()
+        terms = [ vocabulary.SimpleTerm(value=ob, token=getattr(ob, self.value_field), title=getattr(ob, self.token_field)) for ob in results
+                ]
+        return vocabulary.SimpleVocabulary(terms)
+
+
+class VocabularyTable(object):
+    """
+    a database source implementation which caches values for the lifetime of the app, useful
+    if the vocabulary definition is static.
+    """
+    _vocabulary = None
+
+    def __init__(self, table, token_field, value_field):
+        self.table = table
+        self.token_field = token_field
+        self.value_field = value_field
+
+    @property
+    def vocabulary(self):
+        if self._vocabulary:
+            return self._vocabulary
+        terms = rdb.select([self.table.c[self.value_field],
+         self.table.c[self.token_field]]).execute().fetchall()
+        self._vocabulary = vocabulary.SimpleVocabulary.fromItems(terms)
+        return self._vocabulary
+
+    def __getattr__(self, name):
+        return getattr(self.vocabulary, name)
+
+    def __call__(self, *args, **kw):
+        return self.vocabulary

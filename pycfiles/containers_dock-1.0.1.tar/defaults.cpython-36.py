@@ -1,0 +1,14 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /home/vanessa/Documents/Dropbox/Code/share/containershare-python/containershare/defaults.py
+# Compiled at: 2018-07-30 07:43:57
+# Size of source mod 2**32: 2803 bytes
+__doc__ = '\n\ndefaults.py: this script acts as a gateway between variables defined at\nruntime, and defaults. Any variable that has an unchanging default value \ncan be found here. The order of operations works as follows:\n  \n    1. First preference goes to environment variable set at runtime\n    2. Second preference goes to default defined in this file\n    3. Then, if neither is found, null is returned except in the \n       case that required = True. A required = True variable not found\n       will system exit with an error.\n\n\nCopyright (c) 2018, Vanessa Sochat\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n* Redistributions of source code must retain the above copyright notice, this\n  list of conditions and the following disclaimer.\n\n* Redistributions in binary form must reproduce the above copyright notice,\n  this list of conditions and the following disclaimer in the documentation\n  and/or other materials provided with the distribution.\n\n* Neither the name of the copyright holder nor the names of its\n  contributors may be used to endorse or promote products derived from\n  this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n\n\n'
+from containershare.utils import convert2boolean, getenv
+import tempfile, os, pwd, sys
+CONTAINERSHARE_REGISTRY = getenv('CONTAINERSHARE_REGISTRY_BASE', default='https://vsoch.github.io')
+CONTAINERSHARE_LIBRARY = '%s/containershare/library.json' % CONTAINERSHARE_REGISTRY
+COLORIZE = getenv('CONTAINERSHARE_COLORIZE', default=None)
+if COLORIZE is not None:
+    COLORIZE = convert2boolean(COLORIZE)

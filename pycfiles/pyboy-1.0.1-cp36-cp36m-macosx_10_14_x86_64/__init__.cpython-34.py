@@ -1,0 +1,30 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build\bdist.win-amd64\egg\app\__init__.py
+# Compiled at: 2015-08-19 16:40:45
+# Size of source mod 2**32: 923 bytes
+__doc__ = 'app\\__init__.py: This file initializes the Flask app.'
+__author__ = 'dan'
+from flask import Flask
+from flask.ext.sqlalchemy import SQLAlchemy
+from flask.ext.login import LoginManager
+from config import config
+db = SQLAlchemy()
+login_manager = LoginManager()
+login_manager.session_protection = 'strong'
+login_manager.login_view = 'account.login'
+
+def create_app(config_name):
+    app = Flask(__name__)
+    app.config.from_object(config[config_name])
+    config[config_name].init_app(app)
+    db.init_app(app)
+    login_manager.init_app(app)
+    from .core import core as core_blueprint
+    app.register_blueprint(core_blueprint)
+    from .account import account as account_blueprint
+    app.register_blueprint(account_blueprint, url_prefix='/account')
+    from .blog import blog as blog_blueprint
+    app.register_blueprint(blog_blueprint, url_prefix='/blog')
+    return app

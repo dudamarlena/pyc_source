@@ -1,0 +1,118 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python3.6/dist-packages/pyxrd/phases/controllers/phases_controller.py
+# Compiled at: 2020-03-07 03:51:50
+# Size of source mod 2**32: 4701 bytes
+from contextlib import contextmanager
+import logging
+logger = logging.getLogger(__name__)
+from mvc import Model
+from mvc.adapters.gtk_support.dialogs.dialog_factory import DialogFactory
+from pyxrd.generic.views.treeview_tools import new_text_column
+from pyxrd.generic.controllers import ObjectListStoreController
+from pyxrd.generic.utils import not_none
+from pyxrd.phases.views import EditPhaseView, AddPhaseView, EditRawPatternPhaseView
+from pyxrd.file_parsers.json_parser import JSONParser
+from pyxrd.file_parsers.phase_parsers import phase_parsers
+from ..models import Phase, RawPatternPhase
+from .edit_phase_controller import EditPhaseController
+from .raw_pattern_phase_controller import EditRawPatternPhaseController
+from .add_phase_controller import AddPhaseController
+
+class PhasesController(ObjectListStoreController):
+    __doc__ = ' \n        Controller for the phases list\n    '
+    file_filters = Phase.Meta.file_filters
+    treemodel_property_name = 'phases'
+    treemodel_class_type = Phase
+    obj_type_map = [
+     (
+      Phase, EditPhaseView, EditPhaseController),
+     (
+      RawPatternPhase, EditRawPatternPhaseView, EditRawPatternPhaseController)]
+    multi_selection = True
+    columns = [
+     ('Phase name', 'c_name'),
+     (' ', 'c_display_color'),
+     ('R', 'c_R'),
+     ('#', 'c_G')]
+    delete_msg = 'Deleting a phase is irreversible!\nAre You sure you want to continue?'
+    title = 'Edit Phases'
+
+    def get_phases_tree_model(self, *args):
+        return self.treemodel
+
+    def load_phases(self, filename, parser=JSONParser):
+        index = self.get_selected_index()
+        if index is not None:
+            index += 1
+        self.model.load_phases(filename, parser=parser, insert_index=index)
+
+    def setup_treeview_col_c_display_color(self, treeview, name, col_descr, col_index, tv_col_nr):
+
+        def set_background(column, cell_renderer, tree_model, iter, col_index):
+            try:
+                color = tree_model.get_value(iter, col_index)
+            except TypeError:
+                pass
+            else:
+                cell_renderer.set_property('background', color)
+                cell_renderer.set_property('text', '')
+
+        treeview.append_column(new_text_column(name,
+          data_func=(
+         set_background, (col_index,)),
+          text_col=col_index,
+          resizable=False,
+          expand=False))
+        return True
+
+    def create_new_object_proxy(self):
+
+        def on_accept(phase_type, G, R):
+            index = int(not_none(self.get_selected_index(), -1)) + 1
+            if phase_type == 'empty':
+                self.add_object(Phase(G=(int(G)), R=(int(R))))
+            else:
+                if phase_type == 'raw':
+                    self.add_object(RawPatternPhase())
+                else:
+                    filename = phase_type
+            if filename != None:
+                self.model.load_phases(filename, parser=JSONParser, insert_index=index)
+
+        self.add_model = Model()
+        self.add_view = AddPhaseView(parent=(self.view))
+        self.add_ctrl = AddPhaseController(model=(self.add_model),
+          view=(self.add_view),
+          parent=(self.parent),
+          callback=on_accept)
+        self.add_view.present()
+
+    @contextmanager
+    def _multi_operation_context(self):
+        with self.model.hold_mixtures_data_changed():
+            with self.model.hold_mixtures_needs_update():
+                with self.model.hold_phases_data_changed():
+                    yield
+
+    def on_save_object_clicked(self, event):
+
+        def on_accept(dialog):
+            logger.info('Exporting phases...')
+            Phase.save_phases((self.get_selected_objects()), filename=(dialog.filename))
+
+        DialogFactory.get_save_dialog('Export phase',
+          parent=(self.view.get_top_widget()), filters=(phase_parsers.get_export_file_filters())).run(on_accept)
+        return True
+
+    def on_load_object_clicked(self, event):
+
+        def on_accept(dialog):
+            logger.info('Importing phases...')
+            self.load_phases((dialog.filename), parser=(dialog.parser))
+
+        DialogFactory.get_load_dialog('Import phase',
+          parent=(self.view.get_top_widget()), filters=(phase_parsers.get_import_file_filters())).run(on_accept)
+        return True

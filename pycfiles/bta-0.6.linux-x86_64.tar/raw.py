@@ -1,0 +1,33 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python2.7/dist-packages/bta/formatters/raw.py
+# Compiled at: 2015-10-20 16:27:01
+import StringIO, zipfile
+from bta.formatters import Formatter
+
+@Formatter.register
+class Raw(Formatter):
+    _name_ = 'raw'
+
+    def __init__(self):
+        self.doc = []
+
+    def add_list(self, name, lvl, lst):
+        pass
+
+    def add_section(self, section_name, lvl):
+        pass
+
+    def add_content(self, content):
+        pass
+
+    def add_table(self, name, table):
+        pass
+
+    def add_raw(self, name, content):
+        self.doc.append((name, content))
+
+    def finalize(self, encoding=None):
+        return ('').join([ raw for name, raw in self.doc ])

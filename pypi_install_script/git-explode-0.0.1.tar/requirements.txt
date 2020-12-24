@@ -1,0 +1,2 @@
+git-deps >= 1.0.1
+ostruct

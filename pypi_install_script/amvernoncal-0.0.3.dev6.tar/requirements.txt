@@ -1,0 +1,11 @@
+docopt>=0.6.2
+fuzzywuzzy>=0.15.1
+google-api-python-client==1.6.3
+maya>=0.3.2
+nltk>=3.2.4
+numpy>=1.13.1
+oauth2client==4.1.2
+pandas>=0.20.3
+records>=0.5.0
+textblob>=0.13.0
+XlsxWriter~=0.9.8

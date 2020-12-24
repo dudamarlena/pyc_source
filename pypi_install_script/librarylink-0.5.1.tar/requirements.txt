@@ -1,0 +1,9 @@
+amara3.xml
+
+rdflib
+versa
+diskcache
+
+#Optional bits
+#CacheControl[filecache]
+#rdflib-jsonld

@@ -1,0 +1,103 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/philewels/GitHub/MultiQC/multiqc/modules/tophat/tophat.py
+# Compiled at: 2019-11-15 10:23:45
+# Size of source mod 2**32: 5902 bytes
+""" MultiQC module to parse output from Tophat """
+from __future__ import print_function
+from collections import OrderedDict
+import logging, os, re
+from multiqc import config
+from multiqc.plots import bargraph
+from multiqc.modules.base_module import BaseMultiqcModule
+log = logging.getLogger(__name__)
+
+class MultiqcModule(BaseMultiqcModule):
+
+    def __init__(self):
+        super(MultiqcModule, self).__init__(name='Tophat', anchor='tophat', href='https://ccb.jhu.edu/software/tophat/',
+          info='is a fast splice junction mapper for RNA-Seq reads. It aligns RNA-Seq reads to mammalian-sized genomes.')
+        self.tophat_data = dict()
+        for f in self.find_log_files('tophat'):
+            parsed_data = self.parse_tophat_log(f['f'])
+            if parsed_data is not None:
+                if f['s_name'] == 'align' or f['s_name'] == 'align_summary.txt':
+                    s_name = os.path.basename(f['root'])
+                else:
+                    s_name = f['s_name'].split('align_summary.txt', 1)[0]
+                s_name = self.clean_s_name(s_name, f['root'])
+                if s_name in self.tophat_data:
+                    log.debug('Duplicate sample name found! Overwriting: {}'.format(s_name))
+                self.add_data_source(f, s_name)
+                self.tophat_data[s_name] = parsed_data
+
+        self.tophat_data = self.ignore_samples(self.tophat_data)
+        if len(self.tophat_data) == 0:
+            raise UserWarning
+        log.info('Found {} reports'.format(len(self.tophat_data)))
+        self.write_data_file(self.tophat_data, 'multiqc_tophat.txt')
+        self.tophat_general_stats_table()
+        self.tophat_alignment_plot()
+
+    def parse_tophat_log(self, raw_data):
+        """ Parse the Tophat alignment log file. """
+        if 'Aligned pairs' in raw_data:
+            regexes = {'overall_aligned_percent':'([\\d\\.]+)% overall read mapping rate.', 
+             'concordant_aligned_percent':'([\\d\\.]+)% concordant pair alignment rate.', 
+             'aligned_total':'Aligned pairs:\\s+(\\d+)', 
+             'aligned_multimap':'Aligned pairs:\\s+\\d+\\n\\s+of these:\\s+(\\d+)', 
+             'aligned_discordant':'(\\d+) \\([\\s\\d\\.]+%\\) are discordant alignments', 
+             'total_reads':'[Rr]eads:\\n\\s+Input\\s*:\\s+(\\d+)'}
+        else:
+            regexes = {'total_reads':'[Rr]eads:\\n\\s+Input\\s*:\\s+(\\d+)', 
+             'aligned_total':'Mapped\\s*:\\s+(\\d+)', 
+             'aligned_multimap':'of these\\s*:\\s+(\\d+)', 
+             'overall_aligned_percent':'([\\d\\.]+)% overall read mapping rate.'}
+        parsed_data = {}
+        for k, r in regexes.items():
+            r_search = re.search(r, raw_data, re.MULTILINE)
+            if r_search:
+                parsed_data[k] = float(r_search.group(1))
+
+        if len(parsed_data) < 4:
+            return
+        parsed_data['concordant_aligned_percent'] = parsed_data.get('concordant_aligned_percent', 0)
+        parsed_data['aligned_total'] = parsed_data.get('aligned_total', 0)
+        parsed_data['aligned_multimap'] = parsed_data.get('aligned_multimap', 0)
+        parsed_data['aligned_discordant'] = parsed_data.get('aligned_discordant', 0)
+        parsed_data['unaligned_total'] = parsed_data['total_reads'] - parsed_data['aligned_total']
+        parsed_data['aligned_not_multimapped_discordant'] = parsed_data['aligned_total'] - parsed_data['aligned_multimap'] - parsed_data['aligned_discordant']
+        return parsed_data
+
+    def tophat_general_stats_table(self):
+        """ Take the parsed stats from the Tophat report and add it to the
+        basic stats table at the top of the report """
+        headers = OrderedDict()
+        headers['overall_aligned_percent'] = {'title':'% Aligned', 
+         'description':'overall read mapping rate', 
+         'max':100, 
+         'min':0, 
+         'suffix':'%', 
+         'scale':'YlGn'}
+        headers['aligned_not_multimapped_discordant'] = {'title':'{} Aligned'.format(config.read_count_prefix), 
+         'description':'Aligned reads, not multimapped or discordant ({})'.format(config.read_count_desc), 
+         'min':0, 
+         'scale':'PuRd', 
+         'modify':lambda x: x * config.read_count_multiplier, 
+         'shared_key':'read_count'}
+        self.general_stats_addcols(self.tophat_data, headers)
+
+    def tophat_alignment_plot(self):
+        """ Make the HighCharts HTML to plot the alignment rates """
+        keys = OrderedDict()
+        keys['aligned_not_multimapped_discordant'] = {'color':'#437bb1',  'name':'Aligned'}
+        keys['aligned_multimap'] = {'color':'#f7a35c',  'name':'Multimapped'}
+        keys['aligned_discordant'] = {'color':'#e63491',  'name':'Discordant mappings'}
+        keys['unaligned_total'] = {'color':'#7f0000',  'name':'Not aligned'}
+        config = {'id':'tophat_alignment', 
+         'title':'Tophat: Alignment Scores', 
+         'ylab':'# Reads', 
+         'cpswitch_counts_label':'Number of Reads'}
+        self.add_section(plot=(bargraph.plot(self.tophat_data, keys, config)))

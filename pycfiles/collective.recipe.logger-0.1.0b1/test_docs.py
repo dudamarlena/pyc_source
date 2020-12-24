@@ -1,0 +1,36 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/collective/recipe/linktally/tests/test_docs.py
+# Compiled at: 2007-12-20 08:04:40
+__doc__ = "\nGeneric Test case for 'collective.recipe.linktally' doctest\n"
+__docformat__ = 'restructuredtext'
+import unittest, doctest, sys, os
+from zope.testing import doctest
+current_dir = os.path.dirname(__file__)
+
+def doc_suite(test_dir, setUp=None, tearDown=None, globs=None):
+    """Returns a test suite, based on doctests found in /doctest."""
+    suite = []
+    if globs is None:
+        globs = globals()
+    globs['test_dir'] = current_dir
+    flags = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_ONLY_FIRST_FAILURE
+    package_dir = os.path.split(test_dir)[0]
+    if package_dir not in sys.path:
+        sys.path.append(package_dir)
+    doctest_dir = os.path.join(package_dir, 'docs')
+    docs = [ os.path.join(doctest_dir, doc) for doc in os.listdir(doctest_dir) if doc.endswith('.txt') ]
+    for test in docs:
+        suite.append(doctest.DocFileSuite(test, optionflags=flags, globs=globs, setUp=setUp, tearDown=tearDown, module_relative=False))
+
+    return unittest.TestSuite(suite)
+
+
+def test_suite():
+    """returns the test suite"""
+    return doc_suite(current_dir)
+
+
+if __name__ == '__main__':
+    unittest.main(defaultTest='test_suite')

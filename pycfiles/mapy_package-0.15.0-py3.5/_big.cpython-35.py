@@ -1,0 +1,53 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.5 (3350)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win-amd64\egg\mapy\mplutils\_big.py
+# Compiled at: 2017-04-12 19:32:03
+# Size of source mod 2**32: 1772 bytes
+params = {'savefig.dpi': 300, 
+ 'savefig.extension': 'auto', 
+ 'figure.figsize': (9, 5), 
+ 'figure.dpi': 80, 
+ 'figure.facecolor': 'white', 
+ 'figure.edgecolor': 'white', 
+ 'xtick.major.pad': 4, 
+ 'xtick.minor.pad': 4, 
+ 'xtick.labelsize': 'medium', 
+ 'xtick.direction': 'out', 
+ 'xtick.minor.size': 0.0, 
+ 'ytick.major.size': 4, 
+ 'ytick.minor.size': 2, 
+ 'ytick.major.pad': 4, 
+ 'ytick.minor.pad': 4, 
+ 'ytick.labelsize': 'medium', 
+ 'ytick.direction': 'out', 
+ 'ytick.minor.size': 0.0, 
+ 'axes.linewidth': 1.0, 
+ 'axes.grid': True, 
+ 'grid.color': '0.5', 
+ 'grid.linestyle': ':', 
+ 'grid.linewidth': 0.4, 
+ 'axes.labelweight': 'bold', 
+ 'legend.numpoints': 1, 
+ 'legend.fontsize': 10, 
+ 'legend.markerscale': 1.0, 
+ 'legend.labelspacing': 0.0, 
+ 'legend.handlelength': 2.0, 
+ 'legend.handleheight': 0.0}
+defaults = {'font': {'family': 'Times New Roman', 
+          'weight': 'normal', 
+          'size': 10}, 
+ 
+ 'color': ['black'], 
+ 'color_color': map(str, [0.0, 0.2, 0.4, 0.6, 0.8]), 
+ 'markersize': 6, 
+ 'markerfacecolor': 'None', 
+ 'markeredgewidth': 0.75, 
+ 'markeredgecolor': 'black', 
+ 'linestyle': ['-'], 
+ 'linestyle_linestyle': ['-', '--', ':', '-.'], 
+ 'linewidth': ['1.'], 
+ 'marker': [''], 
+ 'marker_marker': ['', 'o', '^', '>', '<', 'v', '+', 'x', 'd', 'D', 's',
+                   '1', '2', '3', '4']}

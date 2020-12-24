@@ -1,0 +1,26 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: ./guild/external/pip/_vendor/chardet/cp949prober.py
+# Compiled at: 2019-09-10 15:18:29
+from .chardistribution import EUCKRDistributionAnalysis
+from .codingstatemachine import CodingStateMachine
+from .mbcharsetprober import MultiByteCharSetProber
+from .mbcssm import CP949_SM_MODEL
+
+class CP949Prober(MultiByteCharSetProber):
+
+    def __init__(self):
+        super(CP949Prober, self).__init__()
+        self.coding_sm = CodingStateMachine(CP949_SM_MODEL)
+        self.distribution_analyzer = EUCKRDistributionAnalysis()
+        self.reset()
+
+    @property
+    def charset_name(self):
+        return 'CP949'
+
+    @property
+    def language(self):
+        return 'Korean'

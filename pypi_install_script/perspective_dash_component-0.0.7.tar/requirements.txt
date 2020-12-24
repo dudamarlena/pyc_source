@@ -1,0 +1,6 @@
+dash>=0.38.0
+dash-core-components>=0.43.0
+dash-html-components>=0.13.5
+Flask>=1.0.2
+gunicorn>=19.9.0
+perspective-python>=0.1.3

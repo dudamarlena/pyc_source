@@ -1,0 +1,254 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /home/c24b/projets/crawtext/newspaper/parsers.py
+# Compiled at: 2014-11-06 08:50:33
+__doc__ = "\nNewspaper uses a lot of python-goose's parsing code. View theirlicense:\nhttps://github.com/codelucas/newspaper/blob/master/GOOSE-LICENSE.txt\n\nParser objects will only contain operations that manipulate\nor query an lxml or soup dom object generated from an article's html.\n"
+import logging, lxml.etree, lxml.html
+from copy import deepcopy
+from . import text
+from . import utils
+log = logging.getLogger(__name__)
+
+class Parser(object):
+
+    @classmethod
+    def xpath_re(cls, node, expression):
+        regexp_namespace = 'http://exslt.org/regular-expressions'
+        items = node.xpath(expression, namespaces={'re': regexp_namespace})
+        return items
+
+    @classmethod
+    def drop_tag(cls, nodes):
+        if isinstance(nodes, list):
+            for node in nodes:
+                node.drop_tag()
+
+        else:
+            nodes.drop_tag()
+
+    @classmethod
+    def css_select(cls, node, selector):
+        return node.cssselect(selector)
+
+    @classmethod
+    def fromstring(cls, html):
+        html = utils.encodeValue(html)
+        try:
+            cls.doc = lxml.html.fromstring(html)
+        except Exception as e:
+            print '[Parse lxml ERR]', str(e)
+            return
+
+        return cls.doc
+
+    @classmethod
+    def node_to_string(cls, node):
+        return lxml.html.tostring(node)
+
+    @classmethod
+    def clean_article_html(cls, node):
+        article_cleaner = lxml.html.clean.Cleaner()
+        article_cleaner.javascript = True
+        article_cleaner.style = True
+        article_cleaner.allow_tags = [
+         'a', 'span', 'p', 'br', 'strong', 'b',
+         'em', 'i', 'tt', 'code', 'pre', 'blockquote', 'img', 'h1',
+         'h2', 'h3', 'h4', 'h5', 'h6']
+        article_cleaner.remove_unknown_tags = False
+        return article_cleaner.clean_html(node)
+
+    @classmethod
+    def nodeToString(cls, node):
+        return lxml.etree.tostring(node)
+
+    @classmethod
+    def replaceTag(cls, node, tag):
+        node.tag = tag
+
+    @classmethod
+    def stripTags(cls, node, *tags):
+        lxml.etree.strip_tags(node, *tags)
+
+    @classmethod
+    def getElementById(cls, node, idd):
+        selector = '//*[@id="%s"]' % idd
+        elems = node.xpath(selector)
+        if elems:
+            return elems[0]
+        else:
+            return
+
+    @classmethod
+    def getElementsByTag(cls, node, tag=None, attr=None, value=None, childs=False):
+        NS = 'http://exslt.org/regular-expressions'
+        selector = 'descendant-or-self::%s' % (tag or '*')
+        if attr and value:
+            selector = '%s[re:test(@%s, "%s", "i")]' % (selector, attr, value)
+        elems = node.xpath(selector, namespaces={'re': NS})
+        if node in elems and (tag or childs):
+            elems.remove(node)
+        return elems
+
+    @classmethod
+    def appendChild(cls, node, child):
+        node.append(child)
+
+    @classmethod
+    def childNodes(cls, node):
+        return list(node)
+
+    @classmethod
+    def childNodesWithText(cls, node):
+        root = node
+        if root.text:
+            t = lxml.html.HtmlElement()
+            t.text = root.text
+            t.tag = 'text'
+            root.text = None
+            root.insert(0, t)
+        for c, n in enumerate(list(root)):
+            idx = root.index(n)
+            if n.tag == 'text':
+                continue
+            if n.tail:
+                t = cls.createElement(tag='text', text=n.tail, tail=None)
+                root.insert(idx + 1, t)
+
+        return list(root)
+
+    @classmethod
+    def textToPara(cls, text):
+        return cls.fromstring(text)
+
+    @classmethod
+    def getChildren(cls, node):
+        return node.getchildren()
+
+    @classmethod
+    def getElementsByTags(cls, node, tags):
+        selector = (',').join(tags)
+        elems = cls.css_select(node, selector)
+        if node in elems:
+            elems.remove(node)
+        return elems
+
+    @classmethod
+    def createElement(cls, tag='p', text=None, tail=None):
+        t = lxml.html.HtmlElement()
+        t.tag = tag
+        t.text = text
+        t.tail = tail
+        return t
+
+    @classmethod
+    def getComments(cls, node):
+        return node.xpath('//comment()')
+
+    @classmethod
+    def getParent(cls, node):
+        return node.getparent()
+
+    @classmethod
+    def remove(cls, node):
+        parent = node.getparent()
+        if parent is not None:
+            if node.tail:
+                prev = node.getprevious()
+                if prev is None:
+                    if not parent.text:
+                        parent.text = ''
+                    parent.text += ' ' + node.tail
+                else:
+                    if not prev.tail:
+                        prev.tail = ''
+                    prev.tail += ' ' + node.tail
+            node.clear()
+            parent.remove(node)
+        return
+
+    @classmethod
+    def getTag(cls, node):
+        return node.tag
+
+    @classmethod
+    def getText(cls, node):
+        txts = [ i for i in node.itertext() ]
+        return text.innerTrim((' ').join(txts).strip())
+
+    @classmethod
+    def previousSiblings(cls, node):
+        nodes = []
+        for c, n in enumerate(node.itersiblings(preceding=True)):
+            nodes.append(n)
+
+        return nodes
+
+    @classmethod
+    def previousSibling(cls, node):
+        nodes = []
+        for c, n in enumerate(node.itersiblings(preceding=True)):
+            nodes.append(n)
+            if c == 0:
+                break
+
+        if nodes:
+            return nodes[0]
+        else:
+            return
+
+    @classmethod
+    def nextSibling(cls, node):
+        nodes = []
+        for c, n in enumerate(node.itersiblings(preceding=False)):
+            nodes.append(n)
+            if c == 0:
+                break
+
+        if nodes:
+            return nodes[0]
+        else:
+            return
+
+    @classmethod
+    def isTextNode(cls, node):
+        if node.tag == 'text':
+            return True
+        return False
+
+    @classmethod
+    def getAttribute(cls, node, attr=None):
+        if attr:
+            return node.attrib.get(attr, None)
+        else:
+            return attr
+
+    @classmethod
+    def delAttribute(cls, node, attr=None):
+        if attr:
+            _attr = node.attrib.get(attr, None)
+            if _attr:
+                del node.attrib[attr]
+        return
+
+    @classmethod
+    def setAttribute(cls, node, attr=None, value=None):
+        if attr and value:
+            node.set(attr, value)
+
+    @classmethod
+    def outerHtml(cls, node):
+        e0 = node
+        if e0.tail:
+            e0 = deepcopy(e0)
+            e0.tail = None
+        return cls.nodeToString(e0)
+
+
+class ParserSoup(Parser):
+
+    @classmethod
+    def fromstring(cls, html):
+        html = utils.encodeValue(html)
+        cls.doc = lxml.html.soupparser.fromstring(html)
+        return cls.doc

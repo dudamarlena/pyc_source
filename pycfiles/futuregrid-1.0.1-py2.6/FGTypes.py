@@ -1,0 +1,23 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/futuregrid/utils/FGTypes.py
+# Compiled at: 2012-09-06 11:03:15
+"""
+Classes to store types used within FG
+"""
+__author__ = 'Fugang Wang'
+
+class FGCredential(object):
+
+    def __init__(self, provider, cred):
+        super(FGCredential, self).__init__()
+        self._provider = provider
+        self._cred = cred
+
+    def getProvider(self):
+        return self._provider
+
+    def getCred(self):
+        return self._cred

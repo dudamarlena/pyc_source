@@ -1,0 +1,103 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/globus_search_cli/config.py
+# Compiled at: 2019-12-03 15:45:33
+"""
+Config handling
+Mostly cloned from globus-cli
+"""
+import os, re
+from configobj import ConfigObj
+import globus_sdk
+from globus_search_cli import version
+__all__ = ('SEARCH_RT_OPTNAME', 'SEARCH_AT_OPTNAME', 'SEARCH_AT_EXPIRES_OPTNAME', 'write_option',
+           'lookup_option', 'remove_option', 'internal_auth_client', 'get_search_client')
+CONF_SECTION_NAME = 'search-cli'
+CLIENT_ID = 'ee929f5c-ed08-4320-b22f-c1aa5229e490'
+SEARCH_RT_OPTNAME = 'search_refresh_token'
+SEARCH_AT_OPTNAME = 'search_access_token'
+SEARCH_AT_EXPIRES_OPTNAME = 'search_access_token_expires'
+GLOBUS_ENV = os.environ.get('GLOBUS_SDK_ENVIRONMENT')
+if GLOBUS_ENV:
+    SEARCH_RT_OPTNAME = ('{}_{}').format(GLOBUS_ENV, SEARCH_RT_OPTNAME)
+    SEARCH_AT_OPTNAME = ('{}_{}').format(GLOBUS_ENV, SEARCH_AT_OPTNAME)
+    SEARCH_AT_EXPIRES_OPTNAME = ('{}_{}').format(GLOBUS_ENV, SEARCH_AT_EXPIRES_OPTNAME)
+    CLIENT_ID = {'sandbox': 'f9e36a20-2e1a-49e5-ba67-34cc82ca8b29', 
+       'integration': '16ba55fb-5a93-4ee0-ae20-1a3a6cbb6c03', 
+       'test': '2aa543de-b6c6-4aa5-9d7b-ef28e3a28cd8', 
+       'staging': '0811fdd3-0d3e-4b5e-b634-8d6c91d87f21', 
+       'preview': '988ff3e0-3bcf-495a-9f12-3b3a309bdb36'}.get(GLOBUS_ENV, CLIENT_ID)
+BASE_URL = os.environ.get('GLOBUS_SEARCH_BASE_URL')
+if BASE_URL is not None and not re.match('^https?://', BASE_URL):
+    scheme = 'http' if BASE_URL.startswith('localhost:') else 'https'
+    BASE_URL = scheme + '://' + BASE_URL
+
+def get_config_obj(file_error=False):
+    path = os.path.expanduser('~/.globus.cfg')
+    return ConfigObj(path, encoding='utf-8', file_error=file_error)
+
+
+def lookup_option(option):
+    conf = get_config_obj()
+    try:
+        return conf[CONF_SECTION_NAME][option]
+    except KeyError:
+        return
+
+    return
+
+
+def write_option(option, value):
+    """
+    Write an option to disk -- doesn't handle config reloading
+    """
+    os.umask(63)
+    conf = get_config_obj()
+    if CONF_SECTION_NAME not in conf:
+        conf[CONF_SECTION_NAME] = {}
+    conf[CONF_SECTION_NAME][option] = value
+    conf.write()
+
+
+def remove_option(option):
+    conf = get_config_obj()
+    try:
+        section = conf[CONF_SECTION_NAME]
+    except KeyError:
+        return
+
+    try:
+        opt_val = section[option]
+        del section[option]
+        conf.write()
+    except KeyError:
+        opt_val = None
+
+    return opt_val
+
+
+def internal_auth_client():
+    return globus_sdk.NativeAppAuthClient(CLIENT_ID, app_name=version.app_name)
+
+
+def get_search_client():
+
+    def search_refresh_callback(token_response):
+        tkn = token_response.by_resource_server
+        token = tkn['search.api.globus.org']['access_token']
+        expires_at = tkn['search.api.globus.org']['expires_at_seconds']
+        write_option(SEARCH_AT_OPTNAME, token)
+        write_option(SEARCH_AT_EXPIRES_OPTNAME, expires_at)
+
+    refresh_token = lookup_option(SEARCH_RT_OPTNAME)
+    access_token = lookup_option(SEARCH_AT_OPTNAME)
+    access_token_expires = lookup_option(SEARCH_AT_EXPIRES_OPTNAME)
+    authorizer = None
+    if access_token_expires is not None:
+        authorizer = globus_sdk.RefreshTokenAuthorizer(refresh_token, internal_auth_client(), access_token, int(access_token_expires), on_refresh=search_refresh_callback)
+    add_kwargs = {}
+    if BASE_URL:
+        add_kwargs['base_url'] = BASE_URL
+    return globus_sdk.SearchClient(authorizer=authorizer, app_name=('search-client-cli v{}').format(version.__version__), **add_kwargs)

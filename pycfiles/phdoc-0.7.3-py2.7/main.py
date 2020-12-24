@@ -1,0 +1,38 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.6-x86_64/egg/phdoc/cli/main.py
+# Compiled at: 2013-09-24 11:14:47
+import logging, os, argparse
+from phdoc.cli import commands
+from phdoc.cli.parser import parser
+from phdoc.config import Config, ConfigNotFound
+
+def main(cmd_args=None):
+    """The main entry point for running the Markdoc CLI."""
+    if cmd_args is not None:
+        args = parser.parse_args(cmd_args)
+    else:
+        args = parser.parse_args()
+    if args.command != 'init':
+        try:
+            args.config = os.path.abspath(args.config)
+            if os.path.isdir(args.config):
+                config = Config.for_directory(args.config)
+            elif os.path.isfile(args.config):
+                config = Config.for_file(args.config)
+            else:
+                raise ConfigNotFound("Couldn't locate Markdoc config.")
+        except ConfigNotFound as exc:
+            parser.error(str(exc))
+
+    else:
+        config = None
+    logging.getLogger('phdoc').setLevel(getattr(logging, args.log_level))
+    command = getattr(commands, args.command.replace('-', '_'))
+    return command(config, args)
+
+
+if __name__ == '__main__':
+    main()

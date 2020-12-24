@@ -1,0 +1,303 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.5 (3351)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/pyams_form/field.py
+# Compiled at: 2020-02-23 12:53:51
+# Size of source mod 2**32: 13388 bytes
+__doc__ = 'PyAMS_form.field module\n\nForm field definitions.\n'
+from zope.interface import Interface, Invalid, alsoProvides, implementer
+from zope.interface.interface import InterfaceClass
+from zope.location import locate
+from zope.schema import getFieldsInOrder
+from zope.schema.interfaces import IField as ISchemaField
+from pyams_form.error import MultipleErrors
+from pyams_form.interfaces import DISPLAY_MODE, IDataConverter, IField, IFields, IManagerValidator, INPUT_MODE, IValidator
+from pyams_form.interfaces.error import IErrorViewSnippet
+from pyams_form.interfaces.form import IContextAware, IFieldsForm, IFormAware
+from pyams_form.interfaces.widget import IFieldWidget, IWidgets
+from pyams_form.util import Manager, SelectionManager, expand_prefix
+from pyams_form.widget import AfterWidgetUpdateEvent
+from pyams_layer.interfaces import IFormLayer
+from pyams_utils.adapter import adapter_config
+from pyams_utils.interfaces.form import IDataManager, NO_VALUE
+from pyams_utils.registry import get_current_registry
+__docformat__ = 'restructuredtext'
+
+def _initkw(keep_readonly=(), omit_readonly=False, **defaults):
+    """Init keywords"""
+    return (
+     keep_readonly, omit_readonly, defaults)
+
+
+class WidgetFactories(dict):
+    """WidgetFactories"""
+
+    def __init__(self):
+        super(WidgetFactories, self).__init__()
+        self.default = None
+
+    def __getitem__(self, key):
+        if key not in self and self.default:
+            return self.default
+        return super(WidgetFactories, self).__getitem__(key)
+
+    def get(self, key, default=None):
+        if key not in self and self.default:
+            return self.default
+        return super(WidgetFactories, self).get(key, default)
+
+
+class WidgetFactoryProperty:
+    """WidgetFactoryProperty"""
+
+    def __get__(self, inst, klass):
+        if not hasattr(inst, '_widget_factories'):
+            inst._widget_factories = WidgetFactories()
+        return inst._widget_factories
+
+    def __set__(self, inst, value):
+        if not hasattr(inst, '_widget_factories'):
+            inst._widget_factories = WidgetFactories()
+        inst._widget_factories.default = value
+
+
+@implementer(IField)
+class Field:
+    """Field"""
+    widget_factory = WidgetFactoryProperty()
+
+    def __init__(self, field, name=None, prefix='', mode=None, interface=None, ignore_context=None, show_default=None):
+        self.field = field
+        if name is None:
+            name = field.__name__
+        assert name
+        self.__name__ = expand_prefix(prefix) + name
+        self.prefix = prefix
+        self.mode = mode
+        if interface is None:
+            interface = field.interface
+        self.interface = interface
+        self.ignore_context = ignore_context
+        self.show_default = show_default
+
+    def __repr__(self):
+        return '<%s %r>' % (self.__class__.__name__, self.__name__)
+
+
+@implementer(IFields)
+class Fields(SelectionManager):
+    """Fields"""
+    manager_interface = IFields
+
+    def __init__(self, *args, **kw):
+        keep_readonly, omit_readonly, defaults = _initkw(**kw)
+        fields = []
+        for arg in args:
+            if isinstance(arg, InterfaceClass):
+                for name, field in getFieldsInOrder(arg):
+                    fields.append((name, field, arg))
+
+            elif ISchemaField.providedBy(arg):
+                name = arg.__name__
+                if not name:
+                    raise ValueError('Field has no name')
+                fields.append((name, arg, arg.interface))
+            else:
+                if self.manager_interface.providedBy(arg):
+                    for form_field in arg.values():
+                        fields.append((
+                         form_field.__name__, form_field, form_field.interface))
+
+                else:
+                    if isinstance(arg, Field):
+                        fields.append((arg.__name__, arg, arg.interface))
+                    else:
+                        raise TypeError('Unrecognized argument type', arg)
+
+        super(Fields, self).__init__()
+        for name, field, iface in fields:
+            if isinstance(field, Field):
+                form_field = field
+            else:
+                if field.readonly and omit_readonly and name not in keep_readonly:
+                    pass
+                else:
+                    custom_defaults = defaults.copy()
+                    if iface is not None:
+                        custom_defaults['interface'] = iface
+                    form_field = Field(field, **custom_defaults)
+                    name = form_field.__name__
+            if name in self:
+                raise ValueError('Duplicate name', name)
+            self[name] = form_field
+
+    def select(self, *names, **kwargs):
+        """See interfaces.IFields"""
+        prefix = kwargs.pop('prefix', None)
+        interface = kwargs.pop('interface', None)
+        assert len(kwargs) == 0
+        if prefix:
+            names = [expand_prefix(prefix) + name for name in names]
+        mapping = self
+        if interface is not None:
+            mapping = {field.field.__name__:field for field in self.values() if field.field.interface is interface}
+        return self.__class__(*[mapping[name] for name in names])
+
+    def omit(self, *names, **kwargs):
+        """See interfaces.IFields"""
+        prefix = kwargs.pop('prefix', None)
+        interface = kwargs.pop('interface', None)
+        assert len(kwargs) == 0
+        if prefix:
+            names = [expand_prefix(prefix) + name for name in names]
+        return self.__class__(*[field for name, field in self.items() if not (name in names and interface is None or field.field.interface is interface and field.field.__name__ in names)])
+
+
+@adapter_config(required=(IFieldsForm, IFormLayer, Interface), provides=IWidgets)
+class FieldWidgets(Manager):
+    """FieldWidgets"""
+    prefix = 'widgets.'
+    mode = INPUT_MODE
+    errors = ()
+    has_required_fields = False
+    ignore_context = False
+    ignore_request = False
+    ignore_readonly = False
+    ignore_required_on_extract = False
+    set_errors = True
+
+    def __init__(self, form, request, content):
+        super(FieldWidgets, self).__init__()
+        self.form = form
+        self.request = request
+        self.content = content
+
+    def validate(self, data):
+        """Validate widgets fields"""
+        fields = self.form.fields.values()
+        schema_data = {}
+        for field in fields:
+            schema = field.interface
+            if schema is None:
+                pass
+            else:
+                field_data = schema_data.setdefault(schema, {})
+                if field.__name__ in data:
+                    field_data[field.field.__name__] = data[field.__name__]
+
+        errors = ()
+        content = self.content
+        if self.ignore_context:
+            content = None
+        registry = self.request.registry
+        for schema, field_data in schema_data.items():
+            validator = registry.getMultiAdapter((content, self.request, self.form, schema, self), IManagerValidator)
+            errors += validator.validate(field_data)
+
+        return errors
+
+    def update(self):
+        """See interfaces.widget.IWidgets"""
+        prefix = expand_prefix(self.form.prefix) + expand_prefix(self.prefix)
+        data = {}
+        data.update(self)
+        registry = self.request.registry
+        for field in self.form.fields.values():
+            ignore_context = self.ignore_context
+            if field.ignore_context is not None:
+                ignore_context = field.ignore_context
+            mode = self.mode
+            if field.mode is not None:
+                mode = field.mode
+            else:
+                if field.field.readonly and not self.ignore_readonly:
+                    mode = DISPLAY_MODE
+                elif not ignore_context:
+                    dman = registry.getMultiAdapter((self.content, field.field), IDataManager)
+                    if not dman.can_write():
+                        mode = DISPLAY_MODE
+            short_name = field.__name__
+            new_widget = True
+            if short_name in self:
+                widget = data[short_name]
+                new_widget = False
+            else:
+                if field.widget_factory.get(mode) is not None:
+                    factory = field.widget_factory.get(mode)
+                    widget = factory(field.field, self.request)
+                else:
+                    widget = registry.getMultiAdapter((field.field, self.request), IFieldWidget)
+                widget.name = prefix + short_name
+                widget.id = (prefix + short_name).replace('.', '-')
+                widget.context = self.content
+                widget.form = self.form
+                alsoProvides(widget, IContextAware, IFormAware)
+                widget.ignore_context = ignore_context
+                widget.ignore_request = self.ignore_request
+                if field.show_default is not None:
+                    widget.show_default = field.show_default
+                widget.mode = mode
+                widget.update()
+                get_current_registry().notify(AfterWidgetUpdateEvent(widget))
+                if widget.required:
+                    self.has_required_fields = True
+            if new_widget:
+                data[short_name] = widget
+                locate(widget, self, short_name)
+
+        self.create_according_to_list(data, self.form.fields.keys())
+
+    def _extract(self, return_raw=False):
+        data = {}
+        errors = ()
+        registry = self.request.registry
+        for name, widget in self.items():
+            if widget.mode == DISPLAY_MODE:
+                pass
+            else:
+                value = widget.field.missing_value
+                try:
+                    widget.set_errors = self.set_errors
+                    raw = widget.extract()
+                    if raw is not NO_VALUE:
+                        value = IDataConverter(widget).to_field_value(raw)
+                    widget.ignore_required_on_validation = self.ignore_required_on_extract
+                    registry.getMultiAdapter((self.content, self.request, self.form,
+                     getattr(widget, 'field', None), widget), IValidator).validate(value)
+                except (Invalid, ValueError, MultipleErrors) as error:
+                    view = registry.getMultiAdapter((error, self.request, widget, widget.field,
+                     self.form, self.content), IErrorViewSnippet)
+                    view.update()
+                    if self.set_errors:
+                        widget.error = view
+                    errors += (view,)
+                else:
+                    name = widget.__name__
+                if return_raw:
+                    data[name] = raw
+                else:
+                    data[name] = value
+
+        for error in self.validate(data):
+            view = registry.getMultiAdapter((error, self.request, None, None,
+             self.form, self.content), IErrorViewSnippet)
+            view.update()
+            errors += (view,)
+
+        if self.set_errors:
+            self.errors = errors
+        return (data, errors)
+
+    def extract(self):
+        """See interfaces.IWidgets"""
+        return self._extract(return_raw=False)
+
+    def extract_raw(self):
+        """See interfaces.IWidgets"""
+        return self._extract(return_raw=True)
+
+    def copy(self):
+        """See interfaces.ISelectionManager"""
+        clone = self.__class__(self.form, self.request, self.content)
+        super(self.__class__, clone).update(self)
+        return clone

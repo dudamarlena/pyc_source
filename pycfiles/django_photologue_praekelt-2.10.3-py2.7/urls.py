@@ -1,0 +1,16 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/photologue/urls.py
+# Compiled at: 2014-04-07 04:12:05
+from django.conf import settings
+from django.conf.urls.defaults import *
+from models import *
+SAMPLE_SIZE = ':%s' % getattr(settings, 'GALLERY_SAMPLE_SIZE', 5)
+gallery_args = {'date_field': 'date_added', 'allow_empty': True, 'queryset': Gallery.objects.filter(is_public=True), 'extra_context': {'sample_size': SAMPLE_SIZE}}
+urlpatterns = patterns('django.views.generic.date_based', url('^gallery/(?P<year>\\d{4})/(?P<month>[a-z]{3})/(?P<day>\\w{1,2})/(?P<slug>[\\-\\d\\w]+)/$', 'object_detail', {'date_field': 'date_added', 'slug_field': 'title_slug', 'queryset': Gallery.objects.filter(is_public=True), 'extra_context': {'sample_size': SAMPLE_SIZE}}, name='pl-gallery-detail'), url('^gallery/(?P<year>\\d{4})/(?P<month>[a-z]{3})/(?P<day>\\w{1,2})/$', 'archive_day', gallery_args, name='pl-gallery-archive-day'), url('^gallery/(?P<year>\\d{4})/(?P<month>[a-z]{3})/$', 'archive_month', gallery_args, name='pl-gallery-archive-month'), url('^gallery/(?P<year>\\d{4})/$', 'archive_year', gallery_args, name='pl-gallery-archive-year'), url('^gallery/?$', 'archive_index', gallery_args, name='pl-gallery-archive'))
+urlpatterns += patterns('django.views.generic.list_detail', url('^gallery/(?P<slug>[\\-\\d\\w]+)/$', 'object_detail', {'slug_field': 'title_slug', 'queryset': Gallery.objects.filter(is_public=True), 'extra_context': {'sample_size': SAMPLE_SIZE}}, name='pl-gallery'), url('^gallery/page/(?P<page>[0-9]+)/$', 'object_list', {'queryset': Gallery.objects.filter(is_public=True), 'allow_empty': True, 'paginate_by': 5, 'extra_context': {'sample_size': SAMPLE_SIZE}}, name='pl-gallery-list'))
+photo_args = {'date_field': 'date_added', 'allow_empty': True, 'queryset': Photo.objects.filter(is_public=True)}
+urlpatterns += patterns('django.views.generic.date_based', url('^photo/(?P<year>\\d{4})/(?P<month>[a-z]{3})/(?P<day>\\w{1,2})/(?P<slug>[\\-\\d\\w]+)/$', 'object_detail', {'date_field': 'date_added', 'slug_field': 'title_slug', 'queryset': Photo.objects.filter(is_public=True)}, name='pl-photo-detail'), url('^photo/(?P<year>\\d{4})/(?P<month>[a-z]{3})/(?P<day>\\w{1,2})/$', 'archive_day', photo_args, name='pl-photo-archive-day'), url('^photo/(?P<year>\\d{4})/(?P<month>[a-z]{3})/$', 'archive_month', photo_args, name='pl-photo-archive-month'), url('^photo/(?P<year>\\d{4})/$', 'archive_year', photo_args, name='pl-photo-archive-year'), url('^photo/$', 'archive_index', photo_args, name='pl-photo-archive'))
+urlpatterns += patterns('django.views.generic.list_detail', url('^photo/(?P<slug>[\\-\\d\\w]+)/$', 'object_detail', {'slug_field': 'title_slug', 'queryset': Photo.objects.filter(is_public=True)}, name='pl-photo'), url('^photo/page/(?P<page>[0-9]+)/$', 'object_list', {'queryset': Photo.objects.filter(is_public=True), 'allow_empty': True, 'paginate_by': 20}, name='pl-photo-list'))

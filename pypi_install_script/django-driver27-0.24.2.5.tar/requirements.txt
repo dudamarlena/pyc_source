@@ -1,0 +1,11 @@
+# MANDATORY
+six
+djangorestframework>=3.7.0
+django-swapfield
+django-filter
+django-countries
+python-slugify
+
+# TEMPLATES
+django-bootstrap3
+django-tabbed-admin

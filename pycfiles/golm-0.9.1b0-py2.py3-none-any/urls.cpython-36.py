@@ -1,0 +1,13 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/prihodad/Documents/projects/visitor/golm/golm/golm_webgui/urls.py
+# Compiled at: 2018-04-15 15:44:09
+# Size of source mod 2**32: 376 bytes
+from django.conf.urls import url
+from .views import *
+urlpatterns = [
+ url('^login/?$', view=do_login, name='do_login'),
+ url('^logout/?$', view=do_logout, name='do_logout'),
+ url('^last_change/$', view=get_last_change, name='last_change')]

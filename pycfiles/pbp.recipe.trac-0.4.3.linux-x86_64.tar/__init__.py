@@ -1,0 +1,201 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python2.6/dist-packages/pbp/recipe/trac/__init__.py
+# Compiled at: 2011-01-27 08:24:52
+"""Recipe trac"""
+import os, sys, subprocess, ConfigParser, shutil, pkg_resources, zc.buildout, zc.recipe.egg
+from trac.admin.console import TracAdmin
+from trac.ticket.model import *
+from trac.perm import PermissionSystem
+from trac.versioncontrol import RepositoryManager
+from trac.wiki.admin import WikiAdmin
+from trac.resource import ResourceNotFound
+
+class Recipe(object):
+    """zc.buildout recipe"""
+
+    def __init__(self, buildout, name, options):
+        self.buildout, self.name, self.options = buildout, name, options
+        options['location'] = os.path.join(buildout['buildout']['parts-directory'], self.name)
+        options['bin-directory'] = buildout['buildout']['bin-directory']
+        options['executable'] = sys.executable
+
+    def install(self):
+        """Installer"""
+        getBool = lambda s: s.strip().lower() in ('true', 'yes')
+
+        def cleanMultiParams(v):
+            params = [ s.split('|') for s in [ l.strip() for l in v.split('\n') ] if len(s) > 0 ]
+            cleaned_params = []
+            for line in params:
+                cleaned_params.append([ row.strip() for row in line ])
+
+            return cleaned_params
+
+        getId = lambda s: ('').join([ c for c in s if c.isalnum() ]).lower()
+        options = self.options
+        entry_points = [
+         ('trac-admin', 'trac.admin.console', 'run'),
+         ('tracd', 'trac.web.standalone', 'main')]
+        zc.buildout.easy_install.scripts(entry_points, pkg_resources.working_set, options['executable'], options['bin-directory'])
+        location = options['location']
+        project_name = options.get('project-name', 'My project')
+        project_url = options.get('project-url', 'http://example.com')
+        db = 'sqlite:%s' % os.path.join('db', 'trac.db')
+        if not os.path.exists(location):
+            os.mkdir(location)
+        trac = TracAdmin(location)
+        if not trac.env_check():
+            trac.do_initenv('"%s" %s' % (project_name, db))
+        env = trac.env
+        clean_up = getBool(options.get('remove-examples', 'True'))
+        if clean_up:
+            for mil in Milestone.select(env):
+                if mil.name in ('milestone1', 'milestone2', 'milestone3', 'milestone4'):
+                    mil.delete()
+
+            for comp in Component.select(env):
+                if comp.name in ('component1', 'component2'):
+                    comp.delete()
+
+        for mil_data in cleanMultiParams(options.get('milestones', '')):
+            mil_name = mil_data[0]
+            try:
+                mil = Milestone(env, name=mil_name)
+            except ResourceNotFound:
+                mil = Milestone(env)
+                mil.name = mil_name
+                mil.insert()
+
+        for comp_data in cleanMultiParams(options.get('components', '')):
+            comp_name = comp_data[0]
+            try:
+                comp = Component(env, name=comp_name)
+            except ResourceNotFound:
+                comp = Component(env)
+                comp.name = comp_name
+                if len(comp_data) == 2 and comp_data[1] not in (None, ''):
+                    comp.owner = comp_data[1]
+                comp.insert()
+
+        trac_ini = os.path.join(location, 'conf', 'trac.ini')
+        parser = ConfigParser.ConfigParser()
+        parser.read([trac_ini])
+        if 'components' not in parser.sections():
+            parser.add_section('components')
+        parser.set('project', 'name', project_name)
+        repos = cleanMultiParams(options.get('repos', None))
+        repo_names = [ getId(r[0]) for r in repos ]
+        repo_types = {}.fromkeys([ r[1].lower() for r in repos ]).keys()
+        if 'repositories' not in parser.sections():
+            parser.add_section('repositories')
+        for repo in repos:
+            repo_name = getId(repo[0])
+            repo_type = repo[1]
+            repo_dir = repo[2]
+            repo_url = repo[3]
+            parser.set('repositories', '%s.type' % repo_name, repo_type)
+            parser.set('repositories', '%s.dir' % repo_name, repo_dir)
+            if repo_url not in ('', None):
+                parser.set('repositories', '%s.url' % repo_name, repo_url)
+
+        default_repo = getId(options.get('default-repo', None))
+        if default_repo and default_repo in repo_names:
+            parser.set('repositories', '.alias', default_repo)
+            parser.set('repositories', '.hidden', 'true')
+        sync_method = options.get('repos-sync', 'request').strip().lower()
+        svn_repos = [ getId(r[0]) for r in repos if r[1] == 'svn' ]
+        if sync_method == 'request':
+            parser.set('trac', 'repository_sync_per_request', (', ').join(svn_repos))
+        project_descr = options.get('project-description', None)
+        if project_descr:
+            parser.set('project', 'descr', project_descr)
+            parser.set('header_logo', 'alt', project_descr)
+        header_logo = options.get('header-logo', '')
+        header_logo = os.path.realpath(header_logo)
+        if os.path.exists(header_logo):
+            shutil.copyfile(header_logo, os.path.join(location, 'htdocs', 'logo'))
+        parser.set('header_logo', 'src', 'site/logo')
+        parser.set('header_logo', 'link', project_url)
+        parser.set('project', 'footer', options.get('footer-message', 'This Trac instance was generated by <a href="http://pypi.python.org/pypi/pbp.recipe.trac">pbp.recipe.trac</a>.'))
+        for name in ('always-bcc', 'always-cc', 'default-domain', 'enabled', 'from',
+                     'from-name', 'password', 'port', 'replyto', 'server', 'subject-prefix',
+                     'user'):
+            param_name = 'smtp-%s' % name
+            default_value = None
+            if param_name == 'smtp-from-name':
+                default_value = project_name
+            value = options.get(param_name, default_value)
+            if value is not None:
+                parser.set('notification', param_name.replace('-', '_'), value)
+
+        if 'hg' in repo_types:
+            parser.set('components', 'tracext.hg.*', 'enabled')
+        menu_items = cleanMultiParams(options.get('additional-menu-items', ''))
+        item_list = []
+        for item in menu_items:
+            item_title = item[0]
+            item_url = item[1]
+            item_id = getId(item_title)
+            item_list.append((item_id, item_title, item_url))
+
+        if item_list > 0:
+            parser.set('components', 'navadd.*', 'enabled')
+            if 'navadd' not in parser.sections():
+                parser.add_section('navadd')
+            parser.set('navadd', 'add_items', (',').join([ i[0] for i in item_list ]))
+            for (uid, title, url) in item_list:
+                parser.set('navadd', '%s.target' % uid, 'mainnav')
+                parser.set('navadd', '%s.title' % uid, title)
+                parser.set('navadd', '%s.url' % uid, url)
+
+        time_tracking = options.get('time-tracking-plugin', 'disabled').strip().lower() == 'enabled'
+        if time_tracking:
+            parser.set('components', 'timingandestimationplugin.*', 'enabled')
+        stats = options.get('stats-plugin', 'disabled').strip().lower() == 'enabled'
+        if stats:
+            parser.set('components', 'tracstats.*', 'enabled')
+        custom_params = cleanMultiParams(options.get('trac-ini-additional', ''))
+        for param in custom_params:
+            if len(param) == 3:
+                section = param[0]
+                if section not in parser.sections():
+                    parser.add_section(section)
+                parser.set(section, param[1], param[2])
+
+        parser.write(open(trac_ini, 'w'))
+        env.shutdown()
+        trac = TracAdmin(location)
+        env = trac.env
+        perm_sys = PermissionSystem(env)
+        for cperm in cleanMultiParams(options.get('permissions', '')):
+            if len(cperm) == 2:
+                user = cperm[0]
+                current_user_perms = perm_sys.get_user_permissions(user)
+                perm_list = [ p.upper() for p in cperm[1].split(' ') if len(p) ]
+                for perm in perm_list:
+                    if perm not in current_user_perms:
+                        perm_sys.grant_permission(user, perm)
+
+        needs_upgrade = env.needs_upgrade()
+        force_upgrade = getBool(options.get('force-instance-upgrade', 'False'))
+        if needs_upgrade or force_upgrade:
+            env.upgrade(backup=True)
+        repo_resync = getBool(options.get('force-repos-resync', 'False'))
+        if repo_resync:
+            rm = RepositoryManager(env)
+            repositories = rm.get_real_repositories()
+            for repos in sorted(repositories, key=lambda r: r.reponame):
+                repos.sync(clean=True)
+
+        wiki_upgrade = getBool(options.get('wiki-doc-upgrade', 'False'))
+        if wiki_upgrade:
+            pages_dir = pkg_resources.resource_filename('trac.wiki', 'default-pages')
+            WikiAdmin(env).load_pages(pages_dir, ignore=[
+             'WikiStart', 'checkwiki.py'], create_only=[
+             'InterMapTxt'])
+        return tuple()
+
+    update = install

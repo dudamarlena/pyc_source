@@ -1,0 +1,75 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.8 (3413)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/PyGnuTLS/tests/test_cert_crl.py
+# Compiled at: 2020-04-24 09:28:10
+# Size of source mod 2**32: 3803 bytes
+import unittest, os, time
+from PyGnuTLS.crypto import X509Certificate, X509CRL
+certs_path = os.path.join('PyGnuTLS', 'tests', 'certs')
+
+class TestCertificates(unittest.TestCase):
+
+    def test_crl_is_revoked(self):
+        cert = X509Certificate(open(os.path.join(certs_path, 'valid.crt'), 'rb').read())
+        crl = X509CRL(open(os.path.join(certs_path, 'crl.pem'), 'rb').read())
+        print('CRL certs/crl.pem:')
+        print('CRL issuer:')
+        print('  CN = %s' % crl.issuer.CN)
+        print('  O  = %s' % crl.issuer.O)
+        print('  OU = %s' % crl.issuer.OU)
+        print('  C  = %s' % crl.issuer.C)
+        print('  ST = %s' % crl.issuer.ST)
+        print('  L  = %s' % crl.issuer.L)
+        print('  EMAIL = %s' % crl.issuer.EMAIL)
+        print('CRL version:', crl.version)
+        print('CRL count:  ', crl.count)
+        print('Certificate certs/valid.crt:')
+        print('Cert subject:')
+        print('  CN = %s' % cert.subject.CN)
+        print('  O  = %s' % cert.subject.O)
+        print('  OU = %s' % cert.subject.OU)
+        print('  C  = %s' % cert.subject.C)
+        print('  ST = %s' % cert.subject.ST)
+        print('  L  = %s' % cert.subject.L)
+        print('  EMAIL = %s' % cert.subject.EMAIL)
+        print('Cert issuer:')
+        print('  CN = %s' % cert.issuer.CN)
+        print('  O  = %s' % cert.issuer.O)
+        print('  OU = %s' % cert.issuer.OU)
+        print('  C  = %s' % cert.issuer.C)
+        print('  ST = %s' % cert.issuer.ST)
+        print('  L  = %s' % cert.issuer.L)
+        print('  EMAIL = %s' % cert.issuer.EMAIL)
+        print('Cert serial:    ', cert.serial_number)
+        print('Cert version:   ', cert.version)
+        print('Cert activation:', time.ctime(cert.activation_time))
+        print('Cert expiration:', time.ctime(cert.expiration_time))
+        self.assertFalse(crl.is_revoked(cert))
+        cert = X509Certificate(open(os.path.join(certs_path, 'revoked.crt'), 'rb').read())
+        print('Certificate certs/revoked.crt:')
+        print('Cert subject:')
+        print('  CN = %s' % cert.subject.common_name)
+        print('  O  = %s' % cert.subject.organization)
+        print('  OU = %s' % cert.subject.organization_unit)
+        print('  C  = %s' % cert.subject.country)
+        print('  ST = %s' % cert.subject.state)
+        print('  L  = %s' % cert.subject.locality)
+        print('  EMAIL = %s' % cert.subject.email)
+        print('Cert issuer:')
+        print('  CN = %s' % cert.issuer.common_name)
+        print('  O  = %s' % cert.issuer.organization)
+        print('  OU = %s' % cert.issuer.organization_unit)
+        print('  C  = %s' % cert.issuer.country)
+        print('  ST = %s' % cert.issuer.state)
+        print('  L  = %s' % cert.issuer.locality)
+        print('  EMAIL = %s' % cert.issuer.email)
+        print('Cert serial:    ', cert.serial_number)
+        print('Cert version:   ', cert.version)
+        print('Cert activation:', time.ctime(cert.activation_time))
+        print('Cert expiration:', time.ctime(cert.expiration_time))
+        self.assertTrue(crl.is_revoked(cert))
+
+
+if __name__ == '__main__':
+    unittest.main()

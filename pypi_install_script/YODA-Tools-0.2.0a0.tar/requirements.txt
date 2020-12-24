@@ -1,0 +1,7 @@
+numpy
+odm2api
+openpyxl
+pandas
+pyyaml
+wxpython==3.0.0.0
+xlrd

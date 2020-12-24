@@ -1,0 +1,32 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/sanhehu/Documents/GitHub/convert2-project/convert2/util.py
+# Compiled at: 2018-01-23 13:38:57
+# Size of source mod 2**32: 682 bytes
+
+
+def extract_number_from_string(text):
+    """Take number like string out of text.
+    """
+    numberstr_list = list()
+    chunks = list()
+    for char in text:
+        if char.isdigit() or char == '.':
+            chunks.append(char)
+        elif len(chunks):
+            numberstr_list.append(''.join(chunks))
+            chunks = list()
+            continue
+
+    if len(chunks):
+        numberstr_list.append(''.join(chunks))
+    new_numberstr_list = list()
+    for s in numberstr_list:
+        try:
+            float(s)
+            new_numberstr_list.append(s)
+        except:
+            pass
+
+    return new_numberstr_list

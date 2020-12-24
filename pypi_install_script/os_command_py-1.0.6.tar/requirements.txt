@@ -1,0 +1,6 @@
+sphinx-argparse
+sphinx_rtd_theme
+nbsphinx
+pytest
+codecov
+pytest-cov

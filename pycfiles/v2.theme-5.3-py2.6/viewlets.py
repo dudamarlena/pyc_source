@@ -1,0 +1,58 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/v2/theme/browser/viewlets.py
+# Compiled at: 2010-11-25 11:55:41
+from Acquisition import aq_inner
+from zope.component import getUtility
+from zope.component import getMultiAdapter
+from plone.app.layout.viewlets import ViewletBase
+from Products.CMFPlone.interfaces import IPloneSiteRoot
+from collective.contentleadimage.config import IMAGE_FIELD_NAME
+from collective.contentleadimage.config import IMAGE_CAPTION_FIELD_NAME
+from collective.contentleadimage.leadimageprefs import ILeadImagePrefsForm
+
+class LeadImageViewlet(ViewletBase):
+    """ A simple viewlet which renders leadimage """
+
+    @property
+    def prefs(self):
+        portal = getUtility(IPloneSiteRoot)
+        return ILeadImagePrefsForm(portal)
+
+    def bodyTag(self, css_class='newsImage'):
+        """ returns img tag """
+        context = aq_inner(self.context)
+        field = context.getField(IMAGE_FIELD_NAME)
+        if field is not None and field.get_size(context) != 0:
+            scale = self.prefs.body_scale_name
+            return field.tag(context, scale=scale, css_class=css_class)
+        else:
+            if field is not None:
+                imageData = field.get(context)
+                field.set(context, imageData)
+            return ''
+
+    def descTag(self, css_class='tileImage'):
+        """ returns img tag """
+        context = aq_inner(self.context)
+        field = context.getField(IMAGE_FIELD_NAME)
+        if field is not None and field.get_size(context) != 0:
+            scale = self.prefs.desc_scale_name
+            return field.tag(context, scale=scale, css_class=css_class)
+        else:
+            return ''
+
+    def caption(self):
+        context = aq_inner(self.context)
+        return context.widget(IMAGE_CAPTION_FIELD_NAME, mode='view')
+
+    def render(self):
+        context = aq_inner(self.context)
+        portal_type = getattr(context, 'portal_type', None)
+        if portal_type in self.prefs.allowed_types:
+            return super(LeadImageViewlet, self).render()
+        else:
+            return ''
+            return

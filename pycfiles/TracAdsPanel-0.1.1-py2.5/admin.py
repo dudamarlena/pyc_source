@@ -1,0 +1,75 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.5 (62131)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/adspanel/admin.py
+# Compiled at: 2008-01-14 12:50:51
+from trac.core import *
+from trac.web.chrome import ITemplateProvider
+from trac.admin import IAdminPanelProvider
+from trac.config import Option, BoolOption, _TRUE_VALUES
+from trac.util.text import unicode_unquote
+from pkg_resources import resource_filename
+
+class AdsAdminPanel(Component):
+    implements(ITemplateProvider, IAdminPanelProvider)
+
+    def __init__(self):
+        self.options = {}
+
+    def get_htdocs_dirs(self):
+        """Return the absolute path of a directory containing additional
+        static resources (such as images, style sheets, etc).
+        """
+        return []
+
+    def get_templates_dirs(self):
+        """Return the absolute path of the directory containing the provided
+        Genshi templates.
+        """
+        return [
+         resource_filename(__name__, 'templates')]
+
+    def get_admin_panels(self, req):
+        if req.perm.has_permission('TRAC_ADMIN'):
+            yield ('adspanel', 'Ads Panel', 'config', 'Configuration')
+
+    def render_admin_panel(self, req, cat, page, path_info):
+        if req.method.lower() == 'post':
+            self.config.set('adspanel', 'hide_for_authenticated', req.args.get('hide_for_authenticated') in _TRUE_VALUES)
+            self.config.set('adspanel', 'store_in_session', req.args.get('store_in_session') in _TRUE_VALUES)
+            self.config.save()
+            code = req.args.get('ads_code')
+            cursor = self.env.get_db_cnx().cursor()
+            cursor.execute('SELECT value FROM system WHERE name=%s', ('adspanel.code', ))
+            if cursor.fetchone():
+                self.log.debug('Updating Ads HTML Code')
+                cursor.execute('UPDATE system SET value=%s WHERE name=%s', (
+                 code, 'adspanel.code'))
+            else:
+                self.log.debug('Inserting Ads HTML Code')
+                cursor.execute('INSERT INTO system (name,value) VALUES (%s,%s)', (
+                 'adspanel.code', code))
+            req.redirect(req.href.admin(cat, page))
+        self._update_config()
+        return ('ads_admin.html', {'ads_options': self.options})
+
+    def _update_config(self):
+        for option in [ option for option in Option.registry.values() if option.section == 'adspanel'
+                      ]:
+            value = ''
+            if option.name in ('hide_for_authenticated', 'store_in_session'):
+                value = self.config.getbool('adspanel', option.name, option.default)
+            elif option.name == 'ads_code':
+                value = self.config.get('adspanel', option.name, option.default)
+            option.value = str(value).lower()
+            self.options[option.name] = option
+
+        cursor = self.env.get_db_cnx().cursor()
+        cursor.execute('SELECT value FROM system WHERE name=%s', ('adspanel.code', ))
+        code = cursor.fetchone()
+        if code:
+            code = unicode_unquote(code[0])
+        else:
+            code = ''
+        self.options['ads_code'].value = code

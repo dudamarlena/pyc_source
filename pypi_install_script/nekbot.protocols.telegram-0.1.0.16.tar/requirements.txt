@@ -1,0 +1,5 @@
+nekbot
+# Required by Telegram
+-e git+git@https://bitbucket.org/luckydonald/pytg2/overview@master#egg=pytg2
+telejson
+future==0.14.3

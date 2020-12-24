@@ -1,0 +1,69 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/cjld/new_jittor/jittor/python/jittor/test/test_image_folder.py
+# Compiled at: 2020-03-28 01:44:39
+# Size of source mod 2**32: 2552 bytes
+import jittor as jt, unittest, os, numpy as np, random
+pass_this_test = False
+msg = ''
+mid = 0
+if os.uname()[1] == 'jittor-ce':
+    mid = 1
+try:
+    jt.dirty_fix_pytorch_runtime_error()
+    import torchvision.datasets as datasets
+    import torchvision.transforms as transforms
+    import torch
+    traindir = [
+     '/data1/cjld/imagenet/train/', '/home/cjld/imagenet/train/'][mid]
+    check_num_batch = 5
+    assert os.path.isdir(traindir)
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
+     0.229, 0.224, 0.225])
+    train_dataset = datasets.ImageFolder(traindir, transforms.Compose([
+     transforms.RandomResizedCrop(224),
+     transforms.RandomHorizontalFlip(),
+     transforms.ToTensor(),
+     normalize]))
+except Exception as e:
+    try:
+        pass_this_test = True
+        msg = str(e)
+    finally:
+        e = None
+        del e
+
+@unittest.skipIf(pass_this_test, f"can not run imagenet dataset test: {msg}")
+class TestImageFolder(unittest.TestCase):
+
+    def test_imagenet(self):
+        train_loader = torch.utils.data.DataLoader(train_dataset,
+          batch_size=256, shuffle=False)
+        random.seed(0)
+        tc_data = []
+        for i, data in enumerate(train_loader):
+            tc_data.append(data)
+            print('get', data[0].shape)
+            if i == check_num_batch:
+                break
+
+        from jittor.dataset.dataset import ImageFolder
+        import jittor.transform as transform
+        dataset = ImageFolder(traindir).set_attrs(batch_size=256, shuffle=False)
+        dataset.set_attrs(transform=(transform.Compose([
+         transform.RandomCropAndResize(224),
+         transform.RandomHorizontalFlip(),
+         transform.ImageNormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])))
+        random.seed(0)
+        for i, (images, labels) in enumerate(dataset):
+            print('compare', i)
+            assert np.allclose(images.numpy(), tc_data[i][0].numpy())
+            assert np.allclose(labels.numpy(), tc_data[i][1].numpy())
+            if i == check_num_batch:
+                break
+
+
+if __name__ == '__main__':
+    unittest.main()

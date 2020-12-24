@@ -1,0 +1,155 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/lib/python3.7/site-packages/stibium/handlers.py
+# Compiled at: 2019-09-02 08:41:04
+# Size of source mod 2**32: 5586 bytes
+"""This module provides the classes for creating event handlers"""
+import re
+from .dataclasses import Message, Reaction
+from ._i18n import _
+
+class BaseHandler(object):
+    __doc__ = 'Base class for creating event handlers'
+    event = None
+    timeout = None
+    handlerfn = None
+
+    def __init__(self, handler=None, timeout=None):
+        self.timeout = timeout
+        if handler is not None:
+            self.handlerfn = handler
+
+    def setup(self, bot):
+        pass
+
+    def check(self, event, bot):
+        return False
+
+    def execute(self, event, bot):
+        if callable(self.handlerfn):
+            self.handlerfn(event, bot)
+
+
+class CommandHandler(BaseHandler):
+    __doc__ = '\n    Event handler for command messages\n\n    Handlers created from this class react to commands, commands being messages\n    starting with a command prefix (defined during bot instantiation) with\n    a name and possibly arguments.\n    Example commands:\n    !echo test (the prefix is "!", command is "echo", args is "test")\n    %help (prefix is "%", command is "help, args is "")\n    '
+    event = 'onMessage'
+    command = None
+    prefix = None
+    regex = None
+    timeout = None
+    wait = False
+
+    def __init__(self, handler, command, wait=False, timeout=None):
+        super().__init__(handler=handler, timeout=timeout)
+        self.command = command
+        self.wait = wait
+
+    def __repr__(self):
+        return f"<{type(self).__name__} for {repr(self.command)}>"
+
+    def setup(self, bot):
+        self.prefix = bot.prefix
+        self.regex = re.compile('^{prefix}\\s?{command}($|\\s(?P<args>.+))$'.format(prefix=(self.prefix),
+          command=(self.command)), re.IGNORECASE)
+
+    def check(self, event: Message, bot):
+        if event.text is None:
+            return False
+        match = self.regex.match(event.text)
+        if match is None:
+            return False
+        return True
+
+    def execute(self, event, bot):
+        match = self.regex.match(event.text)
+        args = match.group('args') or ''
+        event.args = args
+        if self.wait:
+            event.reply(_('Please wait...'))
+        super().execute(event, bot)
+
+    @classmethod
+    def create(cls, command, timeout=None, wait=False):
+
+        def wrapper(fun):
+            return cls(command=command, handler=fun, wait=wait, timeout=timeout)
+
+        return wrapper
+
+
+class ReactionHandler(BaseHandler):
+    __doc__ = '\n    Event handler for reactions\n\n    Handlers created from this class react to reactions\n    added to a specific message (which can be provided\n    as a Message object or directly as a message id)\n    '
+    event = 'onReactionAdded'
+    mid = None
+
+    def __init__(self, handler, mid, timeout=None):
+        super().__init__(handler=handler, timeout=timeout)
+        self.mid = mid
+
+    def __repr__(self):
+        return f"<{type(self).__name__} mid={repr(self.mid)}>"
+
+    def setup(self, bot):
+        if isinstance(self.mid, Message):
+            self.mid = self.mid.mid
+        else:
+            self.mid = str(self.mid)
+
+    def check(self, event: Reaction, bot):
+        if event.mid == self.mid:
+            return True
+        return False
+
+    @classmethod
+    def create(cls, mid, timeout=None):
+
+        def wrapper(fun):
+            return cls(handler=fun, mid=mid, timeout=timeout)
+
+        return wrapper
+
+
+class TimeoutHandler(BaseHandler):
+    __doc__ = '\n    Event handler for timeouts\n\n    Handlers created from this class do not react to messages,\n    but are started a set amount of time after they are registered.\n    '
+    event = '_timeout'
+
+    def __init__(self, handler, timeout):
+        if timeout is None:
+            raise Exception(f"Timeout for {type(self).__name__} not provided")
+        super().__init__(handler=handler, timeout=timeout)
+
+    def execute(self, event, bot):
+        if callable(self.handlerfn):
+            self.handlerfn(event, bot)
+
+    @classmethod
+    def create(cls, timeout):
+
+        def wrapper(fun):
+            return cls(handler=fun, timeout=timeout)
+
+        return wrapper
+
+
+class RecurrentHandler(BaseHandler):
+    __doc__ = '\n    A recurring event handler\n\n    This handler will execute the provided function\n    regulary on a specified schedule.\n\n    The schedule is defined by the `next_time` method,\n    which is called with the current time as\n    a unix timestamp (float) and should return\n    the unix timestamp of the next execution\n    '
+    event = '_recurrent'
+
+    def __init__(self, handler, nexthandler):
+        super().__init__(handler=handler, timeout=None)
+        if nexthandler is not None:
+            self.nextfn = nexthandler
+
+    def next_time(self, now):
+        if callable(self.nextfn):
+            return self.nextfn(now)
+
+    @classmethod
+    def create(cls, nexthandler):
+
+        def wrapper(fun):
+            return cls(handler=fun, nexthandler=nexthandler)
+
+        return wrapper

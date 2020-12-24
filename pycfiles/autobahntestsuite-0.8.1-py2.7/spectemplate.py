@@ -1,0 +1,14 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/autobahntestsuite/spectemplate.py
+# Compiled at: 2018-12-17 11:51:20
+__all__ = ('SPEC_FUZZINGSERVER', 'SPEC_FUZZINGCLIENT', 'SPEC_FUZZINGWAMPSERVER', 'SPEC_FUZZINGWAMPCLIENT',
+           'SPEC_WSPERFCONTROL', 'SPEC_MASSCONNECT')
+SPEC_FUZZINGSERVER = '\n{\n   "url": "ws://127.0.0.1:9001",\n   "outdir": "./reports/clients",\n   "cases": ["*"],\n   "exclude-cases": [],\n   "exclude-agent-cases": {}\n}\n'
+SPEC_FUZZINGCLIENT = '\n{\n   "outdir": "./reports/servers",\n   "servers": [\n      {\n         "url": "ws://127.0.0.1:9001"\n      }\n   ],\n   "cases": ["*"],\n   "exclude-cases": [],\n   "exclude-agent-cases": {}\n}\n'
+SPEC_FUZZINGWAMPSERVER = '\n{\n   "url": "ws://127.0.0.1:9001",\n   "options": {},\n   "outdir": "./reports/wampclients",\n   "cases": ["*"],\n   "exclude-cases": [],\n   "exclude-agent-cases": {}\n}\n'
+SPEC_FUZZINGWAMPCLIENT = '\n{\n   "options": {},\n   "outdir": "./reports/wampservers",\n\n   "testees": [\n                  {\n                     "name": "AutobahnPython",\n                     "url": "ws://127.0.0.1:9001",\n                     "options": {},\n                     "auth": null\n                  }\n               ],\n\n   "cases": ["*"],\n   "exclude-cases": [],\n   "exclude-agent-cases": {}\n}\n'
+SPEC_WSPERFCONTROL = '\n{\n   "options": {\n      "debug": false\n   },\n   "servers":  [\n                  {\n                     "name": "AutobahnPython",\n                     "uri": "ws://127.0.0.1:9000",\n                     "desc": "Autobahn WebSocket Python on localhost"\n                  }\n               ],\n   "testsets": [\n      {\n         "mode": "echo",\n         "options": {\n            "outfile": "report_echo.txt",\n            "digits": 0,\n            "sep": "\\t",\n            "rtts": false,\n            "quantile_count": 10,\n\n            "count": 1000,\n            "timeout": 100000,\n            "binary": false,\n            "sync": true,\n            "verify": false\n         },\n         "cases": [\n                     {"size": 0},\n                     {"size": 64},\n                     {"size": 1024},\n                     {"count": 100, "size": 524288}\n                  ]\n      }\n   ]\n}\n'
+SPEC_MASSCONNECT = '\n{\n   "options": {\n      "connections": 10000,\n      "batchsize": 100,\n      "batchdelay": 10,\n      "retrydelay": 10\n   },\n   "servers":  [\n                  {\n                     "name": "AutobahnPython",\n                     "uri": "ws://127.0.0.1:9000",\n                     "desc": "Autobahn WebSocket Python on localhost"\n                  }\n               ]\n}\n'

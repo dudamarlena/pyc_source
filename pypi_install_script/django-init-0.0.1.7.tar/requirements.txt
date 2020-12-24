@@ -1,0 +1,11 @@
+django-debug-toolbar==2.1
+django-modeladmin-reorder==0.3.1
+django-ckeditor==5.8.0
+django-mptt==0.10.0
+django-mptt-admin==1.0.0
+django-modeltranslation==0.14.1
+easy-thumbnails==2.7
+
+mysqlclient==1.4.4
+psycopg2-binary==2.8.4
+tabulate==0.8.6

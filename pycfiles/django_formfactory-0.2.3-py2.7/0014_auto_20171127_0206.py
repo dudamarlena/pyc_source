@@ -1,0 +1,20 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/altus/gitArchives/django/_instances/django-formfactory/formfactory/migrations/0014_auto_20171127_0206.py
+# Compiled at: 2017-11-28 02:59:59
+from __future__ import unicode_literals
+from django.db import migrations, models
+import simplemde.fields
+
+class Migration(migrations.Migration):
+    dependencies = [
+     ('formfactory', '0013_auto_20171124_1049')]
+    operations = [
+     migrations.AddField(model_name=b'formfield', name=b'paragraph', field=simplemde.fields.SimpleMDEField(blank=True, help_text=b'Markdown for the formfactory ParagraphField and ParagraphWidget combination.', null=True)),
+     migrations.AlterField(model_name=b'action', name=b'action', field=models.CharField(choices=[('formfactory.actions.send_email', 'formfactory.actions.send_email'), ('formfactory.actions.file_upload', 'formfactory.actions.file_upload'), ('formfactory.tests.actions.dummy_wizard_action', 'formfactory.tests.actions.dummy_wizard_action'), ('formfactory.actions.store_data', 'formfactory.actions.store_data'), ('formfactory.tests.actions.dummy_action', 'formfactory.tests.actions.dummy_action'), ('formfactory.actions.login', 'formfactory.actions.login')], max_length=128)),
+     migrations.AlterField(model_name=b'cleanmethod', name=b'clean_method', field=models.CharField(choices=[('formfactory.tests.clean_methods.check_if_values_match', 'formfactory.tests.clean_methods.check_if_values_match')], max_length=128)),
+     migrations.AlterField(model_name=b'formfield', name=b'field_type', field=models.CharField(choices=[('django.forms.fields.BooleanField', 'BooleanField'), ('django.forms.fields.CharField', 'CharField'), ('django.forms.fields.ChoiceField', 'ChoiceField'), ('django.forms.fields.DateField', 'DateField'), ('django.forms.fields.DateTimeField', 'DateTimeField'), ('django.forms.fields.DecimalField', 'DecimalField'), ('django.forms.fields.EmailField', 'EmailField'), ('django.forms.fields.FileField', 'FileField'), ('django.forms.fields.FloatField', 'FloatField'), ('django.forms.fields.GenericIPAddressField', 'GenericIPAddressField'), ('django.forms.fields.IntegerField', 'IntegerField'), ('django.forms.fields.MultipleChoiceField', 'MultipleChoiceField'), ('django.forms.fields.SlugField', 'SlugField'), ('django.forms.fields.SplitDateTimeField', 'SplitDateTimeField'), ('django.forms.fields.TimeField', 'TimeField'), ('django.forms.fields.URLField', 'URLField'), ('django.forms.fields.UUIDField', 'UUIDField'), ('formfactory.fields.ParagraphField', 'ParagraphField')], max_length=128)),
+     migrations.AlterField(model_name=b'formfield', name=b'widget', field=models.CharField(blank=True, choices=[('django.forms.widgets.CheckboxInput', 'CheckboxInput'), ('django.forms.widgets.CheckboxSelectMultiple', 'CheckboxSelectMultiple'), ('django.forms.widgets.DateInput', 'DateInput'), ('django.forms.widgets.DateTimeInput', 'DateTimeInput'), ('django.forms.widgets.EmailInput', 'EmailInput'), ('django.forms.widgets.FileInput', 'FileInput'), ('django.forms.widgets.HiddenInput', 'HiddenInput'), ('django.forms.widgets.NullBooleanSelect', 'NullBooleanSelect'), ('django.forms.widgets.NumberInput', 'NumberInput'), ('django.forms.widgets.PasswordInput', 'PasswordInput'), ('django.forms.widgets.RadioSelect', 'RadioSelect'), ('django.forms.widgets.Select', 'Select'), ('django.forms.widgets.SelectMultiple', 'SelectMultiple'), ('django.forms.widgets.Textarea', 'Textarea'), ('django.forms.widgets.TextInput', 'TextInput'), ('django.forms.widgets.TimeInput', 'TimeInput'), ('django.forms.widgets.URLInput', 'URLInput'), ('formfactory.widgets.ParagraphWidget', 'ParagraphWidget')], help_text=b'Leave blank if you prefer to use the default widget.', max_length=128, null=True)),
+     migrations.AlterField(model_name=b'validator', name=b'validator', field=models.CharField(choices=[('formfactory.tests.validators.dummy_validator', 'formfactory.tests.validators.dummy_validator')], max_length=128))]

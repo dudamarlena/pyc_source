@@ -1,0 +1,3 @@
+six
+pyblake2
+pysha3

@@ -1,0 +1,117 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win-amd64\egg\maha_cet_parser\admission_enums\AdmissionEnums.py
+# Compiled at: 2019-12-07 13:12:13
+# Size of source mod 2**32: 3719 bytes
+from enum import unique, Enum, auto
+HOME_UNIVERSITY_SEATS_ALLOTTED_TO_HOME_UNIVERSITY_CANDIDATES = 'Home University Seats Allotted to Home University Candidates '
+HOME_UNIVERSITY_SEATS_ALLOTTED_TO_OTHER_THAN_HOME_UNIVERSITY_CANDIDATES = 'Home University Seats Allotted to Other Than Home University Candidates '
+OTHER_THAN_HOME_UNIVERSITY_SEATS_ALLOTTED_TO_HOME_UNIVERSITY_CANDIDATES = 'Other Than Home University Seats Allotted to Home University Candidates '
+OTHER_THAN_HOME_UNIVERSITY_SEATS_ALLOTTED_TO_OTHER_THAN_HOME_UNIVERSITY_CANDIDATES = 'Other Than Home University Seats Allotted to Other Than Home University Candidates '
+STATE_LEVEL = 'State Level'
+
+@unique
+class SeatType(Enum):
+    DEFSEBCS = auto()
+    PWDVJH = auto()
+    GSEBCS = auto()
+    ORPHAN = auto()
+    LSEBCO = auto()
+    PWDNT2H = auto()
+    LVJO = auto()
+    PWDSCS = auto()
+    LOPENS = auto()
+    GOPENO = auto()
+    PWDNT3H = auto()
+    GSCS = auto()
+    LNT3O = auto()
+    PWDOPEN = auto()
+    PWDSTH = auto()
+    GNT1H = auto()
+    DEFSCS = auto()
+    DEFVJS = auto()
+    GVJH = auto()
+    GSTS = auto()
+    TFWS = auto()
+    LNT1S = auto()
+    GSCO = auto()
+    LVJS = auto()
+    PWDSCH = auto()
+    GNT3S = auto()
+    LOBCH = auto()
+    LSTS = auto()
+    LOBCS = auto()
+    GNT1O = auto()
+    GVJS = auto()
+    GSCH = auto()
+    PWDSEBC = auto()
+    PWDOPENS = auto()
+    GNT1S = auto()
+    GOBCH = auto()
+    GSTH = auto()
+    LOPENO = auto()
+    PWDOPENH = auto()
+    LOBCO = auto()
+    PWDNT2S = auto()
+    LSEBCH = auto()
+    GNT2S = auto()
+    LNT2O = auto()
+    PWDOBCH = auto()
+    GOBCO = auto()
+    PWDSEBCH = auto()
+    LSEBCS = auto()
+    LSCH = auto()
+    GSTO = auto()
+    LSCO = auto()
+    LNT3H = auto()
+    GOPENH = auto()
+    GOPENS = auto()
+    DEFOBCS = auto()
+    LNT2H = auto()
+    DEFNT1S = auto()
+    EWS = auto()
+    DEFSTS = auto()
+    GSEBCO = auto()
+    PWDOBCS = auto()
+    GNT2H = auto()
+    PWDVJS = auto()
+    LSTO = auto()
+    LNT1H = auto()
+    LNT3S = auto()
+    LSTH = auto()
+    GVJO = auto()
+    PWDSEBCS = auto()
+    LNT1O = auto()
+    PWDSTS = auto()
+    GSEBCH = auto()
+    DEFNT2S = auto()
+    MI = auto()
+    LOPENH = auto()
+    PWDNT3S = auto()
+    GOBCS = auto()
+    LSCS = auto()
+    GNT2O = auto()
+    PWDNT1H = auto()
+    LVJH = auto()
+    LNT2S = auto()
+    GNT3O = auto()
+    DEFOPENS = auto()
+    GNT3H = auto()
+    DEFNT3S = auto()
+    PWDNT1S = auto()
+
+
+@unique
+class Gender(Enum):
+    MALE = auto()
+    FEMALE = auto()
+    INTERSEX = auto()
+
+
+@unique
+class CapRound(Enum):
+    CAP_ROUND_1 = auto()
+    CAP_ROUND_2 = auto()
+    CAP_ROUND_3 = auto()

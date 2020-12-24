@@ -1,0 +1,4 @@
+croniter>=0.3,<0.4
+PyYAML>=3.12,<3.13
+requests>=2.13,<2.14
+jsonschema>=2.6,<2.7

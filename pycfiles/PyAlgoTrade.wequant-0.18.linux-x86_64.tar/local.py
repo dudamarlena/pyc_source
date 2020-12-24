@@ -1,0 +1,110 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/winkidney/.virtualenvs/huobi/lib/python2.7/site-packages/pyalgotrade/optimizer/local.py
+# Compiled at: 2016-11-29 01:45:48
+"""
+.. moduleauthor:: Gabriel Martin Becedillas Ruiz <gabriel.becedillas@gmail.com>
+"""
+import logging, multiprocessing, os, random, socket, threading
+from pyalgotrade.optimizer import base
+from pyalgotrade.optimizer import server
+from pyalgotrade.optimizer import worker
+from pyalgotrade.optimizer import xmlrpcserver
+logger = logging.getLogger(__name__)
+
+class ServerThread(threading.Thread):
+
+    def __init__(self, server):
+        super(ServerThread, self).__init__()
+        self.__server = server
+
+    def run(self):
+        self.__results = self.__server.serve()
+
+
+def worker_process(strategyClass, port, logLevel):
+
+    class Worker(worker.Worker):
+
+        def runStrategy(self, barFeed, *args, **kwargs):
+            strat = strategyClass(barFeed, *args, **kwargs)
+            strat.run()
+            return strat.getResult()
+
+    try:
+        name = 'worker-%s' % os.getpid()
+        w = Worker('localhost', port, name)
+        w.getLogger().setLevel(logLevel)
+        w.run()
+    except Exception as e:
+        w.getLogger().exception('Failed to run worker: %s' % e)
+
+
+def find_port():
+    while True:
+        ret = random.randint(1025, 65536)
+        try:
+            s = socket.socket()
+            s.bind(('localhost', ret))
+            s.close()
+            return ret
+        except socket.error:
+            pass
+
+
+def wait_process(p):
+    timeout = 10
+    p.join(timeout)
+    while p.is_alive():
+        p.join(timeout)
+
+
+def run(strategyClass, barFeed, strategyParameters, workerCount=None, logLevel=logging.ERROR):
+    """Executes many instances of a strategy in parallel and finds the parameters that yield the best results.
+
+    :param strategyClass: The strategy class.
+    :param barFeed: The bar feed to use to backtest the strategy.
+    :type barFeed: :class:`pyalgotrade.barfeed.BarFeed`.
+    :param strategyParameters: The set of parameters to use for backtesting. An iterable object where **each element is
+        a tuple that holds parameter values**.
+    :param workerCount: The number of strategies to run in parallel. If None then as many workers as CPUs are used.
+    :type workerCount: int.
+    :param logLevel: The log level. Defaults to **logging.ERROR**.
+    :rtype: A :class:`Results` instance with the best results found.
+    """
+    assert workerCount is None or workerCount > 0
+    if workerCount is None:
+        workerCount = multiprocessing.cpu_count()
+    ret = None
+    workers = []
+    port = find_port()
+    if port is None:
+        raise Exception('Failed to find a port to listen')
+    paramSource = base.ParameterSource(strategyParameters)
+    resultSinc = base.ResultSinc()
+    srv = xmlrpcserver.Server(paramSource, resultSinc, barFeed, 'localhost', port, False)
+    serverThread = ServerThread(srv)
+    serverThread.start()
+    try:
+        for i in range(workerCount):
+            workers.append(multiprocessing.Process(target=worker_process, args=(
+             strategyClass, port, logLevel)))
+
+        logger.info('Executing workers')
+        for process in workers:
+            process.start()
+
+        for process in workers:
+            wait_process(process)
+
+        logger.info('All workers finished')
+    finally:
+        srv.stop()
+        serverThread.join()
+        bestResult, bestParameters = resultSinc.getBest()
+        if bestResult is not None:
+            ret = server.Results(bestParameters.args, bestResult)
+
+    return ret

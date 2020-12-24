@@ -1,0 +1,9 @@
+gensim
+matplotlib
+networkx
+numpy
+pandas
+rdflib
+scikit_learn
+tqdm
+python-louvain

@@ -1,0 +1,62 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/coils/logic/blob/create_document.py
+# Compiled at: 2012-10-12 07:02:39
+from datetime import datetime
+from coils.foundation import *
+from coils.core import *
+from coils.core.logic import CreateCommand
+from command import BLOBCommand
+from keymap import COILS_DOCUMENT_KEYMAP
+
+class CreateDocument(CreateCommand, BLOBCommand):
+    __domain__ = 'document'
+    __operation__ = 'new'
+
+    def prepare(self, ctx, **params):
+        self.keymap = COILS_DOCUMENT_KEYMAP
+        self.entity = Document
+        CreateCommand.prepare(self, ctx, **params)
+
+    def parse_parameters(self, **params):
+        CreateCommand.parse_parameters(self, **params)
+        self._folder = params.get('folder', None)
+        self._project = params.get('project', None)
+        self._appointment = params.get('appointment', None)
+        self._company = params.get('contact', params.get('enterprise', None))
+        self._name = params.get('name', None)
+        self._annotation = params.get('annotation', None)
+        self._input = params.get('handle', BLOBManager.ScratchFile())
+        return
+
+    def run(self):
+        CreateCommand.run(self)
+        parts = self._name.split('.')
+        if len(parts) > 1:
+            self.obj.extension = self._name.split('.')[(-1)]
+            self.obj.name = ('.').join(self._name.split('.')[:-1])
+        else:
+            self.obj.extension = None
+            self.obj.name = self._name
+        self.obj.creator_id = self._ctx.account_id
+        self.obj.created = datetime.now()
+        self.obj.modified = self.obj.created
+        self.obj.status = 'inserted'
+        self.obj.version_count = 1
+        if self._project is None and self._folder is not None:
+            if self._folder.project_id is not None:
+                self._project = self._ctx.run_command('project::get', id=self._folder.project_id)
+                if self._project is None:
+                    self.log.error(('Unable to marshall projectId#{0} related to specified folderId#{1}').format(self._folder.project_id, self._folder.object_id))
+        if self.obj.abstract is None:
+            self.obj.abstract = self._name
+        self.set_context(self.obj, folder=self._folder, project=self._project, company=self._company, appointment=self._appointment)
+        self.inherit_acls()
+        self.save()
+        manager = self.get_manager(self.obj)
+        self.store_to_version(manager, self.obj, self._input)
+        self.store_to_self(manager, self.obj, self._input)
+        self.set_result(self.obj)
+        return

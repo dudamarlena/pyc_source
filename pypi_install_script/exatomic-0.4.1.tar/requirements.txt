@@ -1,0 +1,7 @@
+numpy
+pandas
+numba
+seaborn
+ipywidgets
+sympy
+numexpr

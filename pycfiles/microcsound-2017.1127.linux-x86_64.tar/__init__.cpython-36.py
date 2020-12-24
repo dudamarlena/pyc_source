@@ -1,0 +1,9 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python3.6/site-packages/microcsound/__init__.py
+# Compiled at: 2017-09-29 22:59:50
+# Size of source mod 2**32: 141 bytes
+""" microcsound, a front end for composition with Csound, with an
+emphasis on pitch flexibility/microtonality. """

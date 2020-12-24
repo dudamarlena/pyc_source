@@ -1,0 +1,19 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/hermann/work/Vodacom-Django-Log-Labeler/log_labeler/__init__.py
+# Compiled at: 2020-04-04 02:50:42
+# Size of source mod 2**32: 569 bytes
+import threading
+local = threading.local()
+DEFAULT_HEADER_VALUE = 'none'
+LOG_LABEL_REQUEST_SETTING = 'LOG_LABEL_REQUEST_SETTING'
+MAX_REQUEST_RESPONSE_SIZE = 'MAX_REQUEST_RESPONSE_SIZE'
+DEFAULT_LOG_LEVEL = 'DEFAULT_LOG_LEVEL'
+NIM_DJANGO_REQUEST_LOG_LEVEL_NAME = 'NIM_DJANGO_REQUEST_LOG_LEVEL_NAME'
+ALLOWED_DYNAMIC_DEBUG_LEVEL_VALUES = ['INFO', 'DEBUG', 'CRITICAL', 'FATAL', 'ERROR', 'NOTSET', 'WARN', 'WARNING']
+LOG_LABEL_EXCLUDE_LOG_LIST = 'LOG_LABEL_EXCLUDE_LOG_LIST'
+LOGGING = 'LOGGING'
+LOG_LABEL_OBFUSCATE = 'LOG_LABEL_OBFUSCATE'
+HIDDEN_INDICATOR = '[--HIDDEN--]'

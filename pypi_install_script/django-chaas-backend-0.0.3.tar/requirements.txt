@@ -1,0 +1,7 @@
+pbr
+
+Django
+djangorestframework
+django-appconf
+
+GitPython

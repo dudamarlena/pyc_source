@@ -1,0 +1,40 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.11-x86_64/egg/ycyc/tests/base/test_marker.py
+# Compiled at: 2016-07-19 10:55:32
+from unittest import TestCase
+from ycyc.base import marker
+
+class TestMarker(TestCase):
+
+    def test_usage(self):
+        self.assertNotEqual(marker.Marker(), marker.Marker())
+        test1 = marker.Marker('test')
+        test2 = marker.Marker('test')
+        self.assertEqual(test1, test2)
+        self.assertIsNot(test1, test2)
+        test_undefined = marker.Marker('undefined')
+        self.assertEqual(test_undefined, marker.Marker.Undefined)
+        self.assertIsNot(test_undefined, marker.Marker.Undefined)
+        m = marker.Marker()
+        self.assertEqual(m, m)
+        self.assertIs(m, m)
+        self.assertFalse(bool(marker.Marker.Undefined))
+        self.assertFalse(bool(marker.Marker.Missed))
+        self.assertFalse(bool(marker.Marker.Disabled))
+        m = marker.Marker('test', True)
+        self.assertTrue(m)
+
+    def test_freeze_attrs(self):
+        m = marker.Marker('test', 123)
+        with self.assertRaisesRegexp(AttributeError, 'name is not writable'):
+            m.name = 1
+        self.assertEqual(m.name, 'test')
+        with self.assertRaisesRegexp(AttributeError, 'value is not writable'):
+            m.value = 1
+        self.assertEqual(m.value, 123)
+        with self.assertRaisesRegexp(AttributeError, "has no attribute 'foo'"):
+            m.foo = 1
+        self.assertFalse(hasattr(m, 'foo'))

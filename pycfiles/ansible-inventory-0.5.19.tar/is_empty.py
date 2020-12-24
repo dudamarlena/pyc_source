@@ -1,0 +1,19 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /work/ansible/ansible-extras/filter_plugins/is_empty.py
+# Compiled at: 2018-10-03 10:45:55
+from ansible import errors
+import os.path
+
+def is_empty(arg):
+    if arg is None or str(arg).strip() is '':
+        return True
+    return False
+
+
+class FilterModule(object):
+    """Returns true if the argument is null or an empty string"""
+
+    def filters(self):
+        return {'is_empty': is_empty}

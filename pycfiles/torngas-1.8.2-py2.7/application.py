@@ -1,0 +1,45 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.10-intel/egg/torngas/application.py
+# Compiled at: 2016-02-16 00:41:00
+import traceback
+from tornado import web
+from tornado import version_info
+from logger import SysLogger
+from middleware.manager import Manager
+from tornado import httputil
+
+class Application(web.Application):
+
+    def __init__(self, handlers=None, default_host='', transforms=None, wsgi=False, middlewares=None, **settings):
+        super(Application, self).__init__(handlers=handlers, default_host=default_host, transforms=transforms, wsgi=wsgi, **settings)
+        self.middleware_fac = Manager()
+        if middlewares:
+            self.middleware_fac.register_all(middlewares)
+            self.middleware_fac.run_init(self)
+        if version_info[0] > 3:
+            this = self
+
+            class HttpRequest(httputil.HTTPServerRequest):
+
+                def __init__(self, *args, **kwargs):
+                    super(HttpRequest, self).__init__(*args, **kwargs)
+                    this.middleware_fac.set_request(self)
+                    try:
+                        this.middleware_fac.run_call(self)
+                    except Exception:
+                        SysLogger.trace_logger.error(traceback.format_exc())
+
+            httputil.HTTPServerRequest = HttpRequest
+
+    def __call__(self, request):
+        if version_info[0] < 4:
+            try:
+                self.middleware_fac.set_request(request)
+                self.middleware_fac.run_call(request)
+                return web.Application.__call__(self, request)
+            except Exception as e:
+                SysLogger.trace_logger.error(e)
+                raise

@@ -1,0 +1,6 @@
+peewee==2.10.2
+aiopg
+aiomysql
+aitertools
+aiofiles
+async-timeout

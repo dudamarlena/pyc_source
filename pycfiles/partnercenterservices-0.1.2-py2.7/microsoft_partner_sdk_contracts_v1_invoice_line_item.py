@@ -1,0 +1,37 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/microsoft/store/partnercenterservices/models/microsoft_partner_sdk_contracts_v1_invoice_line_item.py
+# Compiled at: 2019-02-19 17:42:21
+from msrest.serialization import Model
+
+class MicrosoftPartnerSdkContractsV1InvoiceLineItem(Model):
+    """Represents a line item on an invoice.
+    Each individual charge within an invoice is represented as an
+    InvoiceLineItem.
+
+    Variables are only populated by the server, and will be ignored when
+    sending a request.
+
+    :ivar invoice_line_item_type: Returns the type of invoice line item.
+     Possible values include: 'none', 'usage_line_items', 'billing_line_items'
+    :vartype invoice_line_item_type: str or
+     ~microsoft.store.partnercenterservices.models.enum
+    :ivar billing_provider: Returns the billing provider. Possible values
+     include: 'none', 'office', 'azure', 'azure_data_market'
+    :vartype billing_provider: str or
+     ~microsoft.store.partnercenterservices.models.enum
+    :ivar attributes: Gets the attributes.
+    :vartype attributes:
+     ~microsoft.store.partnercenterservices.models.MicrosoftPartnerSdkContractsV1CommonResourceAttributes
+    """
+    _validation = {'invoice_line_item_type': {'readonly': True}, 'billing_provider': {'readonly': True}, 'attributes': {'readonly': True}}
+    _attribute_map = {'invoice_line_item_type': {'key': 'invoiceLineItemType', 'type': 'str'}, 'billing_provider': {'key': 'billingProvider', 'type': 'str'}, 'attributes': {'key': 'attributes', 'type': 'MicrosoftPartnerSdkContractsV1CommonResourceAttributes'}}
+
+    def __init__(self):
+        super(MicrosoftPartnerSdkContractsV1InvoiceLineItem, self).__init__()
+        self.invoice_line_item_type = None
+        self.billing_provider = None
+        self.attributes = None
+        return

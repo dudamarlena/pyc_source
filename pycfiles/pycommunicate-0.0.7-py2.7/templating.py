@@ -1,0 +1,26 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build\bdist.win32\egg\pycommunicate\templating.py
+# Compiled at: 2016-06-10 21:35:28
+import jinja2
+
+class Templater:
+
+    def __init__(self, controller_or_app):
+        self.app = controller_or_app.app if hasattr(controller_or_app, 'app') else controller_or_app
+        self.env = jinja2.Environment(loader=jinja2.ChoiceLoader((
+         jinja2.PackageLoader('pycommunicate'),
+         jinja2.FileSystemLoader(self.app.template_directory))))
+
+        def add_includes():
+            return self.render_includes()
+
+        self.env.globals.update({'add_includes': add_includes})
+
+    def render(self, template, **kwargs):
+        return self.env.get_template(template).render(**kwargs)
+
+    def render_includes(self):
+        return self.render('__pycommunicate_html/includes.html')

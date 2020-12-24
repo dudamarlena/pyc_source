@@ -1,0 +1,5 @@
+feedparser
+dateparser
+facebook-sdk
+django-web-rich-object
+celery

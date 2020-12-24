@@ -1,0 +1,73 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.2 (3180)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/pexpect/fdpexpect.py
+# Compiled at: 2011-11-02 15:34:07
+"""This is like pexpect, but will work on any file descriptor that you pass it.
+So you are reponsible for opening and close the file descriptor.
+
+$Id: fdpexpect.py 505 2007-12-26 21:33:50Z noah $
+"""
+from pexpect import *
+import os
+__all__ = [
+ 'fdspawn']
+
+class fdspawn(spawn):
+    """This is like pexpect.spawn but allows you to supply your own open file
+    descriptor. For example, you could use it to read through a file looking
+    for patterns, or to control a modem or serial device. """
+
+    def __init__(self, fd, args=[], timeout=30, maxread=2000, searchwindowsize=None, logfile=None):
+        """This takes a file descriptor (an int) or an object that support the
+        fileno() method (returning an int). All Python file-like objects
+        support fileno(). """
+        if type(fd) != type(0) and hasattr(fd, 'fileno'):
+            fd = fd.fileno()
+        if type(fd) != type(0):
+            raise ExceptionPexpect('The fd argument is not an int. If this is a command string then maybe you want to use pexpect.spawn.')
+        try:
+            os.fstat(fd)
+        except OSError:
+            raise ExceptionPexpect('The fd argument is not a valid file descriptor.')
+
+        self.args = None
+        self.command = None
+        spawn.__init__(self, None, args, timeout, maxread, searchwindowsize, logfile)
+        self.child_fd = fd
+        self.own_fd = False
+        self.closed = False
+        self.name = '<file descriptor %d>' % fd
+        return
+
+    def __del__(self):
+        pass
+
+    def close(self):
+        if self.child_fd == -1:
+            return
+        if self.own_fd:
+            self.close(self)
+        else:
+            self.flush()
+            os.close(self.child_fd)
+            self.child_fd = -1
+            self.closed = True
+
+    def isalive(self):
+        """This checks if the file descriptor is still valid. If os.fstat()
+        does not raise an exception then we assume it is alive. """
+        if self.child_fd == -1:
+            return False
+        try:
+            os.fstat(self.child_fd)
+            return True
+        except:
+            return False
+
+    def terminate(self, force=False):
+        raise ExceptionPexpect('This method is not valid for file descriptors.')
+
+    def kill(self, sig):
+        pass

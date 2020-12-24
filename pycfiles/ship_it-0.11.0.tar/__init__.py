@@ -1,0 +1,63 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/robert.dennis/development/ship_it/ship_it/__init__.py
+# Compiled at: 2018-07-05 16:56:37
+from __future__ import unicode_literals
+import sys, subprocess
+from os import path
+from ship_it.manifest import Manifest, get_manifest_from_path
+from ship_it import cli
+from ship_it.virtualenv import VirtualEnvPackager
+
+def validate_path(path_to_check):
+    assert path.isabs(path_to_check) and path.isfile(path_to_check)
+
+
+def get_version_from_setup_py(setup_py_path):
+    out = subprocess.check_output([sys.executable, setup_py_path, b'--version'])
+    return out.decode(b'utf-8').rstrip()
+
+
+def fpm(manifest_path, requirements_file_path=None, setup_py_path=None, **overrides):
+    manifest = get_manifest_from_path(manifest_path)
+    if requirements_file_path is None:
+        requirements_file_path = path.join(manifest.manifest_dir, b'requirements.txt')
+    if setup_py_path is None:
+        setup_py_path = path.join(manifest.manifest_dir, b'setup.py')
+    validate_path(manifest.path)
+    packager = _package_virtualenv_with_manifest(manifest, requirements_file_path, setup_py_path)
+    packager.patch_virtualenv(manifest.remote_virtualenv_path)
+    man_args, man_flags = manifest.get_args_and_flags()
+    man_flags.extend(overrides.items())
+    if not any(flag[0] == b'version' for flag in man_flags):
+        man_flags.extend([(b'version', get_version_from_setup_py(setup_py_path))])
+    command_line = cli.get_command_line(man_args, man_flags)
+    cli.invoke_fpm(command_line)
+    return
+
+
+def _package_virtualenv_with_manifest(manifest, requirements_file_path, setup_py_path):
+    """
+    Given a manifest, package up the virtualenv. The following methods are
+    supported via the manifest's `method` setting:
+
+    * copy: copy in the top-level directory
+    * requirements: run ``pip install -r requirements_file``
+        - useful if requirements_file contains '.'
+    * pip: run ``pip install .``
+    * install (default): run ``python setup.py install``
+    """
+    venv = manifest.local_virtualenv_path
+    install_method = manifest.contents.get(b'method')
+    packager = VirtualEnvPackager(venv, manifest.upgrade_pip, manifest.upgrade_wheel)
+    if install_method == b'copy':
+        packager.copy_package(requirements_file_path, manifest.local_package_path)
+    elif install_method == b'requirements':
+        packager.install_requirements(requirements_file_path)
+    elif install_method == b'pip':
+        packager.pip_install_package(requirements_file_path)
+    else:
+        packager.install_package(setup_py_path)
+    return packager

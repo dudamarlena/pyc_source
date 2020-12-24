@@ -1,0 +1,10 @@
+pytest
+flake8
+pyyaml>=5.1
+oyaml
+coloredlogs
+tabulate
+requests
+Flask>=0.10.1
+Flask-Cors>=3.0.7
+flask-restplus

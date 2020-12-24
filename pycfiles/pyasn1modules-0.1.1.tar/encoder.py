@@ -1,0 +1,164 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/pyasn1/codec/native/encoder.py
+# Compiled at: 2019-10-17 01:00:19
+try:
+    from collections import OrderedDict
+except ImportError:
+    OrderedDict = dict
+
+from pyasn1 import debug
+from pyasn1 import error
+from pyasn1.type import base
+from pyasn1.type import char
+from pyasn1.type import tag
+from pyasn1.type import univ
+from pyasn1.type import useful
+__all__ = [
+ 'encode']
+LOG = debug.registerLoggee(__name__, flags=debug.DEBUG_ENCODER)
+
+class AbstractItemEncoder(object):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        raise error.PyAsn1Error('Not implemented')
+
+
+class BooleanEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        return bool(value)
+
+
+class IntegerEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        return int(value)
+
+
+class BitStringEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        return str(value)
+
+
+class OctetStringEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        return value.asOctets()
+
+
+class TextStringEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        return str(value)
+
+
+class NullEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        return
+
+
+class ObjectIdentifierEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        return str(value)
+
+
+class RealEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        return float(value)
+
+
+class SetEncoder(AbstractItemEncoder):
+    __module__ = __name__
+    protoDict = dict
+
+    def encode(self, value, encodeFun, **options):
+        inconsistency = value.isInconsistent
+        if inconsistency:
+            raise inconsistency
+        namedTypes = value.componentType
+        substrate = self.protoDict()
+        for (idx, (key, subValue)) in enumerate(value.items()):
+            if namedTypes and namedTypes[idx].isOptional and not value[idx].isValue:
+                continue
+            substrate[key] = encodeFun(subValue, **options)
+
+        return substrate
+
+
+class SequenceEncoder(SetEncoder):
+    __module__ = __name__
+    protoDict = OrderedDict
+
+
+class SequenceOfEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        inconsistency = value.isInconsistent
+        if inconsistency:
+            raise inconsistency
+        return [ encodeFun(x, **options) for x in value ]
+
+
+class ChoiceEncoder(SequenceEncoder):
+    __module__ = __name__
+
+
+class AnyEncoder(AbstractItemEncoder):
+    __module__ = __name__
+
+    def encode(self, value, encodeFun, **options):
+        return value.asOctets()
+
+
+tagMap = {univ.Boolean.tagSet: BooleanEncoder(), univ.Integer.tagSet: IntegerEncoder(), univ.BitString.tagSet: BitStringEncoder(), univ.OctetString.tagSet: OctetStringEncoder(), univ.Null.tagSet: NullEncoder(), univ.ObjectIdentifier.tagSet: ObjectIdentifierEncoder(), univ.Enumerated.tagSet: IntegerEncoder(), univ.Real.tagSet: RealEncoder(), univ.SequenceOf.tagSet: SequenceOfEncoder(), univ.SetOf.tagSet: SequenceOfEncoder(), univ.Choice.tagSet: ChoiceEncoder(), char.UTF8String.tagSet: TextStringEncoder(), char.NumericString.tagSet: TextStringEncoder(), char.PrintableString.tagSet: TextStringEncoder(), char.TeletexString.tagSet: TextStringEncoder(), char.VideotexString.tagSet: TextStringEncoder(), char.IA5String.tagSet: TextStringEncoder(), char.GraphicString.tagSet: TextStringEncoder(), char.VisibleString.tagSet: TextStringEncoder(), char.GeneralString.tagSet: TextStringEncoder(), char.UniversalString.tagSet: TextStringEncoder(), char.BMPString.tagSet: TextStringEncoder(), useful.ObjectDescriptor.tagSet: OctetStringEncoder(), useful.GeneralizedTime.tagSet: OctetStringEncoder(), useful.UTCTime.tagSet: OctetStringEncoder()}
+typeMap = {univ.Boolean.typeId: BooleanEncoder(), univ.Integer.typeId: IntegerEncoder(), univ.BitString.typeId: BitStringEncoder(), univ.OctetString.typeId: OctetStringEncoder(), univ.Null.typeId: NullEncoder(), univ.ObjectIdentifier.typeId: ObjectIdentifierEncoder(), univ.Enumerated.typeId: IntegerEncoder(), univ.Real.typeId: RealEncoder(), univ.Set.typeId: SetEncoder(), univ.SetOf.typeId: SequenceOfEncoder(), univ.Sequence.typeId: SequenceEncoder(), univ.SequenceOf.typeId: SequenceOfEncoder(), univ.Choice.typeId: ChoiceEncoder(), univ.Any.typeId: AnyEncoder(), char.UTF8String.typeId: OctetStringEncoder(), char.NumericString.typeId: OctetStringEncoder(), char.PrintableString.typeId: OctetStringEncoder(), char.TeletexString.typeId: OctetStringEncoder(), char.VideotexString.typeId: OctetStringEncoder(), char.IA5String.typeId: OctetStringEncoder(), char.GraphicString.typeId: OctetStringEncoder(), char.VisibleString.typeId: OctetStringEncoder(), char.GeneralString.typeId: OctetStringEncoder(), char.UniversalString.typeId: OctetStringEncoder(), char.BMPString.typeId: OctetStringEncoder(), useful.ObjectDescriptor.typeId: OctetStringEncoder(), useful.GeneralizedTime.typeId: OctetStringEncoder(), useful.UTCTime.typeId: OctetStringEncoder()}
+
+class Encoder(object):
+    __module__ = __name__
+
+    def __init__(self, tagMap, typeMap={}):
+        self.__tagMap = tagMap
+        self.__typeMap = typeMap
+
+    def __call__(self, value, **options):
+        if not isinstance(value, base.Asn1Item):
+            raise error.PyAsn1Error('value is not valid (should be an instance of an ASN.1 Item)')
+        if LOG:
+            debug.scope.push(type(value).__name__)
+            LOG('encoder called for type %s <%s>' % (type(value).__name__, value.prettyPrint()))
+        tagSet = value.tagSet
+        try:
+            concreteEncoder = self.__typeMap[value.typeId]
+        except KeyError:
+            baseTagSet = tag.TagSet(value.tagSet.baseTag, value.tagSet.baseTag)
+            try:
+                concreteEncoder = self.__tagMap[baseTagSet]
+            except KeyError:
+                raise error.PyAsn1Error('No encoder for %s' % (value,))
+
+        if LOG:
+            LOG('using value codec %s chosen by %s' % (concreteEncoder.__class__.__name__, tagSet))
+        pyObject = concreteEncoder.encode(value, self, **options)
+        if LOG:
+            LOG('encoder %s produced: %s' % (type(concreteEncoder).__name__, repr(pyObject)))
+            debug.scope.pop()
+        return pyObject
+
+
+encode = Encoder(tagMap, typeMap)

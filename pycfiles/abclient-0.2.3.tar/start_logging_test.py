@@ -1,0 +1,79 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/taghawi/Dropbox/workspace/abce/unittest/start_logging_test.py
+# Compiled at: 2018-05-03 06:14:15
+import platform, csv, abce
+try:
+    from math import isclose
+except ImportError:
+
+    def isclose(a, b):
+        return a - 1e-06 < b < a + 1e-06
+
+
+class Agent(abce.Agent):
+
+    def go(self):
+        self.create('money', 0.1)
+        self.i = self.id
+        self.r = self.round
+        self.log('li', self.i)
+        self.log('lr', self.r)
+        self.log('l', {'i': self.i, 'r': self.r})
+
+
+def compare(to_compare, path, message, processes):
+    the_path = path + '/' + to_compare
+    if platform.system() == 'Windows':
+        the_path = the_path[the_path.find('/') + 1:]
+    with open(to_compare, 'r') as (generatedf):
+        generated = {}
+        for row in csv.DictReader(generatedf):
+            try:
+                generated[(row['round'], row['name'])] = row
+            except KeyError:
+                generated[row['round']] = row
+
+    with open(the_path, 'r') as (orginialf):
+        orginial = {}
+        for row in csv.DictReader(orginialf):
+            try:
+                orginial[(row['round'], row['name'])] = row
+            except KeyError:
+                orginial[row['round']] = row
+
+    for row in generated:
+        for key in generated[row]:
+            if key != 'index':
+                if generated[row][key] != orginial[row][key]:
+                    assert isclose(float(generated[row][key]), float(orginial[row][key])), (
+                     to_compare, key, generated[row][key], orginial[row][key])
+
+    for row in orginial:
+        for key in orginial[row]:
+            if key != 'index':
+                if generated[row][key] != orginial[row][key]:
+                    assert isclose(float(generated[row][key]), float(orginial[row][key])), (
+                     to_compare, key, generated[row][key], orginial[row][key])
+
+
+def main(processes, rounds):
+    simulation = abce.Simulation(name='logging_test', processes=processes)
+    agents = simulation.build_agents(Agent, 'agent', 10)
+    for rnd in range(100):
+        simulation.advance_round(rnd)
+        agents.go()
+        agents.agg_log(variables=['i', 'r'], goods=['money'])
+        agents.panel_log(variables=['i', 'r'], goods=['money'])
+
+    simulation.finalize()
+    compare('aggregated_agent.csv', simulation.path, 'aggregated logging test\t\t', processes)
+    compare('aggregate_agent.csv', simulation.path, 'aggregate logging test\t\t', processes)
+    compare('panel_agent.csv', simulation.path, 'aggregate logging test mean\t', processes)
+
+
+if __name__ == '__main__':
+    main(processes=1, rounds=None)
+    if platform.system() != 'Windows' and platform.python_implementation() != 'PyPy':
+        main(processes=4, rounds=None)

@@ -1,0 +1,215 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/Larco/Documents/Github/pyvenom/pypi/venomcli/cli.py
+# Compiled at: 2016-04-26 19:07:46
+from __future__ import print_function
+import argparse, sys
+from argparse import ArgumentTypeError
+import os, glob, shutil, subprocess, json, re
+
+class ColorWriter(object):
+    PURPLE = '\x1b[95m'
+    BLUE = '\x1b[94m'
+    GREEN = '\x1b[92m'
+    YELLOW = '\x1b[93m'
+    RED = '\x1b[91m'
+    RESET = '\x1b[0m'
+    BOLD = '\x1b[1m'
+    UNDERLINE = '\x1b[4m'
+
+    @staticmethod
+    def set(color):
+        import sys
+        sys.stdout.write(color)
+
+    @classmethod
+    def reset(cls):
+        cls.set(cls.RESET)
+
+    @classmethod
+    def write(cls, text, color=RESET, end='\n'):
+        cls.set(color)
+        print(text, end=end)
+        cls.set(cls.RESET)
+
+    @classmethod
+    def error(cls, text, end='\n'):
+        cls.write(text, color=cls.RED, end=end)
+
+    @classmethod
+    def warn(cls, text, end='\n'):
+        cls.write(text, color=cls.YELLOW, end=end)
+
+    @classmethod
+    def info(cls, text, end='\n'):
+        cls.write(text, color=cls.BLUE, end=end)
+
+    @classmethod
+    def log(cls, text, end='\n'):
+        text = re.sub('`([^`]*)`', ('{}\\1{}{}').format(cls.UNDERLINE, cls.RESET, cls.GREEN), text)
+        cls.write(text, color=cls.GREEN, end=end)
+
+
+def get_input(*args, **kwargs):
+    try:
+        input = raw_input
+    except NameError:
+        pass
+
+    return input(*args, **kwargs)
+
+
+def check_brew_install():
+    command = [
+     'brew', 'list', 'google-app-engine']
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, error = process.communicate()
+    if error.startswith('Error'):
+        ColorWriter.warn('Google App Engine is not installed on your system\nand is required for venom to run.\n\nInstall Google App Engine? (y/n): ', end='')
+        response = get_input()
+        if response.lower() == 'y':
+            os.system('brew install google-app-engine')
+        else:
+            ColorWriter.error('ERROR: Google App Engine not installed. Exiting')
+            exit(1)
+
+
+def copytree(src, dst, symlinks=False, ignore=None, template=None):
+    template = template if template else {}
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            copytree(s, d, symlinks, ignore)
+        else:
+            s_file = open(s, 'r')
+            s_value = s_file.read()
+            s_file.close()
+            for key, value in template.items():
+                s_value = s_value.replace(('{{{{ {} }}}}').format(key), value)
+
+            d_file = open(d, 'w+')
+            d_file.write(s_value)
+            d_file.close()
+
+
+class VenomCLI(object):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(description='Venom command line tool', usage='venom <command> [<args>]\n\nThe most commonly used venom commands are:\n   create   Create a new pyvenom project\n   start    Starts a venom server\n   kill     Forcefully closes an open port\n')
+        parser.add_argument('command', help='Subcommand to run')
+        args = parser.parse_args(sys.argv[1:2])
+        if not hasattr(self, args.command):
+            ColorWriter.error('Unrecognized command')
+            parser.print_help()
+            exit(1)
+        getattr(self, args.command)()
+
+    def create(self):
+        parser = argparse.ArgumentParser(description='Create a new venom project')
+        parser.add_argument('dir', help='The directory in which to create a new pyvenom project')
+        parser.add_argument('-s', '--source', help='The source directory for creation boilerplate', default=None, action='store')
+        parser.add_argument('-a', '--application', help='The Google App Engine application ID', default=None, action='store')
+        args = parser.parse_args(sys.argv[2:])
+        dir_path = os.path.abspath(args.dir)
+        dir_exists = os.path.exists(dir_path)
+        if dir_exists:
+            if not os.path.isdir(dir_path):
+                raise ArgumentTypeError(("path is not a directory: '{}'").format(args.dir))
+        else:
+            os.makedirs(dir_path)
+        if args.source:
+            source_path = os.path.abspath(args.source)
+        else:
+            cli_dir = os.path.dirname(os.path.realpath(__file__))
+            source_path = os.path.abspath(os.path.join(cli_dir, 'boilerplate'))
+        copytree(source_path, dir_path, template={'application': args.application if args.application else os.path.basename(os.path.normpath(dir_path))})
+        ColorWriter.log(('New venom project created at ./{}\n\n  To run the server\n    - Run `venom start test` or\n    - Run `cd test` and then `venom start`\n  \n  To open the server in the Venom IDE\n    - Run `venom ide test` or\n    - Run `cd test` and then `venom ide`').format(os.path.basename(os.path.normpath(dir_path))))
+        return
+
+    def start(self):
+        parser = argparse.ArgumentParser(description='Run a venom server')
+        parser.add_argument('dir', help='pyvenom server directory', default='.', action='store', nargs='?')
+        parser.add_argument('-c', '--clean', help='Clear all databases before starting the server', action='store_true')
+        parser.add_argument('--port', help='Server port', action='store')
+        parser.add_argument('--host', help='Server host', action='store')
+        parser.add_argument('--admin_port', help='Admin server port', action='store')
+        parser.add_argument('--admin_host', help='Admin server host', action='store')
+        args = parser.parse_args(sys.argv[2:])
+        check_brew_install()
+        dir_path = os.path.abspath(args.dir)
+        command = ('dev_appserver.py "{}"').format(dir_path)
+        kwargs = []
+        if args.clean:
+            kwargs.append('--clear_datastore')
+            kwargs.append('--clear_search_indexes')
+            kwargs.append('--clear_prospective_search')
+        if args.port:
+            kwargs.append(('--port {}').format(args.port))
+        if args.host:
+            kwargs.append(('--host {}').format(args.host))
+        if args.admin_port:
+            kwargs.append(('--admin_port {}').format(args.admin_port))
+        if args.admin_host:
+            kwargs.append(('--admin_host {}').format(args.admin_host))
+        os.system(command + ' ' + (' ').join(kwargs))
+
+    def kill(self):
+        parser = argparse.ArgumentParser(description='Forcefully closes a port')
+        parser.add_argument('port', help='Port to forcefully close', action='store')
+        args = parser.parse_args(sys.argv[2:])
+        command = [
+         'lsof', '-t', ('-i:{}').format(args.port)]
+        process = subprocess.Popen(command, stdout=subprocess.PIPE)
+        output, error = process.communicate()
+        if output:
+            ColorWriter.warn(('Confirm force close port {} (y/n): ').format(args.port), end='')
+            response = get_input()
+            if response.lower() == 'y':
+                os.system(('kill -9 {}').format(output))
+                ColorWriter.warn(('Port {} forcefully closed').format(args.port))
+                exit(1)
+            else:
+                ColorWriter.warn('Snake bite canceled. Exiting')
+                exit(1)
+        ColorWriter.warn(('Port {} is already closed. Exiting').format(args.port))
+        exit(1)
+
+    def run(self):
+        parser = argparse.ArgumentParser(description='Venom script runner')
+        parser.add_argument('script_name', help='Script name from venom.json', action='store')
+        args = parser.parse_args(sys.argv[2:])
+        curr_dir = os.getcwd()
+        json_file = os.path.join(curr_dir, 'venom.json')
+        exists = os.path.exists(json_file)
+        is_file = os.path.isfile(json_file)
+        if not exists:
+            ColorWriter.error('ERROR: Current project does not contain venom.json in the root. Exiting')
+            exit(1)
+        if not is_file:
+            ColorWriter.error('ERROR: venom.json is not a file. Exiting')
+            exit(1)
+        try:
+            venom_json = json.loads(open(json_file, 'r').read())
+        except ValueError:
+            ColorWriter.error('ERROR: venom.json file is not a valid JSON')
+            exit(1)
+
+        if 'scripts' not in venom_json:
+            venom_json['scripts'] = {}
+        script_name = args.script_name
+        if script_name not in venom_json['scripts']:
+            ColorWriter.error(("ERROR: script name '{}' not found in venom.json scripts").format(script_name))
+            exit(1)
+        script = venom_json['scripts'][script_name]
+        os.system(script)
+
+
+def main():
+    VenomCLI()
+
+
+if __name__ == '__main__':
+    main()

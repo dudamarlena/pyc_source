@@ -1,0 +1,64 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /Users/xuming06/Codes/sentiment-classifier-zh/pysenti/bayes.py
+# Compiled at: 2019-09-20 04:24:11
+from __future__ import unicode_literals
+from math import log, exp
+from .frequency import AddOneProb
+from .utils import dump_pkl, load_pkl
+
+class Bayes(object):
+
+    def __init__(self):
+        self.d = {}
+        self.total = 0
+
+    def save(self, fname):
+        d = {b'total': self.total, b'd': {}}
+        for k, v in self.d.items():
+            d[b'd'][k] = v.__dict__
+
+        dump_pkl(d, fname)
+
+    def load(self, fname):
+        d = load_pkl(fname)
+        self.total = d[b'total']
+        self.d = {}
+        for k, v in d[b'd'].items():
+            self.d[k] = AddOneProb()
+            self.d[k].__dict__ = v
+
+    def train(self, data):
+        for d in data:
+            c = d[1]
+            if c not in self.d:
+                self.d[c] = AddOneProb()
+            for word in d[0]:
+                self.d[c].add(word, 1)
+
+        self.total = sum(map(lambda x: self.d[x].getsum(), self.d.keys()))
+
+    def classify(self, x):
+        tmp = {}
+        for k in self.d:
+            tmp[k] = log(self.d[k].getsum()) - log(self.total)
+            for word in x:
+                tmp[k] += log(self.d[k].freq(word))
+
+        ret, prob = (0, 0)
+        for k in self.d:
+            now = 0
+            try:
+                for otherk in self.d:
+                    now += exp(tmp[otherk] - tmp[k])
+
+                now = 1 / now
+            except OverflowError:
+                now = 0
+
+            if now > prob:
+                ret, prob = k, now
+
+        return (
+         ret, prob)

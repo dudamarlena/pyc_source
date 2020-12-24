@@ -1,0 +1,11 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/socialauth/urls.py
+# Compiled at: 2010-07-01 06:52:01
+from django.conf.urls.defaults import *
+from openid_consumer.views import complete, signout
+from django.views.generic.simple import direct_to_template
+urlpatterns = patterns('socialauth.views', url('^facebook_login/xd_receiver.htm$', direct_to_template, {'template': 'socialauth/xd_receiver.htm'}, name='socialauth_xd_receiver'), url('^facebook_login/$', 'facebook_login', name='socialauth_facebook_login'), url('^facebook_login/done/$', 'facebook_login_done', name='socialauth_facebook_login_done'), url('^login/$', 'login_page', name='socialauth_login_page'), url('^openid_login/$', 'openid_login_page', name='socialauth_openid_login_page'), url('^twitter_login/$', 'twitter_login', name='socialauth_twitter_login'), url('^twitter_login/done/$', 'twitter_login_done', name='socialauth_twitter_login_done'), url('^linkedin_login/$', 'linkedin_login', name='socialauth_linkedin_login'), url('^linkedin_login/done/$', 'linkedin_login_done', name='socialauth_linkedin_login_done'), url('^yahoo_login/$', 'yahoo_login', name='socialauth_yahoo_login'), url('^yahoo_login/complete/$', complete, name='socialauth_yahoo_complete'), url('^gmail_login/$', 'gmail_login', name='socialauth_google_login'), url('^gmail_login/complete/$', complete, name='socialauth_google_complete'), url('^openid/$', 'openid_login', name='socialauth_openid_login'), url('^openid/complete/$', complete, name='socialauth_openid_complete'), url('^openid/signout/$', signout, name='openid_signout'), url('^openid/done/$', 'openid_done', name='openid_openid_done'))
+urlpatterns += patterns('socialauth.views', url('^$', 'signin_complete', name='socialauth_signin_complete'), url('^edit/profile/$', 'editprofile', name='socialauth_editprofile'), url('^logout/$', 'social_logout', name='socialauth_social_logout'))

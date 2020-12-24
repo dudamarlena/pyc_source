@@ -1,0 +1,112 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /usr/local/lib/python3.6/dist-packages/pyFTS/partitioners/Entropy.py
+# Compiled at: 2019-01-28 08:43:40
+# Size of source mod 2**32: 3387 bytes
+__doc__ = '\nC. H. Cheng, R. J. Chang, and C. A. Yeh, “Entropy-based and trapezoidal fuzzification-based fuzzy time series approach for forecasting IT project cost,”\nTechnol. Forecast. Social Change, vol. 73, no. 5, pp. 524–542, Jun. 2006.\n'
+import numpy as np, math, random as rnd, functools, operator
+from pyFTS.common import FuzzySet, Membership
+from pyFTS.partitioners import partitioner
+
+def splitBelow(data, threshold):
+    return [k for k in data if k <= threshold]
+
+
+def splitAbove(data, threshold):
+    return [k for k in data if k > threshold]
+
+
+def PMF(data, threshold):
+    a = sum([1.0 for k in splitBelow(data, threshold)])
+    b = sum([1.0 for k in splitAbove(data, threshold)])
+    l = len(data)
+    return [
+     a / l, b / l]
+
+
+def entropy(data, threshold):
+    pmf = PMF(data, threshold)
+    if pmf[0] == 0 or pmf[1] == 0:
+        return 1
+    else:
+        return -sum([pmf[0] * math.log(pmf[0]), pmf[1] * math.log(pmf[1])])
+
+
+def informationGain(data, thres1, thres2):
+    return entropy(data, thres1) - entropy(data, thres2)
+
+
+def bestSplit(data, npart):
+    if len(data) < 2:
+        return []
+    else:
+        count = 1
+        ndata = list(set(np.array(data).flatten()))
+        ndata.sort()
+        l = len(ndata)
+        threshold = 0
+        try:
+            while count < l and informationGain(data, ndata[(count - 1)], ndata[count]) <= 0:
+                threshold = ndata[count]
+                count += 1
+
+        except IndexError:
+            print(threshold)
+            print(ndata)
+            print(count)
+
+        rem = npart % 2
+        if (npart - rem) / 2 > 1:
+            p1 = splitBelow(data, threshold)
+            p2 = splitAbove(data, threshold)
+            if len(p1) > len(p2):
+                np1 = (npart - rem) / 2 + rem
+                np2 = (npart - rem) / 2
+            else:
+                np1 = (npart - rem) / 2
+                np2 = (npart - rem) / 2 + rem
+            tmp = [threshold]
+            for k in bestSplit(p1, np1):
+                tmp.append(k)
+
+            for k in bestSplit(p2, np2):
+                tmp.append(k)
+
+            return tmp
+        return [
+         threshold]
+
+
+class EntropyPartitioner(partitioner.Partitioner):
+    """EntropyPartitioner"""
+
+    def __init__(self, **kwargs):
+        (super(EntropyPartitioner, self).__init__)(name='Entropy', **kwargs)
+
+    def build(self, data):
+        sets = {}
+        kwargs = {'type':self.type, 
+         'variable':self.variable}
+        partitions = bestSplit(data, self.partitions)
+        partitions.append(self.min)
+        partitions.append(self.max)
+        partitions = list(set(partitions))
+        partitions.sort()
+        for c in np.arange(1, len(partitions) - 1):
+            _name = self.get_name(c - 1)
+            if self.membership_function == Membership.trimf:
+                sets[_name] = (FuzzySet.FuzzySet)(_name, (Membership.trimf), 
+                 [
+                  partitions[(c - 1)], partitions[c], partitions[(c + 1)]], (partitions[c]), **kwargs)
+            else:
+                if self.membership_function == Membership.trapmf:
+                    b1 = (partitions[c] - partitions[(c - 1)]) / 2
+                    b2 = (partitions[(c + 1)] - partitions[c]) / 2
+                    sets[_name] = (FuzzySet.FuzzySet)(_name, (Membership.trapmf), 
+                     [
+                      partitions[(c - 1)], partitions[c] - b1,
+                      partitions[c] + b2, partitions[(c + 1)]], 
+                     (partitions[c]), **kwargs)
+
+        return sets

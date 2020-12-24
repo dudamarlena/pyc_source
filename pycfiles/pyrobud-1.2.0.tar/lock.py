@@ -1,0 +1,60 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /usr/local/lib/python2.7/dist-packages/robots/resources/lock.py
+# Compiled at: 2015-01-26 11:58:05
+
+
+def lock(res, wait=True):
+    """
+    Used to define which resources are acquired (and locked)
+    by the action.
+
+    This decorator may be used as many times as required on the same function
+    to lock several resources.
+
+    Usage example:
+
+    .. code-block:: python
+    
+        L_ARM = Resource()
+        R_ARM = Resource()
+        ARMS = CompoundResource(L_ARM, R_ARM)
+
+        @action
+        @lock(ARMS)
+        def lift_box(robot):
+            #...
+
+        @action
+        @lock(L_ARM)
+        def wave_hand(robot):
+            #...
+
+        @action
+        @lock(L_ARM, wait=False)
+        def scratch_head(robot):
+            #...
+
+        robot.lift_box()
+        robot.wave_hand() # waits until lift_box is over
+        robot.scratch_head() # skipped if lift_box or
+                            # wave_hand are still running
+
+    :param res: an instance of Resource or CompoundResource
+    :param wait: (default: true) if ``true``, the action will wait
+                 until the resource is available, if ``false``, the action 
+                 is skipped if the resource is not available.
+
+    """
+
+    def decorator(fn):
+        if hasattr(fn, '_locked_res'):
+            fn._locked_res.append((res, wait))
+        else:
+            fn._locked_res = [
+             (
+              res, wait)]
+        return fn
+
+    return decorator

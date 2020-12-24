@@ -1,0 +1,138 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/bika/health/browser/patient/historicresults.py
+# Compiled at: 2014-12-12 07:13:54
+from Products.CMFCore.utils import getToolByName
+from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile
+from bika.lims.browser import BrowserView
+from bika.health import bikaMessageFactory as _
+from zope.interface import implements
+from plone.app.layout.globals.interfaces import IViewView
+from Products.CMFPlone.i18nl10n import ulocalized_time
+import plone, json
+
+class HistoricResultsView(BrowserView):
+    implements(IViewView)
+    template = ViewPageTemplateFile('historicresults.pt')
+
+    def __init__(self, context, request):
+        super(HistoricResultsView, self).__init__(context, request)
+        self._rows = None
+        self._dates = None
+        path = '/++resource++bika.health.images'
+        self.icon = self.portal_url + path + '/historicresults_big.png'
+        self.title = self.context.translate(_('Historic Results'))
+        self.description = ''
+        return
+
+    def __call__(self):
+        self._load()
+        return self.template()
+
+    def get_dates(self):
+        """ Gets the result capture dates for which at least one analysis
+            result has been found for the current Patient.
+        """
+        return self._dates
+
+    def get_rows(self):
+        """ Returns a dictionary with rows with the following structure:
+            rows = {<sampletype_uid>: {
+                        'object': <sampletype>,
+                        'analyses': {
+                            <analysisservice_uid>: {
+                                'object': <analysisservice>,
+                                'title': <analysisservice.title>,
+                                'units': <analysisservice.units>,
+                                'specs': {'error', 'min', 'max', ...},
+                                <date> : {
+                                    'object': <analysis>,
+                                    'result': <analysis.result>,
+                                    'date': <analysis.resultdate>
+                                },
+                            }
+                        }
+                    }}
+        """
+        return self._rows
+
+    def _load(self):
+        """ Loads the Controller acessors and other stuff
+        """
+        self._dates, self._rows = get_historicresults(self.context)
+
+
+def get_historicresults(patient):
+    if not patient:
+        return ([], {})
+    else:
+        rows = {}
+        dates = []
+        uid = patient.UID()
+        states = ['verified', 'published']
+        bc = getToolByName(patient, 'bika_catalog')
+        ars = [ ar.id for ar in bc(portal_type='AnalysisRequest', review_state=states) if 'Patient' in ar.getObject().Schema() and ar.getObject().Schema().getField('Patient').get(ar.getObject()) and ar.getObject().Schema().getField('Patient').get(ar.getObject()).UID() == uid
+              ]
+        bc = getToolByName(patient, 'bika_analysis_catalog')
+        analyses = [ an.getObject() for an in bc(portal_type='Analysis', getRequestID=ars, sort_on='getResultCaptureDate', sort_order='reverse')
+                   ]
+        for analysis in analyses:
+            ar = analysis.aq_parent
+            sampletype = ar.getSampleType()
+            row = rows.get(sampletype.UID()) if sampletype.UID() in rows.keys() else {'object': sampletype, 'analyses': {}}
+            anrow = row.get('analyses')
+            service = analysis.getService()
+            asdict = anrow.get(service.UID()) if service.UID() in anrow.keys() else {'object': service, 'title': service.Title(), 
+               'keyword': service.getKeyword(), 
+               'units': service.getUnit()}
+            date = analysis.getResultCaptureDate() or analysis.created()
+            date = ulocalized_time(date, 1, None, patient, 'bika')
+            if date not in asdict.keys():
+                asdict[date] = {'object': analysis, 'result': analysis.getResult(), 'formattedresult': analysis.getFormattedResult()}
+                if 'specs' not in asdict.keys():
+                    spec = analysis.getAnalysisSpecs()
+                    spec = spec.getResultsRangeDict() if spec else {}
+                    specs = spec.get(analysis.getKeyword(), {})
+                    if not specs.get('rangecomment', ''):
+                        if specs.get('min', '') and specs.get('max', ''):
+                            specs['rangecomment'] = '%s - %s' % (
+                             specs.get('min'), specs.get('max'))
+                        elif specs.get('min', ''):
+                            specs['rangecomment'] = '> %s' % specs.get('min')
+                        elif specs.get('max', ''):
+                            specs['rangecomment'] = '< %s' % specs.get('max')
+                        if specs.get('error', '0') != '0' and specs.get('rangecomment', ''):
+                            specs['rangecomment'] = '%s (%s' % (
+                             specs.get('rangecomment'),
+                             specs.get('error')) + '%)'
+                    asdict['specs'] = specs
+                if date not in dates:
+                    dates.append(date)
+            anrow[service.UID()] = asdict
+            row['analyses'] = anrow
+            rows[sampletype.UID()] = row
+
+        dates.sort(reverse=False)
+        return (
+         dates, rows)
+
+
+class historicResultsJSON(BrowserView):
+    """ Returns a JSON array datatable in a tabular format.
+    """
+
+    def __call__(self):
+        dates, data = get_historicresults(self.context)
+        datatable = []
+        for andate in dates:
+            datarow = {'date': ulocalized_time(andate, 1, None, self.context, 'bika')}
+            for row in data.itervalues():
+                for anrow in row['analyses'].itervalues():
+                    serie = anrow['title']
+                    datarow[serie] = anrow.get(andate, {}).get('result', '')
+
+            datatable.append(datarow)
+
+        return json.dumps(datatable)

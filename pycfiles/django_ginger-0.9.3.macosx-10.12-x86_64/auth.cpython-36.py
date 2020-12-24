@@ -1,0 +1,57 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/shodh/Projects/django_ginger/ginger/auth.py
+# Compiled at: 2015-10-13 18:04:38
+# Size of source mod 2**32: 1704 bytes
+from django.contrib.auth.backends import ModelBackend
+from django.db.models.query_utils import Q
+from django.utils import six
+from django.contrib.auth.models import User, AbstractUser
+__all__ = [
+ 'GingerUser', 'CaseInsensitiveBackend']
+
+class MetaUser(type):
+
+    def __new__(self, name, bases, attrs):
+        if bases == (AbstractUser,):
+            if name == 'GingerUser':
+                return type.__new__(self, name, (), {})
+        cls = User
+        meta = cls._meta
+        field_dict = {f.name:f for f in meta.fields}
+        for k, v in attrs.items():
+            if k in field_dict:
+                field = field_dict[k]
+                attrs = v.__dict__.keys()
+                for a in attrs:
+                    value = getattr(v, a, None)
+                    if value is not None:
+                        setattr(field, a, value)
+
+            elif k not in cls.__dict__ and not hasattr(cls, k):
+                cls.add_to_class(k, v)
+            else:
+                cls.add_to_class(k, v)
+
+        return cls
+
+
+@six.add_metaclass(MetaUser)
+class GingerUser(AbstractUser):
+
+    class Meta(AbstractUser.Meta):
+        abstract = True
+
+
+class CaseInsensitiveBackend(ModelBackend):
+    __doc__ = "\n    By default ModelBackend does case _sensitive_ username authentication, which isn't what is\n    generally expected.  This backend supports case insensitive username authentication.\n    "
+
+    def authenticate(self, username=None, password=None, **kwargs):
+        try:
+            user = User.objects.filter(Q(username__iexact=username) | Q(email__iexact=username)).get()
+            if user.check_password(password):
+                return user
+        except User.DoesNotExist:
+            return

@@ -1,0 +1,7 @@
+networkx==1.9.1
+numpy
+matplotlib==1.4.3
+seaborn
+biopython
+pygraphviz
+sklearn

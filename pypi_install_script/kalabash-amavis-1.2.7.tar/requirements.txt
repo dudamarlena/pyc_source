@@ -1,0 +1,4 @@
+kalabash>=1.10.2
+chardet
+html2text
+idna

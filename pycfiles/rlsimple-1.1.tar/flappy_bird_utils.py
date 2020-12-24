@@ -1,0 +1,67 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /Users/liup/RL/rlsimpleParent/rlsimple/FlappyBirdEnv/flappy_bird_utils.py
+# Compiled at: 2017-04-09 18:21:20
+import pygame, sys
+
+def load():
+    import os
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    PLAYER_PATH = (
+     dir_path + '/assets/sprites/redbird-upflap.png',
+     dir_path + '/assets/sprites/redbird-midflap.png',
+     dir_path + '/assets/sprites/redbird-downflap.png')
+    BACKGROUND_PATH = dir_path + '/assets/sprites/background-black.png'
+    PIPE_PATH = dir_path + '/assets/sprites/pipe-green.png'
+    IMAGES, SOUNDS, HITMASKS = {}, {}, {}
+    IMAGES['numbers'] = (
+     pygame.image.load(dir_path + '/assets/sprites/0.png').convert_alpha(),
+     pygame.image.load(dir_path + '/assets/sprites/1.png').convert_alpha(),
+     pygame.image.load(dir_path + '/assets/sprites/2.png').convert_alpha(),
+     pygame.image.load(dir_path + '/assets/sprites/3.png').convert_alpha(),
+     pygame.image.load(dir_path + '/assets/sprites/4.png').convert_alpha(),
+     pygame.image.load(dir_path + '/assets/sprites/5.png').convert_alpha(),
+     pygame.image.load(dir_path + '/assets/sprites/6.png').convert_alpha(),
+     pygame.image.load(dir_path + '/assets/sprites/7.png').convert_alpha(),
+     pygame.image.load(dir_path + '/assets/sprites/8.png').convert_alpha(),
+     pygame.image.load(dir_path + '/assets/sprites/9.png').convert_alpha())
+    IMAGES['base'] = pygame.image.load(dir_path + '/assets/sprites/base.png').convert_alpha()
+    if 'win' in sys.platform:
+        soundExt = '.wav'
+    else:
+        soundExt = '.ogg'
+    SOUNDS['die'] = pygame.mixer.Sound(dir_path + '/assets/audio/die' + soundExt)
+    SOUNDS['hit'] = pygame.mixer.Sound(dir_path + '/assets/audio/hit' + soundExt)
+    SOUNDS['point'] = pygame.mixer.Sound(dir_path + '/assets/audio/point' + soundExt)
+    SOUNDS['swoosh'] = pygame.mixer.Sound(dir_path + '/assets/audio/swoosh' + soundExt)
+    SOUNDS['wing'] = pygame.mixer.Sound(dir_path + '/assets/audio/wing' + soundExt)
+    IMAGES['background'] = pygame.image.load(BACKGROUND_PATH).convert()
+    IMAGES['player'] = (
+     pygame.image.load(PLAYER_PATH[0]).convert_alpha(),
+     pygame.image.load(PLAYER_PATH[1]).convert_alpha(),
+     pygame.image.load(PLAYER_PATH[2]).convert_alpha())
+    IMAGES['pipe'] = (
+     pygame.transform.rotate(pygame.image.load(PIPE_PATH).convert_alpha(), 180),
+     pygame.image.load(PIPE_PATH).convert_alpha())
+    HITMASKS['pipe'] = (
+     getHitmask(IMAGES['pipe'][0]),
+     getHitmask(IMAGES['pipe'][1]))
+    HITMASKS['player'] = (
+     getHitmask(IMAGES['player'][0]),
+     getHitmask(IMAGES['player'][1]),
+     getHitmask(IMAGES['player'][2]))
+    return (
+     IMAGES, SOUNDS, HITMASKS)
+
+
+def getHitmask(image):
+    """returns a hitmask using an image's alpha."""
+    mask = []
+    for x in range(image.get_width()):
+        mask.append([])
+        for y in range(image.get_height()):
+            mask[x].append(bool(image.get_at((x, y))[3]))
+
+    return mask

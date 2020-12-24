@@ -1,0 +1,796 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.7 (3394)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-x86_64/egg/genmechanics/core.py
+# Compiled at: 2020-03-26 14:17:33
+# Size of source mod 2**32: 39939 bytes
+"""
+
+"""
+from itertools import combinations
+import numpy as npy, networkx as nx
+from genmechanics import geometry, tools
+from scipy import linalg
+from scipy.optimize import fsolve
+from dessia_common import DessiaObject
+import volmdlr as vm, webbrowser, os
+from jinja2 import Environment, PackageLoader, select_autoescape
+
+class ModelError(Exception):
+
+    def __init__(self, message):
+        self.message = message
+
+    def __str__(self):
+        return 'Model Error: ' + self.message
+
+
+class Part(DessiaObject):
+    _generic_eq = False
+
+    def __init__(self, name='', interest_points=None):
+        if interest_points is None:
+            self.interest_points = []
+        else:
+            self.interest_points = interest_points
+        self.name = name
+
+    @classmethod
+    def wireframe_lines(cls, points):
+        if len(points) == 2:
+            return [
+             vm.LineSegment3D(points[0], points[1])]
+        lines = []
+        full_graph = nx.Graph()
+        full_graph.add_nodes_from(points)
+        points.append(vm.Point3D.mean_point(points))
+        for point1, point2 in combinations(points, 2):
+            full_graph.add_edge(point1, point2, weight=(point1.point_distance(point2)))
+
+        wireframe_graph = nx.minimum_spanning_tree(full_graph)
+        for point1, point2 in wireframe_graph.edges():
+            lines.append(vm.LineSegment3D(point1, point2))
+
+        return lines
+
+
+class Mechanism:
+
+    def __init__(self, linkages, ground, imposed_speeds, known_static_loads, unknown_static_loads, name=''):
+        self.linkages = linkages
+        self.ground = ground
+        self.name = name
+        self.imposed_speeds = imposed_speeds
+        self.known_static_loads = known_static_loads
+        self.unknown_static_loads = unknown_static_loads
+        self._utd_kinematic_results = False
+        self._utd_static_results = False
+        self._holonomic_paths = {}
+
+    def _get_parts(self):
+        parts = []
+        for linkage in self.linkages:
+            for part in [linkage.part1, linkage.part2]:
+                if part not in parts and part != self.ground:
+                    parts.append(part)
+
+        return parts
+
+    parts = property(_get_parts)
+
+    def _get_graph(self):
+        G = nx.Graph()
+        G.add_nodes_from(self.parts)
+        for linkage in self.linkages:
+            G.add_node(linkage)
+            G.add_edge(linkage, linkage.part1)
+            G.add_edge(linkage, linkage.part2)
+
+        return G
+
+    graph = property(_get_graph)
+
+    def _get_holonomic_graph(self):
+        G = nx.Graph()
+        G.add_nodes_from(self.parts)
+        for linkage in self.linkages:
+            if linkage.holonomic:
+                G.add_node(linkage)
+                G.add_edge(linkage, linkage.part1)
+                G.add_edge(linkage, linkage.part2)
+
+        return G
+
+    holonomic_graph = property(_get_holonomic_graph)
+
+    def _settings_path(self, part1, part2):
+        if (
+         part1, part2) in self._settings_paths:
+            return self._settings_paths[(part1, part2)]
+        if (
+         part2, part1) in self._settings_paths:
+            path = [(p2, linkage, not linkage_side, p1) for p1, linkage, linkage_side, p2 in self._settings_paths[(part2, part1)][::-1]]
+            self._settings_paths[(part1, part2)] = path
+            return self._settings_paths[(part1, part2)]
+        path = []
+        raw_path = list(nx.shortest_path(self.settings_graph, part1, part2))
+        for part1, linkage, part2 in zip(raw_path[:-2:2], raw_path[1::2], raw_path[2::2] + [part2]):
+            path.append((part1, linkage, linkage.part1 == part1, part2))
+
+        self._settings_paths[(part1, part2)] = path
+        return path
+
+    def settings_graph(self):
+        graph = self.holonomic_graph.copy()
+        deleted_linkages = []
+        for cycle in nx.cycle_basis(graph):
+            ground_distance = [(l, len(nx.shortest_path(graph, l, self.ground))) for l in cycle if l in self.linkages if l not in deleted_linkages if not l.positions_require_kinematic_parameters]
+            linkage_to_delete = max(ground_distance, key=(lambda x: x[1]))[0]
+            deleted_linkages.append(linkage_to_delete)
+            graph.remove_node(linkage_to_delete)
+
+        self.linkages_kinematic_setting = [l for l in self.linkages if l not in deleted_linkages]
+        self.settings_graph = graph
+
+    def part_linkages(self):
+        part_linkages = {}
+        for linkage in self.linkages:
+            for part in (linkage.part1, linkage.part2):
+                if part not in part_linkages:
+                    part_linkages[part] = [
+                     linkage]
+                else:
+                    part_linkages[part].append(linkage)
+
+        return part_linkages
+
+    def plot_graph(self):
+        s = '<html>\n        <head>\n        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.20.0/vis.min.js"></script>\n        <link href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.20.0/vis.min.css" rel="stylesheet" type="text/css" />\n\n        <style type="text/css">\n            #mynetwork {\n                border: 1px solid lightgray;\n            }\n        </style>\n    </head>\n    <body>\n    <div id="mynetwork"></div>\n\n    <script type="text/javascript">\n    var nodes = new vis.DataSet([\n'
+        index = {}
+        for ipart, part in enumerate(self.parts + [self.ground]):
+            index[part] = ipart
+            s += "{{id: {}, label: '{}'}},\n".format(ipart, part.name)
+
+        n = len(self.parts) + 1
+        for il, linkage in enumerate(self.linkages):
+            index[linkage] = n + il
+            s += "{{id: {}, label: '{}'}},\n".format(n + il, linkage.name)
+
+        s += ']);\n'
+        s += 'var edges = new vis.DataSet(['
+        for linkage in self.linkages:
+            s += '{{from: {}, to: {}}},\n'.format(index[linkage], index[linkage.part1])
+            s += '{{from: {}, to: {}}},\n'.format(index[linkage], index[linkage.part2])
+
+        s += ']);'
+        s += "\n    // create a network\n    var container = document.getElementById('mynetwork');\n\n    // provide the data in the vis format\n    var data = {\n        nodes: nodes,\n        edges: edges\n    };\n    var options = {};\n\n    // initialize your network!\n    var network = new vis.Network(container, data, options);\n</script>\n</body>\n</html>"
+        with open('gm_graph_viz.html', 'w') as (file):
+            file.write(s)
+        webbrowser.open('file://' + os.path.realpath('gm_graph_viz.html'))
+
+    def DrawPowerGraph(self):
+        """
+        Draw graph with tulip
+        """
+        import matplotlib.pyplot as plt
+        G = nx.Graph()
+        widths = []
+        labels = {}
+        edges = []
+        for part in self.parts:
+            G.add_node(part)
+            labels[part] = part.name
+
+        for linkage in self.linkages:
+            G.add_node(linkage)
+            labels[linkage] = linkage.name
+            G.add_edge(linkage, linkage.part1)
+            widths.append(abs(self.TransmittedLinkagePower(linkage, 0)))
+            edges.append((linkage, linkage.part1))
+            G.add_edge(linkage, linkage.part2)
+            widths.append(abs(self.TransmittedLinkagePower(linkage, 1)))
+            edges.append((linkage, linkage.part2))
+
+        for load in self.unknown_static_loads + self.known_static_loads:
+            G.add_node(load)
+            G.add_edge(load, load.part)
+            widths.append(abs(self.LoadPower(load)))
+            labels[load] = load.name
+            edges.append((load, load.part))
+
+        max_widths = max(widths)
+        widths = [6 * w / max_widths for w in widths]
+        plt.figure()
+        pos = nx.spring_layout(G)
+        nx.draw_networkx_nodes(G, pos, nodelist=(self.linkages), node_color='grey')
+        nx.draw_networkx_nodes(G, pos, nodelist=(self.parts))
+        nx.draw_networkx_nodes(G, pos, nodelist=(self.unknown_static_loads), node_color='red')
+        nx.draw_networkx_nodes(G, pos, nodelist=(self.known_static_loads), node_color='green')
+        nx.draw_networkx_nodes(G, pos, nodelist=(self.parts), node_color='cyan')
+        nx.draw_networkx_labels(G, pos, labels)
+        nx.draw_networkx_edges(G, pos, edges, width=widths, edge_color='blue')
+        nx.draw_networkx_edges(G, pos)
+
+    def ChangeImposedSpeeds(self, imposed_speeds):
+        self.imposed_speeds = imposed_speeds
+        self._utd_kinematic_results = False
+        self._utd_static_results = False
+
+    def ChangeLoads(self, known_static_loads, unknown_static_loads):
+        self.known_static_loads = known_static_loads
+        self.unknown_static_loads = unknown_static_loads
+        self._utd_static_results = False
+
+    def Speeds(self, position, part_ref, part):
+        """
+        Speeds from point belonging to part with part_ref as reference
+        """
+        q = self.kinematic_vector
+        path = nx.shortest_path(self.holonomic_graph, part_ref, part)
+        V = npy.zeros((3, self.n_kdof))
+        W = npy.zeros((3, self.n_kdof))
+        for il, linkage2 in enumerate(path):
+            if not linkage2.__class__.__name__ == 'Part':
+                try:
+                    if path[(il + 1)] == linkage2.part2:
+                        side = 1
+                    else:
+                        side = -1
+                except IndexError:
+                    if path[(il - 1)] == linkage2.part1:
+                        side = 1
+                    else:
+                        side = -1
+
+                P = (geometry.Euler2TransferMatrix)(*linkage2.euler_angles)
+                u = linkage2.position
+                uprime = u - position
+                L = geometry.CrossProductMatrix(uprime)
+                Ve = npy.dot(L, npy.dot(P, linkage2.kinematic_matrix[:3, :])) + npy.dot(P, linkage2.kinematic_matrix[3:, :])
+                We = npy.dot(P, linkage2.kinematic_matrix[:3, :])
+                for indof, ndof in enumerate(self.kdof[linkage2]):
+                    V[:, ndof] += side * Ve[:, indof]
+                    W[:, ndof] += side * We[:, indof]
+
+        return npy.hstack((npy.dot(W, q).flatten(), npy.dot(V, q).flatten()))
+
+    def LocalLinkageSpeeds(self, linkage):
+        """
+        :returns: relative speed of linkage in local linkage coordinate system
+        """
+        try:
+            r = self.kinematic_results[linkage]
+            vr = npy.array([r[i] for i in range(linkage.n_kinematic_unknowns)])
+            return npy.dot(linkage.kinematic_matrix, vr).flatten()
+        except:
+            s = self.Speed(linkage.position, self.ground, linkage.part1)
+            v = npy.dot(linkage.P, s[:3])
+            w = npy.dot(linkage.P, s[3:])
+            return npy.hstack((w, v)).flatten()
+
+    def LocalLinkageForces(self, linkage, num_part):
+        """
+        :returns :Local forces of linkage on part given by its number (0 for part1, 1 for part2)
+        """
+        r = self.static_results[linkage]
+        vr = npy.array([r[i] for i in range(linkage.n_static_unknowns)])
+        if num_part == 0:
+            return npy.dot(linkage.static_matrix1, vr)
+        return npy.dot(linkage.static_matrix2, vr)
+
+    def GlobalLinkageForces(self, linkage, num_part):
+        P = (geometry.Euler2TransferMatrix)(*linkage.euler_angles)
+        lf = self.LocalLinkageForces(linkage, num_part)
+        F = npy.zeros(6)
+        F[:3] = npy.dot(P, lf[:3])
+        F[3:] = npy.dot(P, lf[3:])
+        return F
+
+    def LocalLoadForces(self, load):
+        try:
+            F = npy.zeros(6)
+            F[:3] = load.forces
+            F[3:] = load.torques
+            return F
+        except AttributeError:
+            r = self.static_results[load]
+            vr = npy.array([r[i] for i in range(load.n_static_unknowns)])
+            return npy.dot(load.static_matrix, vr)
+
+    def GlobalLoadForces(self, load):
+        f = self.LocalLoadForces(load)
+        F = npy.zeros(6)
+        F[:3] = npy.dot(load.P, f[:3]).flatten()
+        F[3:] = npy.dot(load.P, f[3:]).flatten()
+        return F
+
+    def LinkagePowerLosses(self, linkage):
+        if linkage.holonomic:
+            tf = self.LocalLinkageForces(linkage, 0)
+            ft = npy.hstack((tf[3:], tf[:3]))
+            return npy.dot(self.LocalLinkageSpeeds(linkage), ft)
+        d = self.GlobalLinkageForces(linkage, 0) + self.GlobalLinkageForces(linkage, 1)
+        df = d[:3]
+        dt = d[3:]
+        s = -self.Speeds(linkage.position, self.ground, linkage.part1)
+        w = s[:3]
+        v = s[3:]
+        return npy.dot(df, v) + npy.dot(dt, w)
+
+    def LoadPower(self, load):
+        s = self.Speeds(load.position, self.ground, load.part)
+        f = self.GlobalLoadForces(load)
+        P = npy.dot(s[3:], f[:3])
+        P += npy.dot(f[3:], s[:3])
+        return P
+
+    def TransmittedLinkagePower(self, linkage, num_part):
+        if num_part == 1:
+            s = self.Speeds(linkage.position, self.ground, linkage.part2)
+        else:
+            s = self.Speeds(linkage.position, self.ground, linkage.part1)
+        f = self.GlobalLinkageForces(linkage, num_part)
+        P = npy.dot(s[3:], f[:3])
+        P += npy.dot(f[3:], s[:3])
+        return P
+
+    def _get_static_results(self):
+        if not self._utd_static_results:
+            self._static_results = self._StaticAnalysis()
+            self._utd_static_results = True
+        return self._static_results
+
+    static_results = property(_get_static_results)
+
+    def _get_kinematic_results(self):
+        if not self._utd_kinematic_results:
+            self._kinematic_results, self._kinematic_vector = self._KinematicAnalysis()
+            self._utd_kinematic_results = True
+        return self._kinematic_results
+
+    kinematic_results = property(_get_kinematic_results)
+
+    def _get_kinematic_vector(self):
+        if not self._utd_kinematic_results:
+            self._kinematic_results, self._kinematic_vector = self._KinematicAnalysis()
+            self._utd_kinematic_results = True
+        return self._kinematic_vector
+
+    kinematic_vector = property(_get_kinematic_vector)
+
+    def _StaticAnalysis(self):
+        self.sdof = {}
+        self.n_sdof = 0
+        kinematic_analysis_required = False
+        for linkage in self.linkages:
+            self.sdof[linkage] = list(range(self.n_sdof, self.n_sdof + linkage.n_static_unknowns))
+            self.n_sdof += linkage.n_static_unknowns
+            if linkage.static_require_kinematic:
+                kinematic_analysis_required = True
+
+        uloads_parts = {}
+        for load in self.unknown_static_loads:
+            load_unknowns = load.static_matrix.shape[1]
+            self.sdof[load] = list(range(self.n_sdof, self.n_sdof + load_unknowns))
+            self.n_sdof += load_unknowns
+            if load.static_require_kinematic:
+                kinematic_analysis_required = True
+            try:
+                uloads_parts[load.part].append(load)
+            except:
+                uloads_parts[load.part] = [
+                 load]
+
+        if kinematic_analysis_required:
+            self.kinematic_results
+        loads_parts = {}
+        for load in self.known_static_loads:
+            try:
+                loads_parts[load.part].append(load)
+            except:
+                loads_parts[load.part] = [
+                 load]
+
+        lparts = len(self.parts)
+        M = npy.zeros((6 * lparts, self.n_sdof))
+        K = npy.zeros((6 * lparts, self.n_sdof))
+        F = npy.zeros(6 * lparts)
+        q = npy.zeros(self.n_sdof)
+        nonlinear_eq = {}
+        for ip, part in enumerate(self.parts):
+            for linkage in self.graph[part].keys():
+                P = (geometry.Euler2TransferMatrix)(*linkage.euler_angles)
+                u = linkage.position
+                uprime = u
+                L = geometry.CrossProductMatrix(uprime)
+                if part == linkage.part1:
+                    static_matrix = linkage.static_matrix1
+                else:
+                    static_matrix = linkage.static_matrix2
+                Me1 = npy.abs(npy.dot(P, static_matrix[:3, :])) > 1e-10
+                Me2 = npy.abs(npy.dot(L, npy.dot(P, static_matrix[:3, :])) + npy.dot(P, static_matrix[3:, :])) > 1e-10
+                Me = npy.vstack([Me1, Me2])
+                for indof, ndof in enumerate(self.sdof[linkage]):
+                    M[ip * 6:(ip + 1) * 6, ndof] += Me[:, indof]
+
+                Ke1 = npy.dot(P, static_matrix[:3, :])
+                Ke2 = npy.dot(L, npy.dot(P, static_matrix[:3, :])) + npy.dot(P, static_matrix[3:, :])
+                Ke = npy.vstack([Ke1, Ke2])
+                for indof, ndof in enumerate(self.sdof[linkage]):
+                    K[ip * 6:(ip + 1) * 6, ndof] += Ke[:, indof]
+
+            try:
+                uloads = uloads_parts[part]
+            except:
+                uloads = []
+
+            for load in uloads:
+                P = (geometry.Euler2TransferMatrix)(*load.euler_angles)
+                u = load.position
+                uprime = u
+                L = geometry.CrossProductMatrix(uprime)
+                Me1 = npy.abs(npy.dot(P, load.static_matrix[:3, :])) > 1e-10
+                Me2 = npy.abs(npy.dot(L, npy.dot(P, load.static_matrix[:3, :])) + npy.dot(P, load.static_matrix[3:, :])) > 1e-10
+                Me = npy.vstack([Me1, Me2])
+                for indof, ndof in enumerate(self.sdof[load]):
+                    M[ip * 6:(ip + 1) * 6, ndof] += Me[:, indof]
+
+                Ke1 = npy.dot(P, load.static_matrix[:3, :])
+                Ke2 = npy.dot(L, npy.dot(P, load.static_matrix[:3, :])) + npy.dot(P, load.static_matrix[3:, :])
+                Ke = npy.vstack([Ke1, Ke2])
+                for indof, ndof in enumerate(self.sdof[load]):
+                    K[ip * 6:(ip + 1) * 6, ndof] = Ke[:, indof]
+
+            try:
+                loads = loads_parts[part]
+            except:
+                loads = []
+
+            for load in loads:
+                P = (geometry.Euler2TransferMatrix)(*load.euler_angles)
+                u = load.position
+                uprime = u
+                L = geometry.CrossProductMatrix(uprime)
+                F1 = npy.dot(P, load.forces)
+                F2 = npy.dot(L, npy.dot(P, load.forces)) + npy.dot(P, load.torques)
+                Fe = npy.hstack([F1.reshape(3), F2.reshape(3)])
+                F[ip * 6:(ip + 1) * 6] -= Fe
+
+        neq = 6 * lparts
+        neq_linear = neq
+        indices_r = list(range(neq))
+        for linkage in self.linkages:
+            neq_linkage = linkage.static_behavior_occurence_matrix.shape[0]
+            if neq_linkage > 0:
+                Me = npy.zeros((neq_linkage, self.n_sdof))
+                for indof, ndof in enumerate(self.sdof[linkage]):
+                    Me[:, ndof] += linkage.static_behavior_occurence_matrix[:, indof]
+
+                M = npy.vstack([M, Me])
+                neq_linear_linkage = linkage.static_behavior_linear_eq.shape[0]
+                if neq_linear_linkage > 0:
+                    Ke = npy.zeros((neq_linear_linkage, self.n_sdof))
+                    for indof, ndof in enumerate(self.sdof[linkage]):
+                        Ke[neq_linear:neq_linear + 6, ndof] += linkage.static_behavior_linear_eq[:, indof]
+
+                    K = npy.vstack([K, Ke])
+                    indices_r.extend(range(neq_linear, neq_linear + neq_linear_linkage))
+                if linkage.holonomic:
+                    if linkage.static_require_kinematic:
+                        ls = self.LocalLinkageSpeeds(linkage)
+                        w = ls[:3]
+                        v = ls[3:]
+                    else:
+                        w, v = (0, 0)
+                    for i, fct in zip(linkage.static_behavior_nonlinear_eq_indices, linkage.static_behavior_nonlinear_eq):
+                        nonlinear_eq[neq + i] = lambda x, v=v, w=w, fct=fct: fct(x, w, v)
+
+                else:
+                    if linkage.static_require_kinematic:
+                        s = self.Speeds(linkage.position, self.ground, linkage.part1)
+                        w = npy.dot(linkage.P.T, s[:3])
+                        v = npy.dot(linkage.P.T, s[3:])
+                    else:
+                        w, v = (0, 0)
+                    for i, fct in zip(linkage.static_behavior_nonlinear_eq_indices, linkage.static_behavior_nonlinear_eq):
+                        nonlinear_eq[neq + i] = lambda x, v=v, w=w, fct=fct: fct(x, w, v)
+
+                neq += neq_linkage
+                neq_linear += neq_linear_linkage
+
+        for load in self.unknown_static_loads:
+            neq_load = load.static_behavior_occurence_matrix.shape[0]
+            if neq_load > 0:
+                Me = npy.zeros((neq_load, self.n_sdof))
+                for indof, ndof in enumerate(self.sdof[load]):
+                    Me[:, ndof] += load.static_behavior_occurence_matrix[:, indof]
+
+                M = npy.vstack([M, Me])
+                neq_linear_load = load.static_behavior_linear_eq.shape[0]
+                if neq_linear_load > 0:
+                    Ke = npy.zeros((neq_linear_load, self.n_sdof))
+                    for indof, ndof in enumerate(self.sdof[load]):
+                        Ke[neq_linear:neq_linear + 6, ndof] += load.static_behavior_linear_eq[:, indof]
+
+                    K = npy.vstack([K, Ke])
+                    indices_r.extend(range(neq_linear, neq_linear + neq_linear_load))
+                elif load.static_require_kinematic:
+                    s = self.Speeds(load.position, self.ground, load.part)
+                    w = npy.dot(load.P.T, s[:3])
+                    v = npy.dot(load.P.T, s[3:])
+                else:
+                    w, v = (0, 0)
+                for i, fct in zip(load.static_behavior_nonlinear_eq_indices, load.static_behavior_nonlinear_eq):
+                    nonlinear_eq[neq + i] = lambda x, v=v, w=w, fct=fct: fct(x, w, v)
+
+                neq += neq_load
+                neq_linear += neq_linear_load
+
+        solvable, solvable_var, resolution_order = tools.EquationsSystemAnalysis(M, None)
+        if not solvable:
+            raise ModelError('Overconstrained system')
+        for eqs, variables in resolution_order:
+            linear = True
+            linear_eqs = []
+            for eq in eqs:
+                try:
+                    nonlinear_eq[eq]
+                    linear = False
+                except KeyError:
+                    linear_eqs.append(eq)
+
+            if linear:
+                eqs_r = npy.array([indices_r[eq] for eq in eqs])
+                other_vars = npy.array([i for i in range(self.n_sdof) if i not in variables])
+                Kr = K[(eqs_r[:, None], npy.array(variables))]
+                Fr = F[eqs_r] - npy.dot(K[(eqs_r[:, None], other_vars)], q[other_vars])
+                q[variables] = linalg.solve(Kr, Fr)
+            else:
+                nl_eqs = []
+                other_vars = npy.array([i for i in range(self.n_sdof) if i not in variables])
+                for eq in eqs:
+                    try:
+                        f1 = nonlinear_eq[eq]
+                        vars_func = [i for i in range(self.n_sdof) if M[(eq, i)]]
+
+                        def f2(x, f1=f1, vars_func=vars_func, variables=variables, q=q):
+                            x2 = []
+                            for variable in vars_func:
+                                try:
+                                    x2.append(x[variables.index(variable)])
+                                except ValueError:
+                                    x2.append(q[variable])
+
+                            return f1(x2)
+
+                        nl_eqs.append(f2)
+                    except KeyError:
+                        f2 = lambda x, indices_r=indices_r, K=K, F=F, eq=eq, q=q, other_vars=other_vars: npy.dot(K[(indices_r[eq], variables)], x) - F[indices_r[eq]] + npy.dot(K[(indices_r[eq], other_vars)], q[other_vars])
+                        nl_eqs.append(f2)
+
+                f = lambda x: [fi(x) for fi in nl_eqs]
+                xs = fsolve(f, (npy.zeros(len(variables))), full_output=0)
+                if npy.sum(npy.abs(f(xs))) > 0.0001:
+                    raise ModelError('No convergence of nonlinear phenomena solving' + str(npy.sum(npy.abs(f(xs)))))
+                q[variables] = xs
+
+        results = {}
+        for link, dofs in self.sdof.items():
+            rlink = {}
+            for idof, dof in enumerate(dofs):
+                rlink[idof] = q[dof]
+
+            results[link] = rlink
+
+        return results
+
+    def _KinematicAnalysis(self):
+        self.n_kdof = 0
+        self.kdof = {}
+        loops = nx.cycle_basis(self.holonomic_graph)
+        ll = len(loops)
+        ieq = 6 * ll
+        neq = ieq + len(self.imposed_speeds)
+        nhl = []
+        for linkage in self.linkages:
+            try:
+                ndofl = linkage.kinematic_matrix.shape[1]
+                for dofl in range(ndofl):
+                    try:
+                        self.kdof[linkage].append(self.n_kdof + dofl)
+                    except KeyError:
+                        self.kdof[linkage] = [
+                         self.n_kdof + dofl]
+
+                self.n_kdof += ndofl
+            except AttributeError:
+                nhl.append(linkage)
+                neq += len(linkage.kinematic_directions)
+
+        K = npy.zeros((neq, self.n_kdof))
+        F = npy.zeros((neq, 1))
+        q = npy.zeros((self.n_kdof, 1))
+        M = npy.zeros((neq, self.n_kdof))
+        for il, loop in enumerate(loops):
+            for ilk, linkage in enumerate(loop):
+                if not linkage.__class__.__name__ == 'Part':
+                    try:
+                        if loop[(ilk + 1)] == linkage.part2:
+                            side = 1
+                        else:
+                            side = -1
+                    except IndexError:
+                        if loop[(ilk - 1)] == linkage.part1:
+                            side = 1
+                        else:
+                            side = -1
+
+                    P = (geometry.Euler2TransferMatrix)(*linkage.euler_angles)
+                    u = linkage.position
+                    uprime = u
+                    L = geometry.CrossProductMatrix(uprime)
+                    Me1 = npy.abs(npy.dot(P, linkage.kinematic_matrix[:3, :])) > 1e-10
+                    Me2 = npy.abs(npy.dot(L, npy.dot(P, linkage.kinematic_matrix[:3, :])) + npy.dot(P, linkage.kinematic_matrix[3:, :])) > 1e-10
+                    Me = npy.vstack([Me1, Me2])
+                    for indof, ndof in enumerate(self.kdof[linkage]):
+                        M[6 * il:6 * il + 6, ndof] += Me[:, indof]
+
+                    Ke1 = npy.dot(P, linkage.kinematic_matrix[:3, :])
+                    Ke2 = npy.dot(L, npy.dot(P, linkage.kinematic_matrix[:3, :])) + npy.dot(P, linkage.kinematic_matrix[3:, :])
+                    Ke = side * npy.vstack([Ke1, Ke2])
+                    for indof, ndof in enumerate(self.kdof[linkage]):
+                        K[6 * il:6 * il + 6, ndof] += Ke[:, indof]
+
+        for linkage in nhl:
+            try:
+                path = nx.shortest_path(self.holonomic_graph, linkage.part1, linkage.part2)
+            except nx.NetworkXNoPath:
+                raise ModelError('No path between {} and {} for linkage {} of type {}'.format(linkage.part1.name, linkage.part2.name, linkage.name, linkage.__class__.__name__))
+
+            V = npy.zeros((3, self.n_kdof))
+            for il, linkage2 in enumerate(path):
+                if not linkage2.__class__.__name__ == 'Part':
+                    try:
+                        if path[(il + 1)] == linkage2.part2:
+                            side = 1
+                        else:
+                            side = -1
+                    except IndexError:
+                        if path[(il - 1)] == linkage2.part1:
+                            side = 1
+                        else:
+                            side = -1
+
+                    P = (geometry.Euler2TransferMatrix)(*linkage2.euler_angles)
+                    u = linkage2.position
+                    uprime = u - linkage.position
+                    L = geometry.CrossProductMatrix(uprime)
+                    Ve = npy.dot(L, npy.dot(P, linkage2.kinematic_matrix[:3, :])) + npy.dot(P, linkage2.kinematic_matrix[3:, :])
+                    for indof, ndof in enumerate(self.kdof[linkage2]):
+                        V[:, ndof] += side * Ve[:, indof]
+
+            P = (geometry.Euler2TransferMatrix)(*linkage.euler_angles)
+            for direction in linkage.kinematic_directions:
+                K[ieq, :] = npy.dot(npy.dot(P, direction), V)
+                ieq += 1
+
+        for linkage, index, speed in self.imposed_speeds:
+            K[(ieq, self.kdof[linkage][index])] = 1
+            F[(ieq, 0)] = speed
+            ieq += 1
+
+        M[6 * ll:, :] = npy.abs(K[6 * ll:, :]) > 1e-10
+        solvable, solvable_var, resolution_order = tools.EquationsSystemAnalysis(M, None)
+        if solvable:
+            for eqs, variables in resolution_order:
+                eqs = npy.array(eqs)
+                other_vars = npy.array([i for i in range(self.n_kdof) if i not in variables])
+                Kr = K[(eqs[:, None], npy.array(variables))]
+                Fr = F[eqs, :] - npy.dot(K[(eqs[:, None], other_vars)], q[other_vars, :])
+                q[variables, :] = linalg.solve(Kr, Fr)
+
+            results = {}
+            for link, dofs in self.kdof.items():
+                rlink = {}
+                for idof, dof in enumerate(dofs):
+                    rlink[idof] = q[(dof, 0)]
+
+                results[link] = rlink
+
+            return (
+             results, q)
+        raise ModelError
+
+    def GlobalSankey(self):
+        from matplotlib.sankey import Sankey
+        flows = []
+        orientations = []
+        labels = []
+        for load in self.known_static_loads + self.unknown_static_loads:
+            pl = self.LoadPower(load)
+            flows.append(pl)
+            labels.append(load.name)
+            if (load.__class__.__name__ == 'SimpleUnknownLoad') | (load.__class__.__name__ == 'KnownLoad'):
+                orientations.append(0)
+            else:
+                orientations.append(-1)
+
+        for linkage in self.linkages:
+            pl = self.LinkagePowerLosses(linkage)
+            if pl != 0.0:
+                flows.append(-pl)
+                orientations.append(-1)
+                labels.append(linkage.name)
+
+        l = max([abs(f) for f in flows])
+        sankey = Sankey(unit='W', scale=(1 / l))
+        sankey.add(flows=flows, orientations=orientations,
+          labels=labels)
+        sankey.finish()
+
+    def VMPlot(self, u=1):
+        points = []
+        for linkage in self.linkages:
+            points.append(vm.Point3D(linkage.position))
+            points.append(vm.Line3D(vm.Point3D(linkage.position), vm.Point3D(linkage.position + u * linkage.P[:, 0])))
+
+        mdl = vm.VolumeModel(points)
+        mdl.MPLPlot()
+
+    def SceneCaracteristics(self):
+        min_vect = self.linkages[0].position.copy()
+        max_vect = self.linkages[0].position.copy()
+        center = self.linkages[0].position.copy()
+        n = 1
+        for linkage in self.linkages[1:] + self.known_static_loads + self.unknown_static_loads:
+            for i, (xmin, xmax, xi) in enumerate(zip(min_vect, max_vect, linkage.position)):
+                if xi < xmin:
+                    min_vect[i] = xi
+                if xi > xmax:
+                    max_vect[i] = xi
+
+            center += linkage.position
+            n += 1
+
+        center = center / n
+        max_length = linalg.norm(min_vect - max_vect)
+        return (
+         center, max_length)
+
+    def BabylonScript(self, forces=True):
+        env = Environment(loader=(PackageLoader('genmechanics', 'templates')), autoescape=(select_autoescape(['html', 'xml'])))
+        template = env.get_template('babylon.html')
+        center, length = self.SceneCaracteristics()
+        if forces:
+            max_force = 0.0
+            max_torque = 0
+            for linkage in self.linkages:
+                f = self.GlobalLinkageForces(linkage, 0)[0:3]
+                t = self.GlobalLinkageForces(linkage, 0)[3:]
+                max_force = max(max_force, max(f))
+                max_torque = max(max_torque, max(t))
+
+            for load in self.known_static_loads + self.unknown_static_loads:
+                f = self.GlobalLoadForces(load)[0:3]
+                t = self.GlobalLoadForces(load)[3:]
+                max_force = max(max_force, max(f))
+                max_torque = max(max_torque, max(t))
+
+        linkages_strings = []
+        for linkage in self.linkages:
+            try:
+                if forces:
+                    linkages_strings.append(linkage.Babylon(length, [f / max_force * length / 4 for f in self.GlobalLinkageForces(linkage, 0)[0:3]], [f / max_torque * length / 4 for f in self.GlobalLinkageForces(linkage, 0)[3:]]))
+                else:
+                    linkages_strings.append(linkage.Babylon(length, None, None))
+            except AttributeError:
+                print('error')
+
+        return template.render(name=(self.name), center=(tuple(center)), length=length, linkages_strings=linkages_strings)
+
+    def BabylonShow(self, page='gm_babylonjs', forces=True):
+        page += '.html'
+        with open(page, 'w') as (file):
+            file.write(self.BabylonScript())
+        webbrowser.open('file://' + os.path.realpath(page))

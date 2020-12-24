@@ -1,0 +1,47 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: ../flask_peewee/forms.py
+# Compiled at: 2018-01-29 12:08:58
+from peewee import BooleanField
+from wtforms import widgets
+from wtfpeewee.fields import BooleanSelectField
+from wtfpeewee.fields import ModelSelectField
+from wtfpeewee.orm import ModelConverter
+
+class BaseModelConverter(ModelConverter):
+
+    def __init__(self, *args, **kwargs):
+        super(BaseModelConverter, self).__init__(*args, **kwargs)
+        self.converters[BooleanField] = self.handle_boolean
+
+    def handle_boolean(self, model, field, **kwargs):
+        return (
+         field.name, BooleanSelectField(**kwargs))
+
+
+class ChosenAjaxSelectWidget(widgets.Select):
+
+    def __init__(self, data_source, data_param, *args, **kwargs):
+        self.data_source = data_source
+        self.data_param = data_param
+        super(ChosenAjaxSelectWidget, self).__init__(*args, **kwargs)
+
+    def __call__(self, field, **kwargs):
+        if field.allow_blank and not self.multiple:
+            kwargs['data-role'] = 'ajax-chosenblank'
+        else:
+            kwargs['data-role'] = 'ajax-chosen'
+        kwargs['data-source'] = self.data_source
+        kwargs['data-param'] = self.data_param
+        kwargs['data-placeholder'] = 'Type to search...'
+        return super(ChosenAjaxSelectWidget, self).__call__(field, **kwargs)
+
+
+class LimitedModelSelectField(ModelSelectField):
+
+    def iter_choices(self):
+        for obj in self.query.limit(20):
+            yield (
+             obj._pk, self.get_label(obj), obj == self.data)

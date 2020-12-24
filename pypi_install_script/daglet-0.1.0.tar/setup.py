@@ -1,0 +1,81 @@
+from setuptools import setup
+
+
+version = '0.1.0'
+download_url = 'https://github.com/kkroening/daglet/archive/v{}.zip'.format(version)
+
+
+keywords = [
+    'actor',
+    'acyclic'
+    'analyze',
+    'async',
+    'bfs',
+    'breadth-first',
+    'concurrent sequential processes',
+    'connected',
+    'csp',
+    'cycle',
+    'dag',
+    'depth-first',
+    'dfs',
+    'dijkstra',
+    'directed',
+    'dsp',
+    'edge',
+    'fp',
+    'frp',
+    'functional programming',
+    'functional reactive programming',
+    'functional',
+    'graph',
+    'hamiltonian',
+    'monad',
+    'pipe',
+    'pipeline',
+    'pipes',
+    'routing',
+    'search',
+    'sort',
+    'spanning',
+    'spanning',
+    'stream',
+    'structure',
+    'topological',
+    'topology',
+    'toposort',
+    'undirected',
+    'vertex',
+    'vertices',
+]
+
+
+setup(
+    name='daglet',
+    packages=['daglet'],
+    setup_requires=['pytest-runner'],
+    tests_require=['pytest'],
+    version=version,
+    description='DAG tools for Python',
+    author='Karl Kroening',
+    author_email='karlk@kralnet.us',
+    url='https://github.com/kkroening/daglet',
+    download_url=download_url,
+    keywords=keywords,
+    long_description='DAG tools for Python',
+    install_requires=['future'],
+    classifiers=[
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: Apache Software License',
+        'Natural Language :: English',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+    ],
+)

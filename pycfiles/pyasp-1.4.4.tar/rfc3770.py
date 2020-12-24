@@ -1,0 +1,30 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 2.4 (62061)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: build/bdist.linux-x86_64/egg/pyasn1_modules/rfc3770.py
+# Compiled at: 2020-01-09 12:20:13
+from pyasn1.type import constraint
+from pyasn1.type import univ
+from pyasn1_modules import rfc5280
+MAX = float('inf')
+id_kp_eapOverLAN = univ.ObjectIdentifier('1.3.6.1.5.5.7.3.14')
+id_kp_eapOverPPP = univ.ObjectIdentifier('1.3.6.1.5.5.7.3.13')
+id_pe_wlanSSID = univ.ObjectIdentifier('1.3.6.1.5.5.7.1.13')
+
+class SSID(univ.OctetString):
+    __module__ = __name__
+
+
+SSID.subtypeSpec = constraint.ValueSizeConstraint(1, 32)
+
+class SSIDList(univ.SequenceOf):
+    __module__ = __name__
+
+
+SSIDList.componentType = SSID()
+SSIDList.subtypeSpec = constraint.ValueSizeConstraint(1, MAX)
+id_aca_wlanSSID = univ.ObjectIdentifier('1.3.6.1.5.5.7.10.7')
+_certificateExtensionsMap = {id_pe_wlanSSID: SSIDList()}
+rfc5280.certificateExtensionsMap.update(_certificateExtensionsMap)
+_certificateAttributesMapUpdate = {id_aca_wlanSSID: SSIDList()}
+rfc5280.certificateAttributesMap.update(_certificateAttributesMapUpdate)

@@ -1,0 +1,299 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: c:\users\geoffrey\workspace\python-plex\build\lib\plex\scanners.py
+# Compiled at: 2018-02-04 13:23:23
+# Size of source mod 2**32: 13711 bytes
+"""
+Python Lexical Analyser
+
+Scanning an input stream
+"""
+from plex import errors
+from plex.regexps import BOL, EOL, EOF
+
+class Scanner:
+    __doc__ = "\n    A Scanner is used to read tokens from a stream of characters\n    using the token set specified by a Plex.Lexicon.\n\n    Constructor:\n\n        Scanner(lexicon, stream, name = '')\n\n            See the docstring of the __init__ method for details.\n\n    Methods:\n\n        See the docstrings of the individual methods for more\n        information.\n\n        read() --> (value, text)\n            Reads the next lexical token from the stream.\n\n        position() --> (name, line, col)\n            Returns the position of the last token read using the\n            read() method.\n\n        begin(state_name)\n            Causes scanner to change state.\n\n        produce(value [, text])\n            Causes return of a token value to the caller of the\n            Scanner.\n    "
+    lexicon = None
+    stream = None
+    name = ''
+    buffer = ''
+    buf_start_pos = 0
+    next_pos = 0
+    cur_pos = 0
+    cur_line = 1
+    cur_line_start = 0
+    start_pos = 0
+    start_line = 0
+    start_col = 0
+    text = None
+    initial_state = None
+    state_name = ''
+    queue = None
+    trace = 0
+
+    def __init__(self, lexicon, stream, name=''):
+        """
+        Scanner(lexicon, stream, name = '')
+
+            |lexicon| is a Plex.Lexicon instance specifying the lexical tokens
+            to be recognised.
+
+            |stream| can be a file object or anything which implements a
+            compatible read() method.
+
+            |name| is optional, and may be the name of the file being
+            scanned or any other identifying string.
+        """
+        self.lexicon = lexicon
+        self.stream = stream
+        self.name = name
+        self.queue = []
+        self.initial_state = None
+        self.begin('')
+        self.next_pos = 0
+        self.cur_pos = 0
+        self.cur_line_start = 0
+        self.cur_char = BOL
+        self.input_state = 1
+
+    def read(self):
+        """
+        Read the next lexical token from the stream and return a
+        tuple (value, text), where |value| is the value associated with
+        the token as specified by the Lexicon, and |text| is the actual
+        string read from the stream. Returns (None, '') on end of file.
+        """
+        queue = self.queue
+        while not queue:
+            self.text, action = self.scan_a_token()
+            if action is None:
+                self.produce(None)
+                self.eof()
+            else:
+                value = action.perform(self, self.text)
+                if value is not None:
+                    self.produce(value)
+
+        result = queue[0]
+        del queue[0]
+        return result
+
+    def scan_a_token(self):
+        """
+        Read the next input sequence recognised by the machine
+        and return (text, action). Returns ('', None) on end of
+        file.
+        """
+        self.start_pos = self.cur_pos
+        self.start_line = self.cur_line
+        self.start_col = self.cur_pos - self.cur_line_start
+        action = self.run_machine_inlined()
+        if action:
+            if self.trace:
+                print('Scanner: read: Performing', action, '%d:%d' % (
+                 self.start_pos, self.cur_pos))
+            base = self.buf_start_pos
+            text = self.buffer[self.start_pos - base:self.cur_pos - base]
+            return (text, action)
+        if self.cur_pos == self.start_pos:
+            if self.cur_char == EOL:
+                self.next_char()
+            if not self.cur_char or self.cur_char == EOF:
+                return ('', None)
+        import pdb
+        raise errors.UnrecognizedInput(self, self.state_name)
+
+    def run_machine(self):
+        """
+        Run the machine until no more transitions are possible.
+        """
+        self.state = self.initial_state
+        self.backup_state = None
+        while self.transition():
+            pass
+
+        return self.back_up()
+
+    def run_machine_inlined(self):
+        """
+        Inlined version of run_machine for speed.
+        """
+        state = self.initial_state
+        cur_pos = self.cur_pos
+        cur_line = self.cur_line
+        cur_line_start = self.cur_line_start
+        cur_char = self.cur_char
+        input_state = self.input_state
+        next_pos = self.next_pos
+        buffer = self.buffer
+        buf_start_pos = self.buf_start_pos
+        buf_len = len(buffer)
+        backup_state = None
+        trace = self.trace
+        while True:
+            if trace:
+                print('State %d, %d/%d:%s -->' % (
+                 state['number'], input_state,
+                 cur_pos, repr(cur_char)))
+            else:
+                action = state['action']
+                if action:
+                    backup_state = (action, cur_pos, cur_line, cur_line_start,
+                     cur_char, input_state, next_pos)
+                c = cur_char
+                new_state = state.get(c, -1)
+                if new_state == -1:
+                    new_state = c and state.get('else')
+            if new_state:
+                if trace:
+                    print('State %d' % new_state['number'])
+                else:
+                    state = new_state
+                    if input_state == 1:
+                        cur_pos = next_pos
+                        buf_index = next_pos - buf_start_pos
+                        if buf_index < buf_len:
+                            c = buffer[buf_index]
+                            next_pos = next_pos + 1
+                        else:
+                            discard = self.start_pos - buf_start_pos
+                            data = self.stream.read(4096)
+                            buffer = self.buffer[discard:] + data
+                            self.buffer = buffer
+                            buf_start_pos = buf_start_pos + discard
+                            self.buf_start_pos = buf_start_pos
+                            buf_len = len(buffer)
+                            buf_index = buf_index - discard
+                            if data:
+                                c = buffer[buf_index]
+                                next_pos = next_pos + 1
+                            else:
+                                c = ''
+                            if c == '\n':
+                                cur_char = EOL
+                                input_state = 2
+                            else:
+                                if not c:
+                                    cur_char = EOL
+                                    input_state = 4
+                                else:
+                                    cur_char = c
+                    else:
+                        if input_state == 2:
+                            cur_char = '\n'
+                            input_state = 3
+                        else:
+                            if input_state == 3:
+                                cur_line = cur_line + 1
+                                cur_line_start = cur_pos = next_pos
+                                cur_char = BOL
+                                input_state = 1
+                            else:
+                                if input_state == 4:
+                                    cur_char = EOF
+                                    input_state = 5
+                                else:
+                                    cur_char = ''
+            else:
+                if trace:
+                    print('blocked')
+                else:
+                    if backup_state:
+                        action, cur_pos, cur_line, cur_line_start, cur_char, input_state, next_pos = backup_state
+                    else:
+                        action = None
+                break
+
+        self.cur_pos = cur_pos
+        self.cur_line = cur_line
+        self.cur_line_start = cur_line_start
+        self.cur_char = cur_char
+        self.input_state = input_state
+        self.next_pos = next_pos
+        if trace:
+            if action:
+                print('Doing', action)
+        return action
+
+    def next_char(self):
+        input_state = self.input_state
+        if self.trace:
+            print('Scanner: next:', '                    ', ('[%d] %d' % (
+             input_state, self.cur_pos)),
+              end=' ')
+        else:
+            if input_state == 1:
+                self.cur_pos = self.next_pos
+                c = self.read_char()
+                if c == '\n':
+                    self.cur_char = EOL
+                    self.input_state = 2
+                else:
+                    if not c:
+                        self.cur_char = EOL
+                        self.input_state = 4
+                    else:
+                        self.cur_char = c
+            else:
+                if input_state == 2:
+                    self.cur_char = '\n'
+                    self.input_state = 3
+                else:
+                    if input_state == 3:
+                        self.cur_line = self.cur_line + 1
+                        self.cur_line_start = self.cur_pos = self.next_pos
+                        self.cur_char = BOL
+                        self.input_state = 1
+                    else:
+                        if input_state == 4:
+                            self.cur_char = EOF
+                            self.input_state = 5
+                        else:
+                            self.cur_char = ''
+        if self.trace:
+            print('--> [%d] %d %s' % (input_state,
+             self.cur_pos, repr(self.cur_char)))
+
+    def position(self):
+        """
+        Return a tuple (name, line, col) representing the location of
+        the last token read using the read() method. |name| is the
+        name that was provided to the Scanner constructor; |line|
+        is the line number in the stream (1-based); |col| is the
+        position within the line of the first character of the token
+        (0-based).
+        """
+        return (
+         self.name, self.start_line, self.start_col)
+
+    def begin(self, state_name):
+        """Set the current state of the scanner to the named state."""
+        self.initial_state = self.lexicon.get_initial_state(state_name)
+        self.state_name = state_name
+
+    def produce(self, value, text=None):
+        """
+        Called from an action procedure, causes |value| to be returned
+        as the token value from read(). If |text| is supplied, it is
+        returned in place of the scanned text.
+
+        produce() can be called more than once during a single call to an
+        action procedure, in which case the tokens are queued up and returned
+        one at a time by subsequent calls to read(), until the queue is empty,
+        whereupon scanning resumes.
+        """
+        if text is None:
+            text = self.text
+        self.queue.append((value, text))
+
+    def eof(self):
+        """
+        Override this method if you want something to be done at
+        end of file.
+        """
+        pass
+
+
+setattr(Scanner, 'yield', Scanner.produce)

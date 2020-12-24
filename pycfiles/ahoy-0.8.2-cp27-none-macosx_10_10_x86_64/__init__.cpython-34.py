@@ -1,0 +1,8 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.4 (3310)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /home/iii/Documents/projects/ahorn/venv/lib/python3.4/site-packages/ahorn/__init__.py
+# Compiled at: 2016-08-01 04:00:19
+# Size of source mod 2**32: 1122 bytes
+__doc__ = '\nAhorn\n===================\n\nA game description framework and game playing AI library,\nwritten entirely in Python.\n\nQuickstart\n==========\n    import ahorn, ahorn.Actors, ahorn.TicTacToe\n    player_a, player_b = ahorn.Actors.MCTSPlayer(), ahorn.Actors.MCTSPlayer()\n    starting_state = ahorn.TicTacToe.TicTacToeState([player_a, player_b])\n    controller = ahorn.Controller(starting_state, verbose=True)\n    controller.play()\n\nInstallation\n============\n    pip3 install -r requirements.txt\n    python3 setup.py install\n    python3 run.py  # should start playing a game\n\nRunning the tests\n=================\n    python3 -m pytest tests\n\nAdding a new game\n=================\n\nA game is described by states and actions.\nTo describe a new game, subclass ahorn.GameBase.State and ahorn.GameBase.Action.\nTake a look at the example: ahorn.TicTacToe.\n\nAdding new AI\n=============\n\nAhorn comes with a generic AI based on the Monte Carlo Tree Search algorithm:\n ahorn.Actors.MCTSPlayer.\nTo create a new AI, subclass ahorn.GameBase.Player. Take a look at the\nexample: ahorn.Actors.RandomPlayer.\n\n'
+from .Controller import Controller

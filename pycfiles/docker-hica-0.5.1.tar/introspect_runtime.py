@@ -1,0 +1,95 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /home/podvody/Repos/docker-hica/injectors/introspect_runtime.py
+# Compiled at: 2015-10-26 10:57:44
+import os
+from base.hica_base import *
+import subprocess
+_container_lib_location = '/external_libs'
+
+class IntrospectRuntimeInjector(HicaInjector):
+
+    def get_description(self):
+        return ('Runs a binary ({0}) which makes a white list into the container').format(self.labels.get_value('io.hica.introspect_runtime'))
+
+    def get_config_key(self):
+        return 'io.hica.introspect_runtime'
+
+    def get_injected_args(self):
+        return (
+         (
+          '--introspect-runtime', HicaValueType.PATH, ''),
+         (
+          '--introspect-runtime-whitelist', HicaValueType.STRING, ''))
+
+    def _get_runtime(self):
+        return dict(self.labels.query(''))['io.hica.introspect_runtime']
+
+    def _get_whitelist(self):
+        return dict(self.labels.query(''))['io.hica.introspect_runtime.whitelist'].split(':')
+
+    def _run_introspection(self, runtime='', whitelist=[], verbose=False):
+        """ Figure out which objects are opened by a test binary and are matched by the white list. 
+
+    :param runtime: The binary to run. 
+    :type runtime: str
+    :param whitelist: A list of regular expressions describing acceptable library names
+    :type whitelist: [str]    
+    """
+        found_objects = set()
+        try:
+            p = subprocess.Popen(('strace {} 2>&1| grep open | grep -v ENOENT | cut -d \'"\'  -f 2 | sort | uniq -c | awk \'{{print $2}}\n\'').format(runtime), shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+            stdout, stderr = p.communicate()
+            opened_objects = stdout.split()
+            for obj in opened_objects:
+                for wl in whitelist:
+                    m = re.match('.*' + wl + '[\\..*]?', obj)
+                    if m:
+                        found_objects.add(obj)
+                        if verbose:
+                            print ('Found whitelisted {} at path {}').format(wl, obj)
+                        continue
+
+        except Exception as e:
+            print e
+
+        return found_objects
+
+    def __get_container_path(self, host_path):
+        """ A simple helper function to determine the path of a host library
+    inside the container
+
+    :param host_path: The path of the library on the host
+    :type host_path: str
+    """
+        libname = os.path.split(host_path)[1]
+        return os.path.join(_container_lib_location, libname)
+
+    def __remove_duplicates(self, library):
+        libset = set()
+        unique_libs = []
+        for lib in library:
+            unique_libs.append(lib)
+
+    def inject_config(self, config, from_args):
+        """
+    :param config:
+    :type config: list
+    :param from_args:
+    :type from_args: dict
+    """
+        runtime = self._get_runtime()
+        whitelist = self._get_whitelist()
+        found_libraries = self._run_introspection(runtime, whitelist, verbose=True)
+        container_path_set = set()
+        for library in found_libraries:
+            cpath = self.__get_container_path(library)
+            if cpath in container_path_set:
+                continue
+            container_path_set.add(cpath)
+            config.append(('--volume={0}:{1}').format(library, cpath))
+
+        config.extend(['-e', ('LD_LIBRARY_PATH={0}').format(_container_lib_location)])
+        config.extend(['-e', ('LIBGL_DRIVERS_PATH={0}').format(_container_lib_location)])

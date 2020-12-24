@@ -1,0 +1,15 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.7 (62211)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.macosx-10.9-x86_64/egg/obpds/examples/interactive_schottky_diode.py
+# Compiled at: 2015-11-15 13:26:57
+import logging
+logging.basicConfig()
+import os, sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from obpds import *
+n = Layer(0.3 * um, GaAs, -1e+17 / cm3)
+d = TwoTerminalDevice(layers=[n], contacts=[
+ SchottkyContact(), OhmicContact()], Fn='right')
+d.interactive_zero_current()

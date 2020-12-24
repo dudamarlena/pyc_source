@@ -1,0 +1,17 @@
+ecdsa==0.13
+Fabric==1.11.1
+Jinja2==2.8
+MarkupSafe==0.23
+mysql-connector-python==2.0.4
+mysql-utilities==1.6.1
+paramiko==1.16.0
+pdfshuffler==0.6.0
+pexpect==4.0.1
+ptyprocess==0.5
+pycrypto==2.6.1
+pygobject==3.20.0
+pyodbc==3.0.7
+pyPdf==1.13
+pysqlite==2.7.0
+pyxdg==0.25
+six==1.10.0

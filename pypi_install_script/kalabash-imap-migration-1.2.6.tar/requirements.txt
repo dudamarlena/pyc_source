@@ -1,0 +1,2 @@
+kalabash>=1.10.0
+django-webpack-loader

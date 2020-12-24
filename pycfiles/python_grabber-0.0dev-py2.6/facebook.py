@@ -1,0 +1,39 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 2.6 (62161)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: build/bdist.linux-i686/egg/python_grabber/facebook.py
+# Compiled at: 2009-10-26 07:34:13
+from my_base import BaseGrabber, InvalidLogin
+from BeautifulSoup import BeautifulSoup
+import re, cStringIO, Image
+from pytesser import *
+import urllib
+pattern = re.compile("iui.ajaxLink\\('(?P<profil_url>\\S*)'\\);", re.IGNORECASE)
+
+class FacebookGrabber(BaseGrabber):
+    LoginUrl = 'https://login.facebook.com/login.php?iphone=1&next=http%253A%252F%252Ftouch.facebook.com%252F'
+    ExportUrl = 'http://touch.facebook.com/friends.php'
+    BaseUrl = 'http://touch.facebook.com'
+
+    def __init__(self, username, password):
+        self.params = {'email': username, 'pass': password}
+        super(FacebookGrabber, self).__init__()
+
+    def grab(self):
+        contacts = []
+        self.get_page(self.LoginUrl, self.params)
+        html = self.get_page(self.ExportUrl)
+        soup = BeautifulSoup(unicode(('').join(html), errors='ignore'))
+        friends = soup.findAll('div', attrs={'class': 'item'})
+        for friend in friends:
+            profil_url = re.match(pattern, friend.attrMap['onclick']).group('profil_url')
+            html = self.get_page(self.BaseUrl + profil_url + '&v=info')
+            src = re.search('.*<img src="(?P<src>\\S*)" alt="" />.*', html).group('src')
+            file = urllib.urlopen(self.BaseUrl + src)
+            im = cStringIO.StringIO(file.read())
+            email_img = Image.open(im)
+            email = image_to_string(email_img)
+            contacts.append(email)
+
+        return contacts

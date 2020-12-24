@@ -1,0 +1,17 @@
+# uncompyle6 version 3.6.7
+# Python bytecode 3.5 (3350)
+# Decompiled from: Python 3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10) [MSC v.1916 64 bit (AMD64)]
+# Embedded file name: /usr/local/lib/python3.5/site-packages/pungen/main.py
+# Compiled at: 2016-08-12 10:32:24
+# Size of source mod 2**32: 730 bytes
+import argparse, os
+
+def main():
+    args = argparse.ArgumentParser(description='Generates a Punnet Square using given arguments')
+    args.add_argument('-f', '--female', nargs=2, help='Females Genes', action='store', required=True)
+    args.add_argument('-m', '--male', nargs=2, help='Males Genes', action='store', required=True)
+    ootput = args.parse_args()
+    f_g = ootput.female
+    m_g = ootput.male
+    punnet = '\n\t       |\n\t{0: <6} | {m[0]: ^5} | {m[1]: ^5} |\n\t{1: <3} | {f[0]: ^5} | {f[1]: ^5} |\n\t--------------------------------------------\n\t{2: <6} | {m[0]: >2}{f[0]: <4}| {m[1]: >2}{f[0]: <4}|\n\t{2: <6} | {m[0]: >2}{f[1]: <4}| {m[1]: >2}{f[1]: <4}|\n\n\n\t'.format('Male >', 'Female', '    ', f=f_g, m=m_g)
+    print(punnet)

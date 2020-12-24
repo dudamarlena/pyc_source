@@ -1,0 +1,121 @@
+# uncompyle6 version 3.7.4
+# Python bytecode 3.6 (3379)
+# Decompiled from: Python 3.6.9 (default, Apr 18 2020, 01:56:04) 
+# [GCC 8.4.0]
+# Embedded file name: /usr/local/lib/python3.6/dist-packages/pyxrd/phases/controllers/layer_controllers.py
+# Compiled at: 2020-03-07 03:51:50
+# Size of source mod 2**32: 5887 bytes
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk
+from mvc.adapters.gtk_support.dialogs.dialog_factory import DialogFactory
+from pyxrd.generic.views.treeview_tools import new_text_column, new_combo_column, create_float_data_func, setup_treeview
+from pyxrd.generic.controllers.objectliststore_controllers import wrap_list_property_to_treemodel
+from pyxrd.generic.controllers import InlineObjectListStoreController
+from pyxrd.atoms.models import Atom
+from pyxrd.project.models import Project
+
+class EditLayerController(InlineObjectListStoreController):
+    __doc__ = ' \n        Controller for the (inter)layer atom ObjectListStores\n    '
+    auto_adapt = False
+    enable_import = True
+    enable_export = True
+    treemodel_class_type = Atom
+    file_filters = Atom.Meta.layer_filters
+    new_atom_type = None
+
+    @property
+    def atom_types_treemodel(self):
+        return wrap_list_property_to_treemodel(self.model.phase.project, Project.atom_types)
+
+    def _setup_treeview(self, tv, model):
+        setup_treeview(tv, model, sel_mode='MULTIPLE', reset=True)
+        tv.set_model(model)
+
+        def add_text_col(title, colnr, is_float=True, editable=True):
+            tv.append_column(new_text_column(title,
+              data_func=(create_float_data_func() if is_float else None),
+              editable=editable,
+              edited_callback=((self.on_item_cell_edited, (model, colnr)) if editable else None),
+              resizable=True,
+              text_col=colnr))
+
+        add_text_col('Atom name', (model.c_name), is_float=False)
+        add_text_col('Def. Z (nm)', model.c_default_z)
+        add_text_col('Calc. Z (nm)', (model.c_z), editable=False)
+        add_text_col('#', model.c_pn)
+
+        def atom_type_renderer(column, cell, model, itr, col=None):
+            try:
+                name = model.get_user_data_from_path(model.get_path(itr)).atom_type.name
+            except:
+                name = '#NA#'
+
+            cell.set_property('text', name)
+
+        def adjust_combo(cell, editable, path, data=None):
+            editable.set_wrap_width(10)
+
+        tv.append_column(new_combo_column('Element',
+          data_func=(
+         atom_type_renderer, (3, )),
+          changed_callback=(self.on_atom_type_changed),
+          edited_callback=(
+         self.on_atom_type_edited, (model,)),
+          editing_started_callback=adjust_combo,
+          model=(self.atom_types_treemodel),
+          text_column=(self.atom_types_treemodel.c_name),
+          editable=True,
+          has_entry=True))
+
+    def create_new_object_proxy(self):
+        return Atom(name='New Atom', parent=(self.model))
+
+    def on_save_object_clicked(self, widget, user_data=None):
+
+        def on_accept(save_dialog):
+            Atom.save_as_csv(save_dialog.filename, self.get_all_objects())
+
+        current_name = '%s%s' % (
+         self.model.name.lower(),
+         self.treemodel_property_name.replace('data', '').lower())
+        DialogFactory.get_save_dialog('Export atoms',
+          parent=(self.view.get_toplevel()), current_name=current_name,
+          filters=(self.file_filters)).run(on_accept)
+
+    def on_load_object_clicked(self, widget, user_data=None):
+
+        def import_layer(dialog):
+
+            def on_accept(dialog):
+                del self.treemodel_data[:]
+                Atom.get_from_csv(dialog.filename, self.treemodel_data.append, self.model)
+
+            DialogFactory.get_load_dialog('Import atoms',
+              parent=(self.view.get_toplevel()), filters=(self.file_filters)).run(on_accept)
+
+        DialogFactory.get_confirmation_dialog(message='Are you sure?\nImporting a layer file will clear the current list of atoms!',
+          parent=(self.view.get_toplevel())).run(import_layer)
+
+    def on_atom_type_changed(self, combo, path, new_iter, user_data=None):
+        """Called when the user selects an AtomType from the combo box"""
+        self.new_atom_type = self.atom_types_treemodel.get_user_data(new_iter)
+        return True
+
+    def on_atom_type_edited(self, combo, path, new_text, user_data=None):
+        """Called when the user has closed the AtomType combo box 
+        (so after the on_atom_type_changed call)"""
+        atom = self.treemodel_data[int(path)]
+        if atom is not None:
+            if self.new_atom_type is None:
+                if new_text not in (None, ''):
+                    for atom_type in self.model.phase.project.atom_types:
+                        if atom_type.name == new_text:
+                            self.new_atom_type = atom_type
+
+            if self.new_atom_type is not None:
+                atom.atom_type = self.new_atom_type
+            self.new_atom_type = None
+            return True
+        else:
+            return False
