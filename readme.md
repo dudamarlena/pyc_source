@@ -2,6 +2,7 @@
 
 |Folder|Description|
 |------|------|
+|allpyc|original pyc files (uploading)|
 |analyze_code |code used to download, extract and analyze PyPI applications|
 |failfiles| pyc files that we fail to decompile|
 |json | metadata for PyPI applications|
