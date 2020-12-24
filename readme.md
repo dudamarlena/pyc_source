@@ -5,6 +5,8 @@
 
 /json contains metadata for PyPi applications
 
+/mal_sample contains malware collected from PyPi, NPM and Packagist
+
 /pycfiles contains .pyc files extracted from PyPi applications
 
 /pypi_install_script contains extracted pre/post install scripts.
